@@ -631,24 +631,25 @@ function AdminPage() {
             <h2 className="text-base font-bold text-white">إعدادات هوامش الربح وسعر الصرف العام</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Exchange Rate (EGP per USDT) */}
-            <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
+            <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3 overflow-hidden">
               <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                 <span>سعر صرف الدولار الرقمي (EGP لكل 1 USDT)</span>
                 <span className="font-mono text-cyan-400 font-bold">{exchangeRate} EGP</span>
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="number"
                   step="0.5"
                   value={exchangeRate}
                   onChange={(e) => setExchangeRate(Number(e.target.value))}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white font-mono focus:border-amber-400 outline-none"
+                  className="w-full sm:flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white font-mono focus:border-amber-400 outline-none"
                 />
                 <button
+                  type="button"
                   onClick={handleSaveSettings}
-                  className="rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 text-xs transition-colors flex items-center gap-1.5"
+                  className="w-full sm:w-auto shrink-0 justify-center rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2.5 text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98 shadow-md"
                 >
                   <Save className="h-3.5 w-3.5" />
                   <span>تطبيق الصرف</span>
@@ -660,12 +661,12 @@ function AdminPage() {
             </div>
 
             {/* Global Profit Margin % */}
-            <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3">
+            <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 space-y-3 overflow-hidden">
               <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                 <span>هامش الربح العام على سعر تكلفة الـ API (%)</span>
                 <span className="font-mono text-purple-400 font-bold">{markupPercent}%</span>
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="number"
                   step="1"
@@ -673,11 +674,12 @@ function AdminPage() {
                   max="100"
                   value={markupPercent}
                   onChange={(e) => setMarkupPercent(Number(e.target.value))}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white font-mono focus:border-purple-400 outline-none"
+                  className="w-full sm:flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white font-mono focus:border-purple-400 outline-none"
                 />
                 <button
+                  type="button"
                   onClick={handleApplyMarkup}
-                  className="rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 text-xs transition-colors flex items-center gap-1.5"
+                  className="w-full sm:w-auto shrink-0 justify-center rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 text-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98 shadow-md"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
                   <span>تطبيق على جميع الباقات</span>
@@ -706,18 +708,18 @@ function AdminPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
               <input
                 type="text"
                 placeholder="بحث في الباقات..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none w-40 sm:w-56"
+                className="flex-1 sm:flex-none rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none w-full sm:w-56"
               />
               <select
                 value={selectedCat}
                 onChange={(e) => setSelectedCat(e.target.value as PackageCategory | "all")}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none"
+                className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none w-full sm:w-auto cursor-pointer"
               >
                 <option value="all">كل التصنيفات</option>
                 <option value="diamonds">الجواهر الأساسية</option>

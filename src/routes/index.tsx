@@ -837,7 +837,11 @@ function CustomerStorePage() {
       />
 
       {/* Guide Modal */}
-      <PlayerIdGuideModal open={guideOpen} onOpenChange={setGuideOpen} />
+      <PlayerIdGuideModal
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
+        gameId={selectedGameId}
+      />
 
       {/* Poster High-Res Modal */}
       <Dialog open={posterOpen} onOpenChange={setPosterOpen}>
