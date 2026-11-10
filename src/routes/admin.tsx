@@ -825,22 +825,6 @@ function AdminPage() {
             </table>
           </div>
         </section>
-
-        {/* Security Notice Footer */}
-        <section className="rounded-2xl border border-slate-800 bg-[#080c16] p-5 text-xs text-slate-400 space-y-2">
-          <div className="flex items-center gap-2 text-slate-200 font-bold">
-            <Shield className="h-4 w-4 text-cyan-400" />
-            <span>ملاحظة الحماية والأمان المعماري:</span>
-          </div>
-          <p className="leading-relaxed">
-            وفقاً لمتطلبات المشروع، يتم سحب كافة المفاتيح الحساسة (
-            <code className="text-cyan-300">FAZER_API_KEY</code>,{" "}
-            <code className="text-amber-300">BINANCE_PAY_API_KEY</code>,{" "}
-            <code className="text-amber-300">BINANCE_PAY_SECRET_KEY</code>) حصراً من متغيرات النظام
-            وبيئة التشغيل (.env). يتم توقيع كافة المعاملات عبر Server Functions و API Routes خفيفة
-            لحماية بيانات المتجر والمستخدمين.
-          </p>
-        </section>
       </main>
 
       {/* Edit / Create Package Modal */}
