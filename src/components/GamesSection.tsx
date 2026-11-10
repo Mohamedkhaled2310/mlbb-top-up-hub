@@ -1,5 +1,8 @@
 import React from "react";
-import mlbbArena from "../assets/mlbb-arena.jpg";
+import mlbbCover from "../assets/mlbb-cover.jpg";
+import pubgCover from "../assets/pubg-cover.jpg";
+import freefireCover from "../assets/freefire-cover.jpg";
+import hokCover from "../assets/hok-cover.jpg";
 import { Zap, Gamepad2, ArrowLeft, Check, Sparkles } from "lucide-react";
 
 export interface GameItem {
@@ -29,7 +32,7 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
       publisher: "Moonton",
       statusText: "شحن فوري بالمعرف ⚡",
       currencyName: "Diamonds & Passes",
-      coverImage: mlbbArena,
+      coverImage: mlbbCover,
       accentBorder: "border-rose-500 shadow-rose-500/40 ring-2 ring-rose-500/50",
       badgeBg: "bg-rose-500 text-white shadow-rose-500/50",
       description: "المتجر الرسمي المعتمد لشحن جواهر MLBB وبطاقات الويكلي وعروض الدبل x2 المزدوجة مباشرة إلى حسابك خلال ثوانٍ.",
@@ -41,7 +44,7 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
       publisher: "Tencent Games",
       statusText: "شحن فوري بالمعرف ⚡",
       currencyName: "Unknown Cash (UC)",
-      coverImage: "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=900&auto=format&fit=crop",
+      coverImage: pubgCover,
       accentBorder: "border-amber-500 shadow-amber-500/40 ring-2 ring-amber-500/50",
       badgeBg: "bg-amber-500 text-slate-950 font-bold shadow-amber-500/50",
       description: "شحن شدات ببجي موبايل (UC) الرسمية العالمية والكورية بأفضل أسعار السوق للتجار والزبائن بالـ Character ID.",
@@ -53,7 +56,7 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
       publisher: "Garena",
       statusText: "شحن فوري بالـ ID 💎",
       currencyName: "Garena Diamonds",
-      coverImage: "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=900&auto=format&fit=crop",
+      coverImage: freefireCover,
       accentBorder: "border-cyan-500 shadow-cyan-500/40 ring-2 ring-cyan-500/50",
       badgeBg: "bg-cyan-500 text-slate-950 font-bold shadow-cyan-500/50",
       description: "شحن جواهر فري فاير بالـ Player ID فوري لحسابات الشرق الأوسط وسيرفرات أفريقيا بتخفيضات وعضويات حصرية.",
@@ -65,7 +68,7 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
       publisher: "Level Infinite",
       statusText: "شحن فوري بالمعرف 🚀",
       currencyName: "Tokens",
-      coverImage: "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?q=80&w=900&auto=format&fit=crop",
+      coverImage: hokCover,
       accentBorder: "border-purple-500 shadow-purple-500/40 ring-2 ring-purple-500/50",
       badgeBg: "bg-purple-500 text-white font-bold shadow-purple-500/50",
       description: "باقات شحن توكنز Honor of Kings الرسمية وبطاقات التحدي الأسبوعية بالمعرف مباشرة.",
@@ -128,7 +131,7 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
               }`}
             >
               {/* Cover Image with gradient overlay */}
-              <div className="relative h-28 sm:h-32 w-full overflow-hidden bg-slate-900">
+              <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
                 <img
                   src={game.coverImage}
                   alt={game.name}

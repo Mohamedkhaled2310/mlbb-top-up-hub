@@ -27,6 +27,11 @@ import {
   Search,
   Image as ImageIcon,
   MessageCircle,
+  LayoutGrid,
+  List,
+  ChevronDown,
+  ChevronUp,
+  X,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
@@ -101,9 +106,11 @@ function CustomerStorePage() {
   const [verifying, setVerifying] = useState<boolean>(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
-  // Category filter
+  // Category filter & View mode
   const [selectedCategory, setSelectedCategory] = useState<PackageCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [showAllInAllCategory, setShowAllInAllCategory] = useState<boolean>(false);
 
   // Modals
   const [selectedPackage, setSelectedPackage] = useState<TopUpPackage | null>(null);
@@ -115,6 +122,7 @@ function CustomerStorePage() {
   const handleGameSelect = (gameId: string) => {
     setSelectedGameId(gameId);
     setSelectedCategory("all");
+    setShowAllInAllCategory(false);
     setVerifiedName(null);
     setVerifyError(null);
   };
@@ -208,6 +216,23 @@ function CustomerStorePage() {
     return matchCat && matchQuery;
   });
 
+  // Calculate package count per category for current active game
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: 0 };
+    packages.forEach((pkg) => {
+      if (!pkg.active && pkg.active !== undefined) return;
+      const matchGame =
+        selectedGameId === "mlbb"
+          ? !pkg.gameId || pkg.gameId === "mlbb"
+          : pkg.gameId === selectedGameId;
+      if (!matchGame) return;
+
+      counts.all = (counts.all || 0) + 1;
+      counts[pkg.category] = (counts[pkg.category] || 0) + 1;
+    });
+    return counts;
+  }, [packages, selectedGameId]);
+
   // Dynamic categories per game
   const categories = useMemo(() => {
     switch (selectedGameId) {
@@ -240,6 +265,17 @@ function CustomerStorePage() {
         ];
     }
   }, [selectedGameId]);
+
+  // Avoid endless scrolling on mobile: display top 10 on 'all' by default, or all if expanded
+  const displayedPackages = useMemo(() => {
+    if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory) {
+      return filteredPackages.slice(0, 10);
+    }
+    return filteredPackages;
+  }, [filteredPackages, selectedCategory, searchQuery, showAllInAllCategory]);
+
+  const hasHiddenPackages =
+    selectedCategory === "all" && !searchQuery.trim() && filteredPackages.length > 10;
 
   return (
     <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans selection:bg-rose-500/30 selection:text-rose-200">
@@ -442,128 +478,291 @@ function CustomerStorePage() {
         </section>
 
         {/* Step 2: Choose Package Section */}
-        <section id="packages-section" className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 font-extrabold text-sm border border-cyan-500/30">
+        <section id="packages-section" className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 font-extrabold text-sm border border-cyan-500/30">
                 2
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">اختر باقة {activeGame.name}</h2>
-                <p className="text-xs text-slate-400">
+                <h2 className="text-base sm:text-xl font-bold text-white flex items-center flex-wrap gap-2">
+                  <span>اختر باقة {activeGame.name}</span>
+                  <span className="text-xs font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                    {filteredPackages.length} باقة متاحة
+                  </span>
+                </h2>
+                <p className="text-[11px] sm:text-xs text-slate-400">
                   قوائم الأسعار الرسمية المعتمدة لـ METO STORE (الأسعار بالجنيه المصري و USDT)
                 </p>
               </div>
             </div>
 
-            {/* Search Input */}
-            <div className="relative w-full md:w-64">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="ابحث عن باقة أو الكمية..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-xl border border-slate-800 bg-slate-900/80 pr-9 pl-4 py-2 text-xs text-white placeholder-slate-500 focus:border-rose-400 outline-none"
-              />
+            {/* View Mode & Search Bar */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Search Input */}
+              <div className="relative flex-1 sm:w-60">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="ابحث عن باقة أو الكمية..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900/90 pr-8 pl-8 py-2 text-xs text-white placeholder-slate-500 focus:border-rose-400 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 cursor-pointer"
+                    title="مسح البحث"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* View Toggle (Grid / List) */}
+              <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900/90 p-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === "grid"
+                      ? "bg-rose-500/25 text-rose-300 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="عرض الكروت المدمجة (Grid)"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    viewMode === "list"
+                      ? "bg-rose-500/25 text-rose-300 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="عرض القائمة السريعة بدون سكرول (List)"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Categories Tab Bar */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {/* Categories Tab Bar with package count badges */}
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-none">
             {categories.map((cat) => {
               const Icon = cat.icon;
               const isActive = selectedCategory === cat.id;
+              const count = categoryCounts[cat.id] ?? 0;
               return (
                 <button
                   key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id as PackageCategory | "all")}
-                  className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all cursor-pointer ${
+                  onClick={() => {
+                    setSelectedCategory(cat.id as PackageCategory | "all");
+                    setShowAllInAllCategory(false);
+                  }}
+                  className={`flex shrink-0 items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold transition-all cursor-pointer ${
                     isActive
                       ? "bg-gradient-to-r from-rose-500/20 to-cyan-500/20 text-rose-300 border border-rose-500/50 shadow-md shadow-rose-500/15"
                       : "border border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-rose-400" : "text-slate-400"}`} />
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? "text-rose-400" : "text-slate-400"}`} />
                   <span>{cat.label}</span>
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                      isActive ? "bg-rose-500/30 text-rose-200" : "bg-slate-800 text-slate-400"
+                    }`}
+                  >
+                    {count}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          {/* Packages Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
-            {filteredPackages.map((p) => {
-              return (
-                <div
-                  key={p.id}
-                  onClick={() => handleSelectPackage(p)}
-                  className={`group relative flex flex-col justify-between rounded-2xl border p-4 transition-all duration-300 cursor-pointer overflow-hidden ${
-                    p.popular
-                      ? "border-rose-500/40 bg-gradient-to-b from-[#170e24] to-[#0a0f1d] hover:border-rose-400 hover:shadow-lg hover:shadow-rose-500/25 -translate-y-0.5"
-                      : "border-slate-800/90 bg-[#0a0f1d]/90 hover:border-slate-700 hover:bg-[#0e1428] hover:-translate-y-0.5"
-                  }`}
-                >
-                  {/* Glowing corner accent */}
-                  <div className="absolute -top-12 -right-12 h-24 w-24 rounded-full bg-rose-500/10 blur-xl group-hover:bg-rose-500/20 transition-all pointer-events-none" />
-
-                  {/* Badge */}
-                  {p.badge && (
-                    <span className="absolute top-2 left-2 rounded-full bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[9px] font-bold text-rose-300 shadow-sm">
-                      {p.badge}
-                    </span>
-                  )}
-
-                  {/* Top: Professional 3D Game Asset Icon & Name */}
-                  <div className="pt-2">
-                    <div className="mb-2.5 flex items-center justify-start group-hover:scale-105 transition-transform">
+          {/* 1. Fast Compact List View (Ultra-low scroll for mobile) */}
+          {viewMode === "list" && (
+            <div className="space-y-2">
+              {displayedPackages.map((p) => {
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectPackage(p)}
+                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-slate-800/90 bg-[#0a0f1d]/90 hover:border-rose-500/50 hover:bg-[#0f162c] transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                       <GamePackageIcon
                         category={p.category}
                         diamonds={p.diamonds}
                         bonusDiamonds={p.bonusDiamonds}
                         gameId={p.gameId || selectedGameId}
                         currencyName={p.currencyName || activeGame.currency}
-                        size="md"
+                        size="sm"
                       />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white text-xs sm:text-sm truncate group-hover:text-rose-300 transition-colors">
+                            {p.name}
+                          </h4>
+                          {p.badge && (
+                            <span className="shrink-0 rounded-full bg-rose-500/20 border border-rose-500/30 px-1.5 py-0.2 text-[9px] font-bold text-rose-300">
+                              {p.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] sm:text-[11px] text-slate-400 truncate mt-0.5">
+                          {p.bonusDiamonds
+                            ? `${p.diamonds} + ${p.bonusDiamonds} إضافي مجاني`
+                            : p.diamonds > 0
+                              ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
+                              : p.description?.slice(0, 30) || "باقة مميزة"}
+                        </p>
+                      </div>
                     </div>
 
-                    <h3 className="font-bold text-white text-sm line-clamp-1 group-hover:text-rose-300 transition-colors">
-                      {p.name}
-                    </h3>
-
-                    {p.bonusDiamonds ? (
-                      <div className="flex items-center gap-1 text-[11px] text-amber-400 font-semibold mt-0.5">
-                        <span>{p.diamonds}</span>
-                        <span className="text-emerald-400">+{p.bonusDiamonds} إضافي</span>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {p.diamonds > 0
-                          ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
-                          : p.description?.slice(0, 25) || "باقة مميزة"}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Bottom: Pricing & Action */}
-                  <div className="mt-4 pt-3 border-t border-slate-800/80">
-                    <div className="flex items-baseline justify-between">
-                      <div>
-                        <div className="text-base font-black text-white group-hover:text-rose-400 transition-colors">
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <div className="text-xs sm:text-sm font-black text-white group-hover:text-rose-400 transition-colors">
                           {p.retailPriceEgp}{" "}
                           <span className="text-[10px] text-slate-400 font-normal">EGP</span>
                         </div>
                         <div className="text-[10px] text-slate-400">≈ {p.retailPriceUsdt} USDT</div>
                       </div>
                       <div className="h-7 w-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-all">
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3.5 w-3.5" />
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 2. Compact Grid View */}
+          {viewMode === "grid" && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
+              {displayedPackages.map((p) => {
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => handleSelectPackage(p)}
+                    className={`group relative flex flex-col justify-between rounded-xl sm:rounded-2xl border p-2.5 sm:p-3.5 transition-all duration-200 cursor-pointer overflow-hidden ${
+                      p.popular
+                        ? "border-rose-500/40 bg-gradient-to-b from-[#170e24] to-[#0a0f1d] hover:border-rose-400 hover:shadow-md hover:shadow-rose-500/20 -translate-y-0.5"
+                        : "border-slate-800/90 bg-[#0a0f1d]/90 hover:border-slate-700 hover:bg-[#0e1428] hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {/* Glowing corner accent */}
+                    <div className="absolute -top-12 -right-12 h-20 w-20 rounded-full bg-rose-500/10 blur-xl group-hover:bg-rose-500/20 transition-all pointer-events-none" />
+
+                    {/* Badge */}
+                    {p.badge && (
+                      <span className="absolute top-1.5 left-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 px-1.5 py-0.2 text-[8px] sm:text-[9px] font-bold text-rose-300 shadow-sm z-10">
+                        {p.badge}
+                      </span>
+                    )}
+
+                    {/* Top: Professional 3D Game Asset Icon & Name */}
+                    <div className="pt-1">
+                      <div className="mb-1.5 flex items-center justify-start group-hover:scale-105 transition-transform">
+                        <GamePackageIcon
+                          category={p.category}
+                          diamonds={p.diamonds}
+                          bonusDiamonds={p.bonusDiamonds}
+                          gameId={p.gameId || selectedGameId}
+                          currencyName={p.currencyName || activeGame.currency}
+                          size="sm"
+                        />
+                      </div>
+
+                      <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-1 group-hover:text-rose-300 transition-colors">
+                        {p.name}
+                      </h3>
+
+                      {p.bonusDiamonds ? (
+                        <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-amber-400 font-semibold mt-0.5">
+                          <span>{p.diamonds}</span>
+                          <span className="text-emerald-400">+{p.bonusDiamonds} إضافي</span>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                          {p.diamonds > 0
+                            ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
+                            : p.description?.slice(0, 20) || "باقة مميزة"}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Bottom: Pricing & Action */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
+                      <div>
+                        <div className="text-xs sm:text-sm font-black text-white group-hover:text-rose-400 transition-colors">
+                          {p.retailPriceEgp}{" "}
+                          <span className="text-[9px] text-slate-400 font-normal">EGP</span>
+                        </div>
+                        <div className="text-[9px] text-slate-400">≈ {p.retailPriceUsdt} USDT</div>
+                      </div>
+                      <div className="h-6 w-6 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-all">
+                        <ChevronRight className="h-3 w-3" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Empty search results state */}
+          {displayedPackages.length === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-center text-xs text-slate-400">
+              <Package className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+              <p>لا توجد باقات مطابقة لبحثك في {activeGame.name}.</p>
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("all");
+                }}
+                className="mt-3 text-xs text-rose-400 underline font-bold cursor-pointer"
+              >
+                إعادة ضبط البحث وعرض كافة الباقات
+              </button>
+            </div>
+          )}
+
+          {/* Show more / Collapse button when in 'all' category with > 10 packages */}
+          {hasHiddenPackages && (
+            <div className="flex flex-col items-center justify-center pt-2">
+              {!showAllInAllCategory ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllInAllCategory(true)}
+                  className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-gradient-to-r from-rose-950/40 via-slate-900 to-cyan-950/40 hover:from-rose-900/50 hover:to-cyan-900/50 px-5 py-2.5 text-xs font-bold text-slate-200 transition-all shadow-md active:scale-98 cursor-pointer"
+                >
+                  <span>عرض جميع باقات {activeGame.name} (متبقي {filteredPackages.length - 10} باقة)</span>
+                  <ChevronDown className="h-4 w-4 text-rose-400" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAllInAllCategory(false);
+                    const elem = document.getElementById("packages-section");
+                    if (elem) elem.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-all cursor-pointer"
+                >
+                  <span>عرض الباقات الأكثر طلباً فقط (تقليل القائمة)</span>
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+              )}
+              <p className="text-[11px] text-slate-500 mt-2 text-center">
+                💡 نصيحة: يمكنك الضغط على تصنيفات الباقات أعلاه للانتقال المباشر بدون سكرول طويل
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Poster Callout Banner */}
