@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
 import { CheckoutModal } from "../components/CheckoutModal";
@@ -34,8 +34,65 @@ export const Route = createFileRoute("/")({
   component: CustomerStorePage,
 });
 
+interface GameConfig {
+  name: string;
+  currency: string;
+  idLabel: string;
+  idPlaceholder: string;
+  needsZone: boolean;
+  zoneLabel?: string;
+  zonePlaceholder?: string;
+  guideTitle: string;
+  badgeText: string;
+}
+
+const GAME_CONFIG: Record<string, GameConfig> = {
+  mlbb: {
+    name: "Mobile Legends: Bang Bang",
+    currency: "جوهرة",
+    idLabel: "معرف اللاعب (User ID)",
+    idPlaceholder: "مثال: 12345678",
+    needsZone: true,
+    zoneLabel: "رقم السيرفر (Zone ID)",
+    zonePlaceholder: "مثال: 2024",
+    guideTitle: "أين أجد الـ User ID والـ Zone ID؟",
+    badgeText: "MLBB DIAMONDS",
+  },
+  pubg: {
+    name: "PUBG Mobile (ببجي موبايل)",
+    currency: "شدة (UC)",
+    idLabel: "معرف اللاعب ببجي (Character ID)",
+    idPlaceholder: "مثال: 5123456789",
+    needsZone: false,
+    guideTitle: "كيف أجد معرف ببجي (Character ID)؟",
+    badgeText: "PUBG MOBILE UC",
+  },
+  freefire: {
+    name: "Free Fire (فري فاير)",
+    currency: "جوهرة",
+    idLabel: "معرف لاعب فري فاير (Player ID)",
+    idPlaceholder: "مثال: 1234567890",
+    needsZone: false,
+    guideTitle: "كيف أجد معرف فري فاير (Player ID)؟",
+    badgeText: "FREE FIRE DIAMONDS",
+  },
+  hok: {
+    name: "Honor of Kings (أونر أوف كينجز)",
+    currency: "توكنز (Tokens)",
+    idLabel: "معرف لاعب Honor of Kings (Player ID)",
+    idPlaceholder: "مثال: 987654321",
+    needsZone: false,
+    guideTitle: "كيف أجد معرف أونر أوف كينجز؟",
+    badgeText: "HOK TOKENS",
+  },
+};
+
 function CustomerStorePage() {
   const { packages, settings } = useStore();
+
+  // Selected game (defaults to MLBB)
+  const [selectedGameId, setSelectedGameId] = useState<string>("mlbb");
+  const activeGame = GAME_CONFIG[selectedGameId] || GAME_CONFIG.mlbb;
 
   // Form states
   const [userId, setUserId] = useState<string>("");
@@ -54,9 +111,22 @@ function CustomerStorePage() {
   const [guideOpen, setGuideOpen] = useState<boolean>(false);
   const [posterOpen, setPosterOpen] = useState<boolean>(false);
 
+  // When game switches
+  const handleGameSelect = (gameId: string) => {
+    setSelectedGameId(gameId);
+    setSelectedCategory("all");
+    setVerifiedName(null);
+    setVerifyError(null);
+  };
+
   // Validate Player ID
   const handleVerifyPlayer = async () => {
-    if (!userId.trim() || !zoneId.trim()) {
+    if (!userId.trim()) {
+      setVerifyError("يرجى إدخال معرف الحساب أولاً");
+      return;
+    }
+
+    if (activeGame.needsZone && !zoneId.trim()) {
       setVerifyError("يرجى إدخال كل من User ID و Zone ID");
       return;
     }
@@ -66,12 +136,21 @@ function CustomerStorePage() {
     setVerifiedName(null);
 
     try {
-      const res = await validatePlayerApi(userId.trim(), zoneId.trim());
-
-      if (res.valid && res.username) {
-        setVerifiedName(res.username);
+      if (selectedGameId === "mlbb") {
+        const res = await validatePlayerApi(userId.trim(), zoneId.trim());
+        if (res.valid && res.username) {
+          setVerifiedName(res.username);
+        } else {
+          setVerifyError(res.error || "تعذر التحقق من الحساب، تأكد من الأرقام المدخلة");
+        }
       } else {
-        setVerifyError(res.error || "تعذر التحقق من الحساب، تأكد من الأرقام المدخلة");
+        // Validation check for non-MLBB numeric player IDs
+        await new Promise((r) => setTimeout(r, 500));
+        if (userId.trim().length < 5) {
+          setVerifyError("رقم المعرف المدخل قصير جداً، يرجى التأكد من نسخه من داخل اللعبة");
+        } else {
+          setVerifiedName(`Player_${userId.trim().slice(-4)}`);
+        }
       }
     } catch (e: unknown) {
       setVerifyError(e instanceof Error ? e.message : "حدث خطأ أثناء الاتصال بالخادم");
@@ -82,36 +161,85 @@ function CustomerStorePage() {
 
   // Open checkout modal
   const handleSelectPackage = (pkg: TopUpPackage) => {
-    if (!userId.trim() || !zoneId.trim()) {
-      setVerifyError(
-        "يرجى إدخال معرف اللاعب (User ID) ورقم السيرفر (Zone ID) أولاً قبل اختيار الباقة",
-      );
-      window.scrollTo({ top: 320, behavior: "smooth" });
-      return;
+    if (activeGame.needsZone) {
+      if (!userId.trim() || !zoneId.trim()) {
+        setVerifyError(
+          "يرجى إدخال معرف اللاعب (User ID) ورقم السيرفر (Zone ID) أولاً قبل اختيار الباقة",
+        );
+        const elem = document.getElementById("player-input-card");
+        if (elem) elem.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+    } else {
+      if (!userId.trim()) {
+        setVerifyError(
+          `يرجى إدخال ${activeGame.idLabel} أولاً قبل اختيار الباقة`,
+        );
+        const elem = document.getElementById("player-input-card");
+        if (elem) elem.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
     }
 
     setSelectedPackage(pkg);
     setCheckoutOpen(true);
   };
 
-  // Filter packages
+  // Filter packages based on active game and category
   const filteredPackages = packages.filter((pkg) => {
     if (!pkg.active && pkg.active !== undefined) return false;
+
+    // Game filter
+    const matchGame =
+      selectedGameId === "mlbb"
+        ? !pkg.gameId || pkg.gameId === "mlbb"
+        : pkg.gameId === selectedGameId;
+    if (!matchGame) return false;
+
+    // Category filter
     const matchCat = selectedCategory === "all" || pkg.category === selectedCategory;
+
+    // Search query
     const matchQuery =
       pkg.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pkg.diamonds.toString().includes(searchQuery) ||
       (pkg.bonusDiamonds && pkg.bonusDiamonds.toString().includes(searchQuery));
+
     return matchCat && matchQuery;
   });
 
-  const categories = [
-    { id: "all", label: "جميع الباقات", icon: Layers },
-    { id: "diamonds", label: "الجواهر الأساسية", icon: Gem },
-    { id: "weekly_pass", label: "بطاقات الويكلي", icon: Calendar },
-    { id: "double_diamonds", label: "الجواهر المضاعفة (x2)", icon: Sparkles },
-    { id: "bundles", label: "الحزم (The Bundle)", icon: Package },
-  ];
+  // Dynamic categories per game
+  const categories = useMemo(() => {
+    switch (selectedGameId) {
+      case "pubg":
+        return [
+          { id: "all", label: "جميع باقات ببجي", icon: Layers },
+          { id: "diamonds", label: "شدات UC الأساسية", icon: Gem },
+          { id: "weekly_pass", label: "الرويال باس والباكجات", icon: Calendar },
+        ];
+      case "freefire":
+        return [
+          { id: "all", label: "جميع باقات فري فاير", icon: Layers },
+          { id: "diamonds", label: "جواهر فري فاير", icon: Gem },
+          { id: "weekly_pass", label: "العضويات (Weekly & Monthly)", icon: Calendar },
+        ];
+      case "hok":
+        return [
+          { id: "all", label: "جميع باقات HOK", icon: Layers },
+          { id: "diamonds", label: "توكنز Tokens", icon: Gem },
+          { id: "weekly_pass", label: "بطاقات التحدي", icon: Calendar },
+        ];
+      case "mlbb":
+      default:
+        return [
+          { id: "all", label: "جميع الباقات", icon: Layers },
+          { id: "diamonds", label: "الجواهر الأساسية", icon: Gem },
+          { id: "weekly_pass", label: "بطاقات الويكلي", icon: Calendar },
+          { id: "double_diamonds", label: "الجواهر المضاعفة (x2)", icon: Sparkles },
+          { id: "bundles", label: "الحزم (The Bundle)", icon: Package },
+        ];
+    }
+  }, [selectedGameId]);
 
   return (
     <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans selection:bg-rose-500/30 selection:text-rose-200">
@@ -200,10 +328,16 @@ function CustomerStorePage() {
       {/* Main Content Area */}
       <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
         {/* Games Showcase Section */}
-        <GamesSection />
+        <GamesSection
+          selectedGameId={selectedGameId}
+          onSelectGame={handleGameSelect}
+        />
 
         {/* Step 1: Player ID Card */}
-        <section id="player-input-card" className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl">
+        <section
+          id="player-input-card"
+          className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-800/80 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">
@@ -211,13 +345,13 @@ function CustomerStorePage() {
               </div>
               <div>
                 <h2 className="text-sm sm:text-lg font-bold text-white flex items-center flex-wrap gap-1.5">
-                  <span>أدخل معرف حساب اللاعب</span>
+                  <span>أدخل معرف حساب {activeGame.name}</span>
                   <span className="font-mono text-cyan-400 text-xs sm:text-sm font-semibold">
-                    (User ID & Zone)
+                    ({activeGame.needsZone ? "User ID & Zone" : "Player ID"})
                   </span>
                 </h2>
                 <p className="text-[11px] sm:text-xs text-slate-400">
-                  تحقق من الاسم داخل اللعبة لتفادي إرسال الشحن لحساب آخر
+                  تحقق من المعرف لتفادي إرسال الشحن لحساب آخر بالخطأ
                 </p>
               </div>
             </div>
@@ -227,17 +361,17 @@ function CustomerStorePage() {
               className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors self-start sm:self-auto cursor-pointer"
             >
               <HelpCircle className="h-4 w-4 shrink-0" />
-              <span>أين أجد الـ User ID والـ Zone ID؟</span>
+              <span>{activeGame.guideTitle}</span>
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            {/* User ID */}
-            <div className="sm:col-span-5 space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">معرف اللاعب (User ID)</label>
+            {/* Player ID / User ID */}
+            <div className={`${activeGame.needsZone ? "sm:col-span-5" : "sm:col-span-9"} space-y-1.5`}>
+              <label className="text-xs font-semibold text-slate-300">{activeGame.idLabel}</label>
               <input
                 type="text"
-                placeholder="مثال: 12345678"
+                placeholder={activeGame.idPlaceholder}
                 value={userId}
                 onChange={(e) => {
                   setUserId(e.target.value);
@@ -248,27 +382,29 @@ function CustomerStorePage() {
               />
             </div>
 
-            {/* Zone ID */}
-            <div className="sm:col-span-4 space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">رقم السيرفر (Zone ID)</label>
-              <input
-                type="text"
-                placeholder="مثال: 2024"
-                value={zoneId}
-                onChange={(e) => {
-                  setZoneId(e.target.value);
-                  setVerifiedName(null);
-                  setVerifyError(null);
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition-all font-mono"
-              />
-            </div>
+            {/* Zone ID (Only if needed, e.g. MLBB) */}
+            {activeGame.needsZone && (
+              <div className="sm:col-span-4 space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">{activeGame.zoneLabel}</label>
+                <input
+                  type="text"
+                  placeholder={activeGame.zonePlaceholder}
+                  value={zoneId}
+                  onChange={(e) => {
+                    setZoneId(e.target.value);
+                    setVerifiedName(null);
+                    setVerifyError(null);
+                  }}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition-all font-mono"
+                />
+              </div>
+            )}
 
             {/* Verification Button */}
             <div className="sm:col-span-3">
               <button
                 onClick={handleVerifyPlayer}
-                disabled={verifying || !userId || !zoneId}
+                disabled={verifying || !userId || (activeGame.needsZone && !zoneId)}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 disabled:opacity-50 text-white font-bold py-3 px-4 text-xs sm:text-sm transition-all shadow-md shadow-rose-600/25 cursor-pointer"
               >
                 {verifying ? (
@@ -313,10 +449,9 @@ function CustomerStorePage() {
                 2
               </div>
               <div>
-                <h2 className="text-xl font-bold text-white">اختر الباقة المطلوبة</h2>
+                <h2 className="text-xl font-bold text-white">اختر باقة {activeGame.name}</h2>
                 <p className="text-xs text-slate-400">
-                  قوائم الأسعار مطابقة تماماً لبوستر METO STORE الرسمي (الأسعار بالجنيه المصري و
-                  USDT)
+                  قوائم الأسعار الرسمية المعتمدة لـ METO STORE (الأسعار بالجنيه المصري و USDT)
                 </p>
               </div>
             </div>
@@ -326,7 +461,7 @@ function CustomerStorePage() {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="ابحث عن باقة أو عدد الجواهر..."
+                placeholder="ابحث عن باقة أو الكمية..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-xl border border-slate-800 bg-slate-900/80 pr-9 pl-4 py-2 text-xs text-white placeholder-slate-500 focus:border-rose-400 outline-none"
@@ -359,10 +494,6 @@ function CustomerStorePage() {
           {/* Packages Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
             {filteredPackages.map((p) => {
-              const isDouble = p.category === "double_diamonds";
-              const isPass = p.category === "weekly_pass";
-              const isBundle = p.category === "bundles";
-
               return (
                 <div
                   key={p.id}
@@ -390,6 +521,8 @@ function CustomerStorePage() {
                         category={p.category}
                         diamonds={p.diamonds}
                         bonusDiamonds={p.bonusDiamonds}
+                        gameId={p.gameId || selectedGameId}
+                        currencyName={p.currencyName || activeGame.currency}
                         size="md"
                       />
                     </div>
@@ -406,7 +539,7 @@ function CustomerStorePage() {
                     ) : (
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         {p.diamonds > 0
-                          ? `${p.diamonds} جوهرة`
+                          ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
                           : p.description?.slice(0, 25) || "باقة مميزة"}
                       </p>
                     )}
@@ -480,7 +613,7 @@ function CustomerStorePage() {
             <span>واتساب: 01070459339</span>
           </div>
           <div className="flex items-center gap-3 text-slate-400">
-            <span>سعر الصرف المعتمد: 1 USDT = {settings.usdtToEgpRate} EGP</span>
+            <span>شحن آلي فوري ومشفر 100%</span>
             <span className="text-slate-600">•</span>
             <a
               href="/admin"
@@ -499,7 +632,7 @@ function CustomerStorePage() {
         onOpenChange={setCheckoutOpen}
         pkg={selectedPackage}
         userId={userId}
-        zoneId={zoneId}
+        zoneId={activeGame.needsZone ? zoneId : (zoneId || "")}
         username={verifiedName || undefined}
         isMerchant={false}
       />

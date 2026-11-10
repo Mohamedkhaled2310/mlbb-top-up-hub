@@ -95,8 +95,8 @@ export function CheckoutModal({
       merchantTradeNo: tradeNo,
       orderAmount: priceUsdt,
       currency: "USDT",
-      goodsTitle: `${pkg.name} - MLBB Top Up`,
-      goodsDetail: `MLBB diamonds topup for UID ${userId} (${zoneId})`,
+      goodsTitle: `${pkg.name} - METO STORE`,
+      goodsDetail: `Top up for UID ${userId}${zoneId && zoneId !== "-" ? ` (${zoneId})` : ""}`,
     })
       .then((res) => {
         if (!isMounted) return;
@@ -226,16 +226,16 @@ export function CheckoutModal({
 
   const copyReceipt = () => {
     const text = `
-إيصال شحن METO STORE - Mobile Legends
+إيصال شحن METO STORE الرسمي
 ------------------------------------
 رقم الطلب: ${localOrderIdRef.current || ""}
-معرف اللاعب: ${userId} (${zoneId})
-اسم الحساب: ${username || "MLBB Hero"}
+معرف اللاعب: ${userId}${zoneId && zoneId !== "-" ? ` (${zoneId})` : ""}
+اسم الحساب: ${username || "Player"}
 الباقة: ${pkg?.name || ""}
-الجواهر: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} جوهرة
+الكمية: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} ${pkg?.currencyName || "جوهرة"}
 المبلغ: ${priceUsdt} USDT (${priceEgp} EGP)
 معاملة Binance: ${orderData?.merchantTradeNo || ""}
-معاملة FazerCards: ${topUpResult?.transactionId || "قيد المعالجة"}
+معاملة المزود: ${topUpResult?.transactionId || "قيد المعالجة"}
 الحالة: ناجحة ومكتملة ✓
 خدمة العملاء واتساب: 01070459339
 ------------------------------------
@@ -292,6 +292,8 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
                     category={pkg.category}
                     diamonds={pkg.diamonds}
                     bonusDiamonds={pkg.bonusDiamonds}
+                    gameId={pkg.gameId}
+                    currencyName={pkg.currencyName}
                     size="md"
                   />
                 )}
@@ -300,11 +302,12 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
                   <h4 className="font-bold text-white text-base mt-0.5">{pkg?.name}</h4>
                   <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
                     <span className="text-purple-400 font-semibold">
-                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} جوهرة
+                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} {pkg?.currencyName || "جوهرة"}
                     </span>
                     <span>•</span>
                     <span>
-                      حساب: <span className="font-mono text-cyan-300">{userId}</span> ({zoneId})
+                      حساب: <span className="font-mono text-cyan-300">{userId}</span>
+                      {zoneId && zoneId !== "-" && <span> ({zoneId})</span>}
                     </span>
                   </div>
                   {username && (

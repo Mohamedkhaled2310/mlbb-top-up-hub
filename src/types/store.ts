@@ -2,10 +2,12 @@ export type PackageCategory = "diamonds" | "weekly_pass" | "double_diamonds" | "
 
 export interface TopUpPackage {
   id: string;
+  gameId?: "mlbb" | "pubg" | "freefire" | "hok" | string;
   name: string;
   category: PackageCategory;
   diamonds: number;
   bonusDiamonds?: number;
+  currencyName?: string;
   fazerProductId: string;
   costPriceUsdt: number;
   merchantPriceEgp: number;

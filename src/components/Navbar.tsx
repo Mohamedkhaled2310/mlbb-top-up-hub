@@ -119,17 +119,8 @@ export function Navbar() {
             </button>
           </nav>
 
-          {/* Right actions: WhatsApp, Exchange Rate & Mobile Menu Toggle */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
-            {/* Exchange Rate pill */}
-            <div className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-slate-700/60 bg-slate-900/80 px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs text-slate-300 shrink-0">
-              <span className="flex h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
-              <span className="text-slate-400 hidden sm:inline">الصرف:</span>
-              <span className="font-mono font-bold text-rose-400">
-                {settings.usdtToEgpRate} <span className="text-[9px] sm:text-[10px] text-slate-400">EGP</span>
-              </span>
-            </div>
-
+          {/* Right actions: WhatsApp & Mobile Menu Toggle */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {/* WhatsApp Link */}
             <a
               href="https://wa.me/201070459339"
@@ -284,18 +275,6 @@ export function Navbar() {
                       </div>
                       <ChevronLeft className="h-4 w-4 text-emerald-500" />
                     </a>
-                  </div>
-
-                  {/* Exchange rate info card */}
-                  <div className="mx-4 p-3 rounded-xl border border-slate-800 bg-slate-900/60 text-xs text-slate-300 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">سعر الصرف المعتمد:</span>
-                      <span className="font-mono font-bold text-rose-400">1 USDT = {settings.usdtToEgpRate} EGP</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      <span>تحديث لحظي لأسعار التحويل بالجنيه المصري</span>
-                    </div>
                   </div>
                 </div>
 

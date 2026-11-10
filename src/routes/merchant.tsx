@@ -134,17 +134,11 @@ function MerchantPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setPosterOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 px-3.5 py-3 text-xs font-bold transition-all shadow-sm"
+              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 px-4 py-3 text-xs font-bold transition-all shadow-sm cursor-pointer"
             >
               <ImageIcon className="h-4 w-4 text-purple-400" />
-              <span>عرض بوستر الأسعار</span>
+              <span>عرض بوستر الأسعار الرسمي</span>
             </button>
-            <div className="rounded-xl border border-purple-500/30 bg-[#120f26] p-3 text-right">
-              <span className="text-[11px] text-slate-400 block">سعر صرف الجملة:</span>
-              <span className="text-base font-extrabold text-purple-300">
-                1 USDT = {settings.usdtToEgpRate} EGP
-              </span>
-            </div>
           </div>
         </div>
       </div>
