@@ -81,15 +81,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "MLBB Top-Up Hub | متجر شحن جواهر Mobile Legends فوري" },
+      { title: "METO STORE | متجر شحن Mobile Legends الرسمي" },
       {
         name: "description",
         content:
-          "شحن جواهر وباقات وبطاقات الويكلي للعبة Mobile Legends بالجنيه المصري و USDT عبر FazerCards و Binance Pay",
+          "متجر METO STORE لشحن جواهر وبطاقات ويكلي وعروض دبل Mobile Legends: Bang Bang بالجنيه المصري و USDT عبر FazerCards و Binance Pay",
       },
-      { name: "author", content: "MLBB Top-Up Hub" },
-      { property: "og:title", content: "MLBB Top-Up Hub" },
-      { property: "og:description", content: "شحن جواهر وباقات Mobile Legends فوري" },
+      { name: "author", content: "METO STORE" },
+      { property: "og:title", content: "METO STORE - MLBB Diamonds Top Up" },
+      { property: "og:description", content: "Your MLBB Top Up Store ♡ • Play More Spend Less ♡" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

@@ -6,6 +6,7 @@ import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
 import { useStore } from "../lib/store/useStore";
 import { TopUpPackage, PackageCategory } from "../types/store";
 import { validatePlayerApi } from "../lib/api-client";
+import metoPoster from "../assets/meto-poster.jpg";
 import {
   Zap,
   CheckCircle2,
@@ -20,7 +21,9 @@ import {
   Copy,
   Check,
   Sparkles,
+  Image as ImageIcon,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 
 export const Route = createFileRoute("/merchant")({
   component: MerchantPage,
@@ -42,6 +45,7 @@ function MerchantPage() {
   // Modals
   const [checkoutOpen, setCheckoutOpen] = useState<boolean>(false);
   const [guideOpen, setGuideOpen] = useState<boolean>(false);
+  const [posterOpen, setPosterOpen] = useState<boolean>(false);
   const [copiedTradeNo, setCopiedTradeNo] = useState<string | null>(null);
 
   const selectedPkg = packages.find((p) => p.id === selectedPackageId) || packages[0];
@@ -117,6 +121,13 @@ function MerchantPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPosterOpen(true)}
+              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 px-3.5 py-3 text-xs font-bold transition-all shadow-sm"
+            >
+              <ImageIcon className="h-4 w-4 text-purple-400" />
+              <span>عرض بوستر الأسعار</span>
+            </button>
             <div className="rounded-xl border border-purple-500/30 bg-[#120f26] p-3 text-right">
               <span className="text-[11px] text-slate-400 block">سعر صرف الجملة:</span>
               <span className="text-base font-extrabold text-purple-300">
@@ -504,6 +515,25 @@ function MerchantPage() {
       />
 
       <PlayerIdGuideModal open={guideOpen} onOpenChange={setGuideOpen} />
+
+      {/* Poster High-Res Modal */}
+      <Dialog open={posterOpen} onOpenChange={setPosterOpen}>
+        <DialogContent className="max-w-2xl bg-[#0a0e1c] border border-purple-500/40 text-slate-100 p-4 rounded-2xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader className="mb-2">
+            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-purple-400" />
+              <span>بوستر أسعار METO STORE المعتمد</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
+            <img
+              src={metoPoster}
+              alt="METO STORE Official MLBB Diamonds Poster"
+              className="w-full h-auto object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

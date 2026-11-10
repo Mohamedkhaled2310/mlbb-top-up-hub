@@ -225,7 +225,7 @@ export function CheckoutModal({
 
   const copyReceipt = () => {
     const text = `
-إيصال شحن Mobile Legends: Bang Bang
+إيصال شحن METO STORE - Mobile Legends
 ------------------------------------
 رقم الطلب: ${localOrderIdRef.current || ""}
 معرف اللاعب: ${userId} (${zoneId})
@@ -234,10 +234,11 @@ export function CheckoutModal({
 الجواهر: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} جوهرة
 المبلغ: ${priceUsdt} USDT (${priceEgp} EGP)
 معاملة Binance: ${orderData?.merchantTradeNo || ""}
-معاملة Fazer: ${topUpResult?.transactionId || "قيد المعالجة"}
+معاملة FazerCards: ${topUpResult?.transactionId || "قيد المعالجة"}
 الحالة: ناجحة ومكتملة ✓
+خدمة العملاء واتساب: 01070459339
 ------------------------------------
-MLBB Top-Up Hub
+METO STORE • نشاطاتنا تميزنا ثقة ♡
     `.trim();
 
     navigator.clipboard.writeText(text);
