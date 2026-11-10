@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { TopUpPackage, TopUpOrder } from "../types/store";
 import { createPaymentOrderApi, checkPaymentStatusApi, executeTopUpApi } from "../lib/api-client";
 import { useStore } from "../lib/store/useStore";
+import { GamePackageIcon } from "./GamePackageIcon";
 import {
   CheckCircle2,
   Loader2,
@@ -285,26 +286,36 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
           {/* Order Details Card */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="flex items-start justify-between">
-              <div>
-                <span className="text-xs font-medium text-cyan-400">الباقة المختارة:</span>
-                <h4 className="font-bold text-white text-base mt-0.5">{pkg?.name}</h4>
-                <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
-                  <span className="text-purple-400 font-semibold">
-                    {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} جوهرة
-                  </span>
-                  <span>•</span>
-                  <span>
-                    حساب: <span className="font-mono text-cyan-300">{userId}</span> ({zoneId})
-                  </span>
-                </div>
-                {username && (
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+              <div className="flex items-start gap-3">
+                {pkg && (
+                  <GamePackageIcon
+                    category={pkg.category}
+                    diamonds={pkg.diamonds}
+                    bonusDiamonds={pkg.bonusDiamonds}
+                    size="md"
+                  />
+                )}
+                <div>
+                  <span className="text-xs font-medium text-cyan-400">الباقة المختارة:</span>
+                  <h4 className="font-bold text-white text-base mt-0.5">{pkg?.name}</h4>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
+                    <span className="text-purple-400 font-semibold">
+                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} جوهرة
+                    </span>
+                    <span>•</span>
                     <span>
-                      الاسم داخل اللعبة: <strong>{username}</strong>
+                      حساب: <span className="font-mono text-cyan-300">{userId}</span> ({zoneId})
                     </span>
                   </div>
-                )}
+                  {username && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>
+                        الاسم داخل اللعبة: <strong>{username}</strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <span className="text-xs text-slate-400">المبلغ المطلوب:</span>

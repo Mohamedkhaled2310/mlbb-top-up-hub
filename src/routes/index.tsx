@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
+import { GamesSection } from "../components/GamesSection";
+import { GamePackageIcon } from "../components/GamePackageIcon";
 import { useStore } from "../lib/store/useStore";
 import { TopUpPackage, PackageCategory } from "../types/store";
 import { validatePlayerApi } from "../lib/api-client";
@@ -197,18 +199,21 @@ function CustomerStorePage() {
 
       {/* Main Content Area */}
       <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
+        {/* Games Showcase Section */}
+        <GamesSection />
+
         {/* Step 1: Player ID Card */}
-        <section className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl">
+        <section id="player-input-card" className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-800/80 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">
                 1
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-white">
-                  أدخل معرف حساب اللاعب{" "}
+                <h2 className="text-sm sm:text-lg font-bold text-white flex items-center flex-wrap gap-1.5">
+                  <span>أدخل معرف حساب اللاعب</span>
                   <span className="font-mono text-cyan-400 text-xs sm:text-sm font-semibold">
-                    (User ID)
+                    (User ID & Zone)
                   </span>
                 </h2>
                 <p className="text-[11px] sm:text-xs text-slate-400">
@@ -301,7 +306,7 @@ function CustomerStorePage() {
         </section>
 
         {/* Step 2: Choose Package Section */}
-        <section className="space-y-6">
+        <section id="packages-section" className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 font-extrabold text-sm border border-cyan-500/30">
@@ -378,18 +383,15 @@ function CustomerStorePage() {
                     </span>
                   )}
 
-                  {/* Top: Icon & Diamond count */}
+                  {/* Top: Professional 3D Game Asset Icon & Name */}
                   <div className="pt-2">
-                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500/20 to-cyan-500/20 border border-rose-500/30 text-rose-400 group-hover:scale-110 transition-transform">
-                      {isPass ? (
-                        <Calendar className="h-5 w-5 text-purple-400" />
-                      ) : isDouble ? (
-                        <Sparkles className="h-5 w-5 text-amber-400" />
-                      ) : isBundle ? (
-                        <Package className="h-5 w-5 text-emerald-400" />
-                      ) : (
-                        <Gem className="h-5 w-5 text-cyan-400" />
-                      )}
+                    <div className="mb-2.5 flex items-center justify-start group-hover:scale-105 transition-transform">
+                      <GamePackageIcon
+                        category={p.category}
+                        diamonds={p.diamonds}
+                        bonusDiamonds={p.bonusDiamonds}
+                        size="md"
+                      />
                     </div>
 
                     <h3 className="font-bold text-white text-sm line-clamp-1 group-hover:text-rose-300 transition-colors">
@@ -477,11 +479,15 @@ function CustomerStorePage() {
             <span>•</span>
             <span>واتساب: 01070459339</span>
           </div>
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>سعر الصرف: 1 USDT = {settings.usdtToEgpRate} EGP</span>
-            <span>•</span>
-            <a href="/admin" className="hover:text-rose-400 transition-colors">
-              لوحة الإدارة
+          <div className="flex items-center gap-3 text-slate-400">
+            <span>سعر الصرف المعتمد: 1 USDT = {settings.usdtToEgpRate} EGP</span>
+            <span className="text-slate-600">•</span>
+            <a
+              href="/admin"
+              className="text-slate-600 hover:text-slate-400 transition-colors text-[11px]"
+              title="بوابة دخول المشرف (محمية)"
+            >
+              🔒 المشرف
             </a>
           </div>
         </div>

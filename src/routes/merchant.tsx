@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
+import { GamePackageIcon } from "../components/GamePackageIcon";
 import { useStore } from "../lib/store/useStore";
 import { TopUpPackage, PackageCategory } from "../types/store";
 import { validatePlayerApi } from "../lib/api-client";
@@ -268,9 +269,17 @@ function MerchantPage() {
 
               {selectedPkg && (
                 <div className="space-y-3 text-xs border-y border-slate-800/80 py-3">
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-slate-400">الباقة المختارة:</span>
-                    <span className="font-bold text-white">{selectedPkg.name}</span>
+                    <div className="flex items-center gap-2">
+                      <GamePackageIcon
+                        category={selectedPkg.category}
+                        diamonds={selectedPkg.diamonds}
+                        bonusDiamonds={selectedPkg.bonusDiamonds}
+                        size="sm"
+                      />
+                      <span className="font-bold text-white">{selectedPkg.name}</span>
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">كمية الجواهر:</span>
@@ -381,7 +390,12 @@ function MerchantPage() {
                   return (
                     <tr key={pkg.id} className="hover:bg-purple-950/20 transition-colors">
                       <td className="p-3.5 font-bold text-white flex items-center gap-2">
-                        <Gem className="h-3.5 w-3.5 text-purple-400" />
+                        <GamePackageIcon
+                          category={pkg.category}
+                          diamonds={pkg.diamonds}
+                          bonusDiamonds={pkg.bonusDiamonds}
+                          size="sm"
+                        />
                         <span>{pkg.name}</span>
                       </td>
                       <td className="p-3.5 font-mono text-[11px] text-slate-400">

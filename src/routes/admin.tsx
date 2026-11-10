@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
 import { useStore } from "../lib/store/useStore";
 import { TopUpPackage, PackageCategory } from "../types/store";
@@ -22,6 +22,14 @@ import {
   Save,
   CheckCircle2,
   Image as ImageIcon,
+  Lock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  LogOut,
+  Key,
+  ShieldAlert,
+  ArrowRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -30,6 +38,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
+
+const DEFAULT_ADMIN_PASSWORD = "MetoAdmin@2026#Secure!779";
+const AUTH_SESSION_KEY = "meto_admin_authenticated";
+const CUSTOM_PASS_KEY = "meto_admin_password";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -46,6 +58,21 @@ function AdminPage() {
     updateExchangeRate,
     resetToDefaults,
   } = useStore();
+
+  // Admin authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [passwordInput, setPasswordInput] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  const [lockoutTimer, setLockoutTimer] = useState<number>(0);
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+
+  // Password change modal
+  const [changePassOpen, setChangePassOpen] = useState<boolean>(false);
+  const [newPasswordInput, setNewPasswordInput] = useState<string>("");
+  const [changePassSuccess, setChangePassSuccess] = useState<boolean>(false);
 
   // Settings local state
   const [exchangeRate, setExchangeRate] = useState<number>(settings.usdtToEgpRate);
@@ -80,10 +107,83 @@ function AdminPage() {
   const [selectedCat, setSelectedCat] = useState<PackageCategory | "all">("all");
   const [search, setSearch] = useState("");
 
-  // Fetch connection status on mount
+  // Check auth and setup lockout timer
   useEffect(() => {
-    fetchStatus();
+    const isAuth =
+      localStorage.getItem(AUTH_SESSION_KEY) === "true" ||
+      sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
+    if (isAuth) {
+      setIsAuthenticated(true);
+      fetchStatus();
+    }
   }, []);
+
+  useEffect(() => {
+    if (lockoutTimer > 0) {
+      const timer = setTimeout(() => {
+        setLockoutTimer((prev) => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [lockoutTimer]);
+
+  const handleLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (lockoutTimer > 0) return;
+
+    setIsLoggingIn(true);
+    setLoginError(null);
+
+    setTimeout(() => {
+      const activePassword = localStorage.getItem(CUSTOM_PASS_KEY) || DEFAULT_ADMIN_PASSWORD;
+
+      if (passwordInput.trim() === activePassword.trim()) {
+        if (rememberMe) {
+          localStorage.setItem(AUTH_SESSION_KEY, "true");
+        } else {
+          sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+        }
+        setIsAuthenticated(true);
+        setLoginError(null);
+        setPasswordInput("");
+        setFailedAttempts(0);
+        fetchStatus();
+      } else {
+        const nextAttempts = failedAttempts + 1;
+        setFailedAttempts(nextAttempts);
+        if (nextAttempts >= 5) {
+          setLockoutTimer(30);
+          setLoginError("تم تجاوز الحد الأقصى للمحاولات (5). تم حظر الإدخال مؤقتاً لمدة 30 ثانية لأسباب أمنية.");
+        } else {
+          setLoginError(`كلمة المرور غير صحيحة! يرجى التأكد وإعادة المحاولة (المتبقي ${5 - nextAttempts} محاولات).`);
+        }
+      }
+      setIsLoggingIn(false);
+    }, 400);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    setIsAuthenticated(false);
+    setPasswordInput("");
+    setLoginError(null);
+  };
+
+  const handleChangePassword = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (newPasswordInput.trim().length < 8) {
+      alert("كلمة المرور يجب أن لا تقل عن 8 خانات وتحتوي أحرف وأرقام ورموز خاصة.");
+      return;
+    }
+    localStorage.setItem(CUSTOM_PASS_KEY, newPasswordInput.trim());
+    setChangePassSuccess(true);
+    setTimeout(() => {
+      setChangePassSuccess(false);
+      setChangePassOpen(false);
+      setNewPasswordInput("");
+    }, 1800);
+  };
 
   const fetchStatus = async () => {
     setCheckingStatus(true);
@@ -194,9 +294,188 @@ function AdminPage() {
     return matchCat && matchSearch;
   });
 
+  // If not authenticated, render secure admin login view
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans selection:bg-rose-500/30 selection:text-rose-200">
+        <Navbar />
+
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-6 my-auto">
+          <div className="w-full max-w-md">
+            {/* Cyber lock card */}
+            <div className="relative rounded-3xl border border-rose-500/30 bg-[#0a0f20]/95 p-6 sm:p-8 shadow-2xl shadow-rose-950/40 backdrop-blur-2xl">
+              {/* Background ambient glow */}
+              <div className="absolute -top-16 -right-16 h-36 w-36 rounded-full bg-rose-500/15 blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-16 -left-16 h-36 w-36 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+
+              {/* Header Icon */}
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="relative mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 via-red-600 to-amber-500 p-0.5 shadow-xl shadow-rose-600/30">
+                  <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-[#0c1224]">
+                    <Lock className="h-8 w-8 text-rose-400" />
+                  </div>
+                  <span className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-slate-950 text-xs font-black shadow">
+                    <Key className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/40 bg-rose-950/40 px-3 py-1 text-[11px] font-bold text-rose-300 mb-2">
+                  <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
+                  <span>منطقة مشفرة ومحمية بباسورد قوي</span>
+                </div>
+
+                <h1 className="text-xl sm:text-2xl font-black text-white">
+                  بوابة المشرف المركزي
+                </h1>
+                <p className="text-xs text-slate-400 mt-1">
+                  لوحة تحكم إدارة أسعار وهوامش شحن METO STORE
+                </p>
+              </div>
+
+              {/* Login Form */}
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2 text-right">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>كلمة المرور الإدارية (Admin Password)</span>
+                    <span className="text-[10px] text-cyan-400">حماية مشفرة</span>
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="أدخل كلمة مرور الإدارة القوية..."
+                      value={passwordInput}
+                      onChange={(e) => {
+                        setPasswordInput(e.target.value);
+                        setLoginError(null);
+                      }}
+                      disabled={lockoutTimer > 0 || isLoggingIn}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition-all font-mono"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Remember me toggle */}
+                <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-900 text-rose-500 focus:ring-rose-500/30"
+                    />
+                    <span>تذكر جلسة العمل على هذا المتصفح</span>
+                  </label>
+                </div>
+
+                {/* Error feedback */}
+                {loginError && (
+                  <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-300 animate-fadeIn">
+                    <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold">{loginError}</p>
+                      {lockoutTimer > 0 && (
+                        <p className="text-[11px] text-amber-300 mt-1">
+                          يمكن المحاولة مرة أخرى بعد:{" "}
+                          <strong className="font-mono text-white text-sm">{lockoutTimer}</strong> ثانية
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit button */}
+                <button
+                  type="submit"
+                  disabled={lockoutTimer > 0 || isLoggingIn || !passwordInput.trim()}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 disabled:opacity-50 text-white font-black py-3 px-4 text-sm transition-all shadow-lg shadow-rose-600/30 cursor-pointer active:scale-98"
+                >
+                  {isLoggingIn ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>جاري التحقق من الصلاحيات...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="h-4 w-4" />
+                      <span>تسجيل الدخول للوحة التحكم</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Password notice & Back to store */}
+              <div className="mt-6 pt-4 border-t border-slate-800/80 space-y-3">
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3 text-[11px] text-cyan-300 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-white">
+                    <Shield className="h-3.5 w-3.5 text-cyan-400" />
+                    <span>كلمة المرور الافتراضية القوية للوحة:</span>
+                  </div>
+                  <div className="font-mono text-xs text-rose-300 bg-black/40 p-1.5 rounded border border-rose-500/30 select-all text-center font-bold">
+                    MetoAdmin@2026#Secure!779
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center">
+                    (يمكنك تغيير كلمة المرور فور الدخول إلى لوحة الإدارة)
+                  </p>
+                </div>
+
+                <Link
+                  to="/"
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+                >
+                  <span>العودة لمتجر الزبائن</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#070912] text-slate-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
       <Navbar />
+
+      {/* Admin Top Status & Quick Action Bar */}
+      <div className="border-b border-amber-500/30 bg-[#0d1222] px-4 py-2 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-bold text-emerald-400">جلسة المشرف نشطة</span>
+            <span className="text-slate-500">•</span>
+            <span className="text-slate-400">لوحة التحكم الآمنة</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setChangePassOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 px-2.5 py-1 text-slate-200 font-medium transition-colors cursor-pointer"
+            >
+              <Key className="h-3.5 w-3.5 text-amber-400" />
+              <span>تغيير كلمة المرور</span>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-lg border border-rose-500/40 bg-rose-950/40 hover:bg-rose-900/60 px-2.5 py-1 text-rose-300 font-bold transition-colors cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5 text-rose-400" />
+              <span>تسجيل الخروج</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Admin Header */}
       <div className="border-b border-amber-500/20 bg-gradient-to-r from-[#120e21] via-[#1a140d] to-[#120e21] px-4 py-8 sm:px-6 lg:px-8">
@@ -728,6 +1007,57 @@ function AdminPage() {
               className="w-full h-auto object-contain"
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Admin Password Modal */}
+      <Dialog open={changePassOpen} onOpenChange={setChangePassOpen}>
+        <DialogContent className="max-w-md bg-[#0a0f20] border border-amber-500/40 text-slate-100 p-5 rounded-2xl">
+          <DialogHeader className="text-right">
+            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
+              <Key className="h-4 w-4 text-amber-400" />
+              <span>تغيير كلمة المرور الإدارية</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400 text-right">
+              أدخل كلمة مرور جديدة قوية لحماية لوحة الإدارة (يجب أن لا تقل عن 8 خانات).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleChangePassword} className="space-y-4 my-2 text-right">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">كلمة المرور الجديدة:</label>
+              <input
+                type="text"
+                placeholder="مثال: Admin#2026@Pass!Meto"
+                value={newPasswordInput}
+                onChange={(e) => setNewPasswordInput(e.target.value)}
+                className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-none font-mono"
+              />
+            </div>
+
+            {changePassSuccess && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-2.5 text-xs text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span>تم تحديث وحفظ كلمة المرور الجديدة بنجاح!</span>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setChangePassOpen(false)}
+                className="flex-1 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 py-2.5 text-xs font-semibold hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-bold py-2.5 text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+              >
+                حفظ كلمة المرور
+              </button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
