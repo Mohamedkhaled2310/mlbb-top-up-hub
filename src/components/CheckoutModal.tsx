@@ -257,23 +257,23 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-[#0b0f1d] border border-cyan-500/30 text-slate-100 p-0 overflow-hidden rounded-2xl shadow-2xl shadow-cyan-950/60 max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#0d162d] to-[#17102e] border-b border-cyan-500/20 px-6 py-4">
-          <DialogHeader>
+        <div className="bg-gradient-to-r from-[#0d162d] to-[#17102e] border-b border-cyan-500/20 px-4 sm:px-6 py-3.5 sm:py-4">
+          <DialogHeader className="text-right sm:text-right">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-400">
                   <QrCode className="h-4 w-4" />
                 </div>
                 <div>
-                  <DialogTitle className="text-base font-bold text-white">
-                    {isMerchant ? "شحن فوري - بوابة التاجر" : "تأكيد الشحن والدفع عبر Binance Pay"}
+                  <DialogTitle className="text-sm sm:text-base font-bold text-white">
+                    {isMerchant ? "شحن فوري - بوابة التاجر" : "تأكيد الشحن والدفع بـ Binance Pay"}
                   </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-400">
-                    دفع مشفر آمن وفوري بنسبة 100%
+                  <DialogDescription className="text-[11px] sm:text-xs text-slate-400">
+                    دفع مشفر آمن وفوري 100%
                   </DialogDescription>
                 </div>
               </div>
-              <span className="font-mono text-xs text-cyan-300 rounded bg-cyan-950/60 px-2 py-1 border border-cyan-500/30">
+              <span className="font-mono text-[11px] sm:text-xs text-cyan-300 rounded bg-cyan-950/60 px-2 py-0.5 sm:py-1 border border-cyan-500/30">
                 {formatTime(timeLeft)}
               </span>
             </div>
@@ -281,7 +281,7 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
         </div>
 
         {/* Body Container */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4">
           {/* Order Details Card */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="flex items-start justify-between">
@@ -342,11 +342,11 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
                 </p>
 
                 {/* QR Code Container */}
-                <div className="relative rounded-xl bg-white p-3 shadow-xl ring-4 ring-cyan-500/20">
+                <div className="relative rounded-xl bg-white p-2.5 sm:p-3 shadow-xl ring-4 ring-cyan-500/20">
                   <img
                     src={orderData.qrCodeUrl}
                     alt="Binance Pay QR Code"
-                    className="h-52 w-52 object-contain"
+                    className="h-44 w-44 sm:h-52 sm:w-52 object-contain"
                   />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="h-10 w-10 rounded-full bg-slate-900/90 border border-amber-400 flex items-center justify-center shadow-lg">

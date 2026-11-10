@@ -139,7 +139,7 @@ function MerchantPage() {
       </div>
 
       {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex-1 w-full space-y-10">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
         {/* Section 1: Fast Top-Up Panel */}
         <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-b from-[#0e1224] to-[#090d1a] p-6 sm:p-8 shadow-xl shadow-purple-950/30">
           <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
@@ -362,7 +362,7 @@ function MerchantPage() {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a0f1d]">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs min-w-[620px]">
               <thead className="bg-[#0e1428] text-slate-300 font-semibold border-b border-slate-800">
                 <tr>
                   <th className="p-3.5">اسم الباقة</th>
@@ -434,7 +434,7 @@ function MerchantPage() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a0f1d]">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs min-w-[620px]">
                 <thead className="bg-[#0e1428] text-slate-300 font-semibold border-b border-slate-800">
                   <tr>
                     <th className="p-3.5">رقم الطلب</th>

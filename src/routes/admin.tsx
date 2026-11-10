@@ -244,7 +244,7 @@ function AdminPage() {
       </div>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex-1 w-full space-y-8">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
         {savedNotice && (
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 text-xs text-emerald-300 animate-fadeIn">
             <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -458,7 +458,7 @@ function AdminPage() {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-[#0a0f1d]">
-            <table className="w-full text-right text-xs">
+            <table className="w-full text-right text-xs min-w-[720px]">
               <thead className="bg-[#0e1428] text-slate-300 font-semibold border-b border-slate-800">
                 <tr>
                   <th className="p-3.5">الباقة</th>

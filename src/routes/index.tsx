@@ -157,56 +157,61 @@ function CustomerStorePage() {
           </p>
 
           {/* Quick Buttons: View Original Poster + WhatsApp */}
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto mb-6 px-1">
             <button
               onClick={() => setPosterOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/50 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 px-4 py-2.5 text-xs font-bold transition-all shadow-md shadow-cyan-500/20"
+              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/50 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 py-2.5 px-3 text-xs font-bold transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
             >
-              <ImageIcon className="h-4 w-4 text-cyan-400" />
-              <span>عرض بوستر الأسعار الرسمي (Original Poster)</span>
+              <ImageIcon className="h-4 w-4 text-cyan-400 shrink-0" />
+              <span>عرض بوستر الأسعار الرسمي</span>
             </button>
 
             <a
               href="https://wa.me/201070459339"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 px-4 py-2.5 text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
+              className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 py-2.5 px-3 text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
             >
-              <MessageCircle className="h-4 w-4 text-emerald-400" />
-              <span>الدعم الفني عبر واتساب: 01070459339</span>
+              <MessageCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span>الدعم الفني واتساب: 01070459339</span>
             </a>
           </div>
 
           {/* Value Props */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto text-xs text-slate-300">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto text-[11px] sm:text-xs text-slate-300 px-1">
             <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <Clock className="h-4 w-4 text-rose-400" />
+              <Clock className="h-3.5 w-3.5 text-rose-400 shrink-0" />
               <span>شحن آلي وفوري خلال ثوانٍ</span>
             </div>
             <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <ShieldCheck className="h-4 w-4 text-cyan-400" />
-              <span>دفع مشفر بـ Binance Pay بدون كشف بيانات</span>
+              <ShieldCheck className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+              <span>دفع مشفر بـ Binance Pay</span>
             </div>
             <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <Gem className="h-4 w-4 text-purple-400" />
-              <span>بطاقات الويكلي وعروض الدبل x2 الرسمية</span>
+              <Gem className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+              <span>بطاقات الويكلي وعروض الدبل x2</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 flex-1 w-full space-y-10">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
         {/* Step 1: Player ID Card */}
-        <section className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-5 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl">
+        <section className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-800/80 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">
                 1
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">أدخل معرف حساب اللاعب (MLBB ID)</h2>
-                <p className="text-xs text-slate-400">
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  أدخل معرف حساب اللاعب{" "}
+                  <span className="font-mono text-cyan-400 text-xs sm:text-sm font-semibold">
+                    (User ID)
+                  </span>
+                </h2>
+                <p className="text-[11px] sm:text-xs text-slate-400">
                   تحقق من الاسم داخل اللعبة لتفادي إرسال الشحن لحساب آخر
                 </p>
               </div>
@@ -214,9 +219,9 @@ function CustomerStorePage() {
 
             <button
               onClick={() => setGuideOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors self-start sm:self-auto"
+              className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors self-start sm:self-auto cursor-pointer"
             >
-              <HelpCircle className="h-4 w-4" />
+              <HelpCircle className="h-4 w-4 shrink-0" />
               <span>أين أجد الـ User ID والـ Zone ID؟</span>
             </button>
           </div>
