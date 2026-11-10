@@ -91,7 +91,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "METO STORE - MLBB Diamonds Top Up" },
       { property: "og:description", content: "Your MLBB Top Up Store ♡ • Play More Spend Less ♡" },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/meto-logo.png" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/meto-logo.png" },
     ],
     links: [
       {
@@ -99,6 +101,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/meto-logo.png", type: "image/png" },
+      { rel: "shortcut icon", href: "/meto-logo.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/meto-logo.png" },
     ],
   }),
   shellComponent: RootShell,

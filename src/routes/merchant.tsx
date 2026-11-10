@@ -8,6 +8,7 @@ import { useStore } from "../lib/store/useStore";
 import { TopUpPackage, PackageCategory } from "../types/store";
 import { validatePlayerApi } from "../lib/api-client";
 import metoPoster from "../assets/meto-poster.jpg";
+import metoLogo from "../assets/meto-logo.jpg";
 import {
   Zap,
   CheckCircle2,
@@ -107,18 +108,27 @@ function MerchantPage() {
       {/* Merchant Header Bar */}
       <div className="border-b border-purple-500/20 bg-gradient-to-r from-[#0d0f21] via-[#150e2a] to-[#0d0f21] px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-950/40 px-3 py-1 text-xs text-purple-300 mb-2">
-              <Zap className="h-3.5 w-3.5 text-purple-400" />
-              <span>بوابة تجار التجزئة والموزعين المعتمدة (B2B Portal)</span>
+          <div className="flex items-center gap-3.5">
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-600 to-rose-500 p-0.5 shadow-lg shadow-purple-950/40">
+              <img
+                src={metoLogo}
+                alt="METO STORE Logo"
+                className="h-full w-full rounded-[14px] object-cover bg-white"
+              />
             </div>
-            <h1 className="text-2xl sm:text-4xl font-extrabold text-white">
-              بوابة التاجر • <span className="text-purple-400">أسعار الجملة المعتمدة</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              تنفيذ فوري مباشر عبر FazerCards وسداد فوري مشفر بـ Binance Pay بهوامش ربح تجارية
-              مخفضة.
-            </p>
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-950/40 px-3 py-1 text-xs text-purple-300 mb-1">
+                <Zap className="h-3.5 w-3.5 text-purple-400" />
+                <span>بوابة تجار التجزئة والموزعين المعتمدة (B2B Portal)</span>
+              </div>
+              <h1 className="text-xl sm:text-3xl font-extrabold text-white">
+                بوابة التاجر • <span className="text-purple-400">أسعار الجملة المعتمدة</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                تنفيذ فوري مباشر عبر FazerCards وسداد فوري مشفر بـ Binance Pay بهوامش ربح تجارية
+                مخفضة.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
