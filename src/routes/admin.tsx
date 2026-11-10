@@ -413,31 +413,11 @@ function AdminPage() {
                 </button>
               </form>
 
-              {/* Password notice & Back to store */}
+              {/* Footer & Back to store */}
               <div className="mt-5 pt-3.5 border-t border-slate-800/80 space-y-2.5">
-                <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-2.5 sm:p-3 text-[11px] text-cyan-300 space-y-2">
-                  <div className="flex items-center gap-1.5 font-bold text-white text-[11px] sm:text-xs">
-                    <Shield className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-                    <span>كلمة المرور الافتراضية للوحة:</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-1.5 bg-black/50 p-2 rounded-lg border border-rose-500/30">
-                    <span className="font-mono text-[11px] sm:text-xs text-rose-300 select-all font-bold break-all">
-                      MetoAdmin@2026#Secure!779
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPasswordInput("MetoAdmin@2026#Secure!779");
-                        setLoginError(null);
-                      }}
-                      className="shrink-0 px-2 py-1 rounded bg-rose-500/25 hover:bg-rose-500/40 text-rose-300 hover:text-white text-[10px] font-bold transition-colors cursor-pointer border border-rose-500/40"
-                    >
-                      استخدام تلقائي
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 text-center">
-                    (يمكنك تغيير كلمة المرور فور الدخول إلى لوحة الإدارة)
-                  </p>
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
+                  <Shield className="h-3.5 w-3.5 text-slate-400" />
+                  <span>دخول المشرفين والمخولين فقط • حماية مشفرة</span>
                 </div>
 
                 <Link
