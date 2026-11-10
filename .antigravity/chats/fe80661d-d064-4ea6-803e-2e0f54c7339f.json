@@ -3,6 +3,19 @@
   "name": "بص اقرا ال readme وكمل بقى.",
   "createdAt": "2026-11-10T14:36:18.767Z",
   "filename": "fe80661d-d064-4ea6-803e-2e0f54c7339f.json",
-  "geminiStarted": false,
-  "messages": []
+  "geminiStarted": true,
+  "messages": [
+    {
+      "id": "fcbeaf41-24f0-4476-8c58-c585e7301e84",
+      "role": "user",
+      "content": "بص اقرا ال readme  وكمل بقى.  تم تفعيل Lovable Cloud وربط FazerCards بأمان، والتحقق من باقات MLBB وتكاليفها الحالية؛ وأنشأت صورة للمتجر. لم تكتمل الصفحات الثلاث أو أسعار البيع أو ربط Binance Pay أو ملف الإعداد؛ البوستر لم يُرفع، ونفد رصيد التنفيذ فتوقفت المتابعة باختيارك، والاستكمال يتطلب رصيداً متاحاً. المشروع مبني حالياً على TanStack، لذلك ستُبنى الصفحات عليه بدلاً من Next.js",
+      "status": "pending",
+      "model": "gemini-3.8-flash-high",
+      "client_type": "gemini-bridge",
+      "parent_message_id": null,
+      "created_at": "2026-11-10T14:37:00.227Z",
+      "sender": "ios",
+      "is_cancelled": false
+    }
+  ]
 }
