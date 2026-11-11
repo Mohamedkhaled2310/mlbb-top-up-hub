@@ -35,13 +35,63 @@ const DEFAULT_EGP_RATE = 50;
 const DEFAULT_RETAIL_MARKUP = 0.2; // 20% default retail over cost*egp if not specified
 const DEFAULT_MERCHANT_MARKUP = 0.1;
 
+async function syncFazerInternal() {
+  const sb = supabaseAdmin as any;
+  const account = await FazerCardsService.checkAccount();
+  const catalog = await FazerCardsService.fetchCatalog();
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (account.connected) {
+    updates.fazer_balance = account.balance ?? null;
+    updates.fazer_balance_currency = account.currency ?? null;
+    updates.fazer_balance_updated_at = new Date().toISOString();
+  }
+  let upserted = 0;
+  if (catalog.ok && catalog.products.length) {
+    const rows = catalog.products.map((p) => ({
+      offer_id: p.offer_id,
+      game_id: p.game_id || "mlbb",
+      category: p.category || "diamonds",
+      name: p.name,
+      diamonds: p.diamonds || 0,
+      bonus_diamonds: p.bonus_diamonds || 0,
+      currency_name: p.currency_name || null,
+      cost_usd: p.cost_usd ?? null,
+      regions: p.regions ?? null,
+      active: p.active !== false,
+      raw: p.raw ?? null,
+      updated_at: new Date().toISOString(),
+    }));
+    const { error } = await sb.from("fazer_packages").upsert(rows, { onConflict: "offer_id" });
+    if (!error) {
+      upserted = rows.length;
+      updates.packages_synced_at = new Date().toISOString();
+    }
+  }
+  await sb.from("store_settings").update(updates).eq("id", 1);
+  return { ok: true, account, catalog: { ok: catalog.ok, count: upserted, message: catalog.message }, settings: updates };
+}
+
 export async function getStoreData(gameId?: string) {
   const sb = supabaseAdmin as any;
-  const { data: settingsRow } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
-  const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+  let { data: settingsRow } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
+  let egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
   let q = sb.from("fazer_packages").select("*").eq("active", true).order("updated_at", { ascending: false }).limit(500);
   if (gameId) q = q.eq("game_id", gameId);
-  const { data: pkgs } = await q;
+  let { data: pkgs } = await q;
+
+  // auto-sync on first load / empty cache so store works when API key is configured
+  if (!pkgs || pkgs.length === 0) {
+    try {
+      await syncFazerInternal();
+      const s2 = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
+      settingsRow = s2.data || settingsRow;
+      egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+      let q2 = sb.from("fazer_packages").select("*").eq("active", true).order("updated_at", { ascending: false }).limit(500);
+      if (gameId) q2 = q2.eq("game_id", gameId);
+      pkgs = (await q2).data || pkgs;
+    } catch { /* ignore sync errors, return empty state */ }
+  }
+
   const packages = (pkgs || []).map((p: any) => {
     const costUsd = Number(p.cost_usd || 0);
     const retail = costUsd > 0 ? Math.ceil(costUsd * egpRate * (1 + DEFAULT_RETAIL_MARKUP)) : 0;
@@ -84,43 +134,7 @@ export async function syncFazerPackagesAndBalance(opts: { token?: string | null;
     if (!opts.token) return { ok: false, error: "unauthorized" };
     try { await requireAdmin(opts.token); } catch (e: any) { return { ok: false, error: e?.message || "forbidden" }; }
   }
-  const sb = supabaseAdmin as any;
-  const account = await FazerCardsService.checkAccount();
-  const catalog = await FazerCardsService.fetchCatalog();
-
-  const updates: any = { updated_at: new Date().toISOString() };
-  if (account.connected) {
-    updates.fazer_balance = account.balance ?? null;
-    updates.fazer_balance_currency = account.currency ?? null;
-    updates.fazer_balance_updated_at = new Date().toISOString();
-  }
-
-  let upserted = 0;
-  if (catalog.ok && catalog.products.length) {
-    const rows = catalog.products.map((p) => ({
-      offer_id: p.offer_id,
-      game_id: p.game_id || "mlbb",
-      category: p.category || "diamonds",
-      name: p.name,
-      diamonds: p.diamonds || 0,
-      bonus_diamonds: p.bonus_diamonds || 0,
-      currency_name: p.currency_name || null,
-      cost_usd: p.cost_usd ?? null,
-      regions: p.regions ?? null,
-      active: p.active !== false,
-      raw: p.raw ?? null,
-      updated_at: new Date().toISOString(),
-    }));
-    const { error } = await sb.from("fazer_packages").upsert(rows, { onConflict: "offer_id" });
-    if (!error) {
-      upserted = rows.length;
-      updates.packages_synced_at = new Date().toISOString();
-    }
-  }
-
-  await sb.from("store_settings").update(updates).eq("id", 1);
-
-  return { ok: true, account, catalog: { ok: catalog.ok, count: upserted, message: catalog.message }, settings: updates };
+  return await syncFazerInternal();
 }
 
 function normalizeRegion(r?: string | null) {
