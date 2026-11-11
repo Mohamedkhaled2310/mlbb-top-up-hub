@@ -199,7 +199,16 @@ export class FazerCardsService {
     const apiKey = this.getApiKey();
     if (!apiKey) return { ok: false, products: [], message: "FAZER_API_KEY is not configured" };
 
-    const categories = ["mobile_legends", "pubg_mobile", "free_fire", "honor_of_kings", "mlbb", "pubg", "freefire", "hok"];
+    const categories: Array<{ id: string; game: string }> = [
+      { id: "mobile_legends", game: "mlbb" },
+      { id: "mlbb", game: "mlbb" },
+      { id: "pubg_mobile", game: "pubg" },
+      { id: "pubg", game: "pubg" },
+      { id: "free_fire", game: "freefire" },
+      { id: "freefire", game: "freefire" },
+      { id: "honor_of_kings", game: "hok" },
+      { id: "hok", game: "hok" },
+    ];
     const bases = [
       "/topups/offers",
       "/topups/products",
@@ -211,18 +220,17 @@ export class FazerCardsService {
       "/games/offers",
       "/games/products",
     ];
-    const candidates: Array<{ url: string; method: "GET" | "POST"; body?: any }> = [];
+    const candidates: Array<{ url: string; method: "GET" | "POST"; body?: any; gameHint?: string }> = [];
     for (const b of bases) {
       candidates.push({ url: `${FAZER_API_BASE}${b}`, method: "GET" });
       for (const c of categories) {
-        candidates.push({ url: `${FAZER_API_BASE}${b}?category_id=${encodeURIComponent(c)}`, method: "GET" });
-        candidates.push({ url: `${FAZER_API_BASE}${b}?category=${encodeURIComponent(c)}`, method: "GET" });
-        candidates.push({ url: `${FAZER_API_BASE}${b}?game=${encodeURIComponent(c)}`, method: "GET" });
+        candidates.push({ url: `${FAZER_API_BASE}${b}?category_id=${encodeURIComponent(c.id)}`, method: "GET", gameHint: c.game });
+        candidates.push({ url: `${FAZER_API_BASE}${b}?category=${encodeURIComponent(c.id)}`, method: "GET", gameHint: c.game });
+        candidates.push({ url: `${FAZER_API_BASE}${b}?game=${encodeURIComponent(c.id)}`, method: "GET", gameHint: c.game });
       }
     }
-    // also try POST for offers endpoints
     for (const b of ["/topups/offers", "/offers", "/products", "/topups/products"]) {
-      for (const c of categories) candidates.push({ url: `${FAZER_API_BASE}${b}`, method: "POST", body: { category_id: c } });
+      for (const c of categories) candidates.push({ url: `${FAZER_API_BASE}${b}`, method: "POST", body: { category_id: c.id }, gameHint: c.game });
     }
 
     const all: FazerCatalogProduct[] = [];
@@ -240,15 +248,18 @@ export class FazerCardsService {
         if (!items || !items.length) continue;
         lastRaw = data;
         for (const it of items) {
-          const p = this.normalizeProduct(it);
+          const p = this.normalizeProduct(it, cand.gameHint);
           if (p) all.push(p);
         }
       } catch { /* try next */ }
     }
 
-    // dedupe by offer_id
+    // dedupe by game+offer_id (same offer id can exist across games)
     const byId = new Map<string, FazerCatalogProduct>();
-    for (const p of all) if (!byId.has(p.offer_id)) byId.set(p.offer_id, p);
+    for (const p of all) {
+      const k = `${p.game_id}::${p.offer_id}`;
+      if (!byId.has(k)) byId.set(k, p);
+    }
     const products = Array.from(byId.values());
     if (products.length) return { ok: true, products, raw: lastRaw };
     return { ok: false, products: [], message: "تعذر جلب كتالوج Fazer تلقائيًا (تحقق من endpoint/الصلاحيات). سيتم استخدام آخر بيانات محفوظة." };
@@ -262,38 +273,69 @@ export class FazerCardsService {
       data.data?.data, data.data?.products, data.data?.offers, data.data?.items,
       data.result?.data, data.result?.products, data.result?.offers,
     ];
-    for (const c of candidates) if (Array.isArray(c) && c.length >= 0) return c;
-    // sometimes keyed by category
+    for (const c of candidates) if (Array.isArray(c)) return c;
     if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
       const vals = Object.values(data.data);
       if (vals.length && vals.every((v) => Array.isArray(v))) return vals.flat() as any[];
     }
+    if (typeof data === "object") {
+      for (const v of Object.values(data)) if (Array.isArray(v)) return v as any[];
+    }
     return null;
   }
 
-  private static normalizeGameId(raw: string): string {
-    const g = String(raw || "").toLowerCase().replace(/[^a-z0-9]+/g, "_");
-    if (g.includes("mobile") && g.includes("legend")) return "mlbb";
-    if (g === "mlbb" || g.includes("mobile_legends")) return "mlbb";
+  private static normalizeGameId(raw: string, fallback?: string): string {
+    const g = String(raw || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!g) return fallback || "mlbb";
+    if (g === "mlbb" || g.includes("mobile_legends") || g.includes("mobilelegends")) return "mlbb";
     if (g.includes("pubg")) return "pubg";
-    if (g.includes("free") && g.includes("fire")) return "freefire";
-    if (g.includes("honor") && g.includes("kings")) return "hok";
-    if (g === "hok") return "hok";
+    if (g.includes("free_fire") || g.includes("freefire") || g === "ff") return "freefire";
+    if (g.includes("honor_of_kings") || g.includes("honorofkings") || g === "hok") return "hok";
+    if (fallback) return fallback;
     return raw || "mlbb";
   }
 
-  private static normalizeProduct(it: any): FazerCatalogProduct | null {
+  private static inferGameFromText(offerId: string, name: string, hint?: string): string | null {
+    const t = `${offerId} ${name}`.toLowerCase();
+    if (/\bpubg\b|\buc\b|unknown\s*cash/.test(t)) return "pubg";
+    if (/free\s*fire|\bfreefire\b|\bgarena\b|\bff\b/.test(t)) return "freefire";
+    if (/honor\s*of\s*kings|\bhok\b|\btoken\b|\btokens\b/.test(t)) return "hok";
+    if (/mobile\s*legends|\bmlbb\b|\bdiamond\b|\bdiamonds\b/.test(t)) return "mlbb";
+    return hint || null;
+  }
+
+  private static normalizeProduct(it: any, gameHint?: string): FazerCatalogProduct | null {
     if (!it) return null;
     const offer_id = it.offer_id || it.id || it.product_id || it.sku || it.code || it.offerId;
     if (!offer_id) return null;
+    const name = String(it.name || it.title || it.product_name || it.label || offer_id);
     const cost = it.cost ?? it.cost_usd ?? it.price ?? it.price_usd ?? it.unit_price ?? it.usd_price ?? it.priceUsd ?? it.amount_usd ?? null;
     const regions = Array.isArray(it.regions) ? it.regions : it.region ? [it.region] : it.countries ? (Array.isArray(it.countries) ? it.countries : [it.countries]) : null;
-    const gameRaw = it.game_id || it.game || it.category_id || it.category || it.gameId || "mlbb";
+    const gameRaw = String(it.game_id || it.game || it.category_id || it.category || it.gameId || "").trim();
+    const normalizedRaw = this.normalizeGameId(gameRaw, "");
+    const inferred = this.inferGameFromText(String(offer_id), name, gameHint);
+    let game_id = normalizedRaw;
+    if (!game_id) {
+      game_id = inferred || gameHint || "mlbb";
+    } else if (gameHint) {
+      // when fetched under a specific category, prefer hint unless item explicitly signals another game
+      if (inferred && inferred !== gameHint && inferred !== "mlbb") {
+        game_id = inferred;
+      } else if (game_id === "mlbb" && gameHint !== "mlbb") {
+        game_id = inferred || gameHint;
+      } else {
+        game_id = game_id || inferred || gameHint;
+      }
+    } else if (inferred && game_id === "mlbb") {
+      // defaulted to mlbb but text strongly suggests another known game
+      game_id = inferred;
+    }
+    if (!game_id) game_id = "mlbb";
     return {
       offer_id: String(offer_id),
-      game_id: this.normalizeGameId(String(gameRaw)),
+      game_id,
       category: it.type || it.category_type || it.group || null,
-      name: String(it.name || it.title || it.product_name || it.label || offer_id),
+      name,
       diamonds: Number(it.diamonds ?? it.amount ?? it.qty ?? it.value ?? 0) || 0,
       bonus_diamonds: Number(it.bonus ?? it.bonus_diamonds ?? it.bonusDiamonds ?? 0) || 0,
       currency_name: it.currency_name || it.currencyName || it.currency || null,
