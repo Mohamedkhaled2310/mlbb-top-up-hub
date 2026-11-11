@@ -135,7 +135,7 @@ function AdminPage() {
       <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 w-full flex-1 py-6 space-y-6 pb-16">
         <div className="rounded-2xl border border-amber-500/30 bg-[#0d1222] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div><h1 className="text-xl sm:text-2xl font-extrabold flex items-center gap-2"><Shield className="w-5 h-5 text-amber-400"/> لوحة الأدمن</h1><p className="text-xs text-slate-400 mt-1">مزامنة Fazer، سعر الصرف، وإدارة التجار (الدخول عبر حساب Supabase بدور admin).</p></div>
-          {isAdmin && <Button variant="outline" onClick={signOut}><LogOut className="w-4 h-4"/> خروج</Button>}
+          {isAdmin && <Button variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" onClick={signOut}><LogOut className="w-4 h-4"/> خروج</Button>}
         </div>
 
         {!isAdmin ? (
@@ -143,7 +143,7 @@ function AdminPage() {
             <h2 className="font-bold flex items-center gap-2"><LogIn className="w-4 h-4 text-amber-400"/> دخول الأدمن</h2>
             <Input type="email" placeholder="البريد الإلكتروني" value={email} onChange={(e)=>setEmail(e.target.value)} />
             <Input type="password" placeholder="كلمة المرور" value={password} onChange={(e)=>setPassword(e.target.value)} />
-            <Button className="w-full" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
+            <Button className="w-full bg-amber-600 hover:bg-amber-500 text-white" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
             <p className="text-[11px] text-slate-400">يجب أن يكون للمستخدم `profiles.role = 'admin'` في Supabase.</p>
           </div>
         ) : (
@@ -152,12 +152,12 @@ function AdminPage() {
               <div className="rounded-2xl border border-slate-800 bg-[#0c1020] p-5 space-y-2">
                 <div className="flex items-center justify-between"><h3 className="font-bold flex items-center gap-2"><Server className="w-4 h-4 text-cyan-400"/> Fazer</h3><span className={`h-2.5 w-2.5 rounded-full ${status?.fazer?.connected?'bg-emerald-400':'bg-amber-400'}`}/></div>
                 <div className="text-xs text-slate-300 space-y-1"><div>الحالة: <b className={status?.fazer?.connected?'text-emerald-400':'text-amber-400'}>{status?.fazer?.connected?'متصل':'غير متصل/محاكاة'}</b></div><div>الرصيد: <b className="text-cyan-300 font-mono">{status?.fazer?.balance ?? store.settings.fazer_balance ?? '—'} {status?.fazer?.currency ?? store.settings.fazer_balance_currency ?? ''}</b></div><div>آخر مزامنة باقات: {store.settings.packages_synced_at ? new Date(store.settings.packages_synced_at).toLocaleString('ar-EG') : '—'}</div></div>
-                <Button size="sm" className="w-full" onClick={doSync} disabled={syncing}><RefreshCw className={`w-4 h-4 ${syncing?'animate-spin':''}`}/> مزامنة الباقات والرصيد الآن</Button>
+                <Button size="sm" className="w-full bg-cyan-700 hover:bg-cyan-600 text-white" onClick={doSync} disabled={syncing}><RefreshCw className={`w-4 h-4 ${syncing?'animate-spin':''}`}/> مزامنة الباقات والرصيد الآن</Button>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-[#0c1020] p-5 space-y-3">
                 <h3 className="font-bold flex items-center gap-2"><DollarSign className="w-4 h-4 text-amber-400"/> سعر الصرف</h3>
                 <div className="flex items-center gap-2"><Input type="number" step="0.5" value={egpRate} onChange={(e)=>setEgpRate(Number(e.target.value))} /><span className="text-xs text-slate-400">ج.م/$</span></div>
-                <Button size="sm" className="w-full" onClick={saveRate}>حفظ سعر الصرف</Button>
+                <Button size="sm" className="w-full bg-amber-600 hover:bg-amber-500 text-white" onClick={saveRate}>حفظ سعر الصرف</Button>
                 <p className="text-[11px] text-slate-400">يُستخدم لحساب أسعار البيع/التاجر من تكلفة Fazer بالدولار.</p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-[#0c1020] p-5 space-y-2">
@@ -170,7 +170,7 @@ function AdminPage() {
             <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <h2 className="font-bold flex items-center gap-2"><Users className="w-4 h-4 text-purple-400"/> التجار (صفحة {mPage}/{mTotalPages})</h2>
-                <div className="flex gap-2"><Input placeholder="بحث اسم/هاتف/ID" value={mQuery} onChange={(e)=>setMQuery(e.target.value)} className="w-48"/><Button size="sm" variant="outline" onClick={()=> token && loadMerchants(token,1,mQuery)}>بحث</Button></div>
+                <div className="flex gap-2"><Input placeholder="بحث اسم/هاتف/ID" value={mQuery} onChange={(e)=>setMQuery(e.target.value)} className="w-48"/><Button size="sm" variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" onClick={()=> token && loadMerchants(token,1,mQuery)}>بحث</Button></div>
               </div>
               <div className="overflow-x-auto rounded-xl border border-slate-800">
                 <table className="w-full text-xs min-w-[720px]">
@@ -182,7 +182,7 @@ function AdminPage() {
                         <td className="p-3 font-mono font-bold text-emerald-300">{m.balance_egp}</td>
                         <td className="p-3 font-mono">{m.margin_percent}%</td>
                         <td className="p-3"><span className={`px-2 py-0.5 rounded-full ${m.is_active?'bg-emerald-500/20 text-emerald-300':'bg-rose-500/20 text-rose-300'}`}>{m.is_active?'مفعل':'موقوف'}</span></td>
-                        <td className="p-3"><div className="flex items-center justify-center gap-2"><Button size="sm" variant="outline" onClick={()=>setCredit({id:m.id, amount:"", note:"إضافة رصيد من الأدمن"})}>شحن رصيد</Button><Button size="sm" variant="outline" onClick={()=>setMarginEdit({id:m.id, value:String(m.margin_percent||0)})}>تعديل الهامش</Button></div></td>
+                        <td className="p-3"><div className="flex items-center justify-center gap-2"><Button size="sm" variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" onClick={()=>setCredit({id:m.id, amount:"", note:"إضافة رصيد من الأدمن"})}>شحن رصيد</Button><Button size="sm" variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" onClick={()=>setMarginEdit({id:m.id, value:String(m.margin_percent||0)})}>تعديل الهامش</Button></div></td>
                       </tr>
                     ))}
                     {merchants.length===0 && <tr><td colSpan={5} className="p-6 text-center text-slate-400">لا يوجد تجار. أنشئ مستخدمًا ثم أضف صفًا في `merchant_accounts`.</td></tr>}
@@ -190,9 +190,9 @@ function AdminPage() {
                 </table>
               </div>
               <div className="flex items-center justify-center gap-2">
-                <Button size="sm" variant="outline" disabled={mPage<=1} onClick={()=> token && loadMerchants(token, mPage-1, mQuery)}>السابق</Button>
+                <Button size="sm" variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" disabled={mPage<=1} onClick={()=> token && loadMerchants(token, mPage-1, mQuery)}>السابق</Button>
                 <span className="text-xs text-slate-400">{mPage} / {mTotalPages}</span>
-                <Button size="sm" variant="outline" disabled={mPage>=mTotalPages} onClick={()=> token && loadMerchants(token, mPage+1, mQuery)}>التالي</Button>
+                <Button size="sm" variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" disabled={mPage>=mTotalPages} onClick={()=> token && loadMerchants(token, mPage+1, mQuery)}>التالي</Button>
               </div>
             </div>
 
@@ -217,12 +217,12 @@ function AdminPage() {
 
       <Dialog open={!!credit} onOpenChange={(o)=>!o && setCredit(null)}>
         <DialogContent className="max-w-sm bg-[#0a0f20] border border-slate-700 text-slate-100"><DialogHeader><DialogTitle>شحن رصيد تاجر</DialogTitle></DialogHeader>
-          <div className="space-y-2"><Input type="number" placeholder="المبلغ (ج.م)" value={credit?.amount||""} onChange={(e)=> setCredit(c=>c?{...c, amount:e.target.value}:c)} /><Input placeholder="ملاحظة" value={credit?.note||""} onChange={(e)=> setCredit(c=>c?{...c, note:e.target.value}:c)} /><Button className="w-full" onClick={submitCredit}>تأكيد الإضافة</Button></div>
+          <div className="space-y-2"><Input type="number" placeholder="المبلغ (ج.م)" value={credit?.amount||""} onChange={(e)=> setCredit(c=>c?{...c, amount:e.target.value}:c)} /><Input placeholder="ملاحظة" value={credit?.note||""} onChange={(e)=> setCredit(c=>c?{...c, note:e.target.value}:c)} /><Button className="w-full bg-emerald-700 hover:bg-emerald-600 text-white" onClick={submitCredit}>تأكيد الإضافة</Button></div>
         </DialogContent>
       </Dialog>
       <Dialog open={!!marginEdit} onOpenChange={(o)=>!o && setMarginEdit(null)}>
         <DialogContent className="max-w-sm bg-[#0a0f20] border border-slate-700 text-slate-100"><DialogHeader><DialogTitle>تعديل هامش التاجر (%)</DialogTitle></DialogHeader>
-          <div className="space-y-2"><Input type="number" step="0.5" placeholder="الهامش %" value={marginEdit?.value||""} onChange={(e)=> setMarginEdit(m=>m?{...m, value:e.target.value}:m)} /><Button className="w-full" onClick={submitMargin}>حفظ</Button></div>
+          <div className="space-y-2"><Input type="number" step="0.5" placeholder="الهامش %" value={marginEdit?.value||""} onChange={(e)=> setMarginEdit(m=>m?{...m, value:e.target.value}:m)} /><Button className="w-full bg-purple-700 hover:bg-purple-600 text-white" onClick={submitMargin}>حفظ</Button></div>
         </DialogContent>
       </Dialog>
     </div>

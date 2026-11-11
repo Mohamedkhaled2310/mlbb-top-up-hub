@@ -194,50 +194,112 @@ export class FazerCardsService {
     };
   }
 
-  // Try to fetch catalog/offers from Fazer (endpoint may vary by account/API version)
+  // Try to fetch catalog/offers from Fazer (endpoint/shape may vary by account/API version)
   static async fetchCatalog(): Promise<{ ok: boolean; products: FazerCatalogProduct[]; message?: string; raw?: unknown }> {
     const apiKey = this.getApiKey();
     if (!apiKey) return { ok: false, products: [], message: "FAZER_API_KEY is not configured" };
 
-    const candidates = [
-      `${FAZER_API_BASE}/products`,
-      `${FAZER_API_BASE}/offers`,
-      `${FAZER_API_BASE}/topups/products`,
-      `${FAZER_API_BASE}/topups/offers`,
-      `${FAZER_API_BASE}/catalog`,
+    const categories = ["mobile_legends", "pubg_mobile", "free_fire", "honor_of_kings", "mlbb", "pubg", "freefire", "hok"];
+    const bases = [
+      "/topups/offers",
+      "/topups/products",
+      "/offers",
+      "/products",
+      "/catalog",
+      "/topup/offers",
+      "/topup/products",
+      "/games/offers",
+      "/games/products",
     ];
+    const candidates: Array<{ url: string; method: "GET" | "POST"; body?: any }> = [];
+    for (const b of bases) {
+      candidates.push({ url: `${FAZER_API_BASE}${b}`, method: "GET" });
+      for (const c of categories) {
+        candidates.push({ url: `${FAZER_API_BASE}${b}?category_id=${encodeURIComponent(c)}`, method: "GET" });
+        candidates.push({ url: `${FAZER_API_BASE}${b}?category=${encodeURIComponent(c)}`, method: "GET" });
+        candidates.push({ url: `${FAZER_API_BASE}${b}?game=${encodeURIComponent(c)}`, method: "GET" });
+      }
+    }
+    // also try POST for offers endpoints
+    for (const b of ["/topups/offers", "/offers", "/products", "/topups/products"]) {
+      for (const c of categories) candidates.push({ url: `${FAZER_API_BASE}${b}`, method: "POST", body: { category_id: c } });
+    }
 
-    for (const url of candidates) {
+    const all: FazerCatalogProduct[] = [];
+    let lastRaw: unknown = null;
+    for (const cand of candidates) {
       try {
-        const res = await fetch(url, { method: "GET", headers: this.headers() });
+        const res = await fetch(cand.url, {
+          method: cand.method,
+          headers: this.headers(),
+          body: cand.body ? JSON.stringify(cand.body) : undefined,
+        });
         if (!res.ok) continue;
         const data = await res.json().catch(() => null);
-        const items = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : Array.isArray(data?.products) ? data.products : Array.isArray(data?.offers) ? data.offers : null;
-        if (!items) continue;
-        const products: FazerCatalogProduct[] = items.map((it: any) => this.normalizeProduct(it)).filter(Boolean) as FazerCatalogProduct[];
-        if (products.length) return { ok: true, products, raw: data };
+        const items = this.extractItems(data);
+        if (!items || !items.length) continue;
+        lastRaw = data;
+        for (const it of items) {
+          const p = this.normalizeProduct(it);
+          if (p) all.push(p);
+        }
       } catch { /* try next */ }
     }
+
+    // dedupe by offer_id
+    const byId = new Map<string, FazerCatalogProduct>();
+    for (const p of all) if (!byId.has(p.offer_id)) byId.set(p.offer_id, p);
+    const products = Array.from(byId.values());
+    if (products.length) return { ok: true, products, raw: lastRaw };
     return { ok: false, products: [], message: "تعذر جلب كتالوج Fazer تلقائيًا (تحقق من endpoint/الصلاحيات). سيتم استخدام آخر بيانات محفوظة." };
+  }
+
+  private static extractItems(data: any): any[] | null {
+    if (!data) return null;
+    if (Array.isArray(data)) return data;
+    const candidates = [
+      data.data, data.products, data.offers, data.items, data.result,
+      data.data?.data, data.data?.products, data.data?.offers, data.data?.items,
+      data.result?.data, data.result?.products, data.result?.offers,
+    ];
+    for (const c of candidates) if (Array.isArray(c) && c.length >= 0) return c;
+    // sometimes keyed by category
+    if (data.data && typeof data.data === "object" && !Array.isArray(data.data)) {
+      const vals = Object.values(data.data);
+      if (vals.length && vals.every((v) => Array.isArray(v))) return vals.flat() as any[];
+    }
+    return null;
+  }
+
+  private static normalizeGameId(raw: string): string {
+    const g = String(raw || "").toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    if (g.includes("mobile") && g.includes("legend")) return "mlbb";
+    if (g === "mlbb" || g.includes("mobile_legends")) return "mlbb";
+    if (g.includes("pubg")) return "pubg";
+    if (g.includes("free") && g.includes("fire")) return "freefire";
+    if (g.includes("honor") && g.includes("kings")) return "hok";
+    if (g === "hok") return "hok";
+    return raw || "mlbb";
   }
 
   private static normalizeProduct(it: any): FazerCatalogProduct | null {
     if (!it) return null;
-    const offer_id = it.offer_id || it.id || it.product_id || it.sku || it.code;
+    const offer_id = it.offer_id || it.id || it.product_id || it.sku || it.code || it.offerId;
     if (!offer_id) return null;
-    const cost = it.cost ?? it.cost_usd ?? it.price ?? it.price_usd ?? it.unit_price ?? it.amount ?? null;
+    const cost = it.cost ?? it.cost_usd ?? it.price ?? it.price_usd ?? it.unit_price ?? it.usd_price ?? it.priceUsd ?? it.amount_usd ?? null;
     const regions = Array.isArray(it.regions) ? it.regions : it.region ? [it.region] : it.countries ? (Array.isArray(it.countries) ? it.countries : [it.countries]) : null;
+    const gameRaw = it.game_id || it.game || it.category_id || it.category || it.gameId || "mlbb";
     return {
       offer_id: String(offer_id),
-      game_id: String(it.game_id || it.game || it.category_id || it.category || "mlbb"),
-      category: it.type || it.category || it.group || null,
-      name: String(it.name || it.title || it.product_name || offer_id),
-      diamonds: Number(it.diamonds || it.amount || it.qty || 0) || 0,
-      bonus_diamonds: Number(it.bonus || it.bonus_diamonds || 0) || 0,
-      currency_name: it.currency_name || it.currency || null,
+      game_id: this.normalizeGameId(String(gameRaw)),
+      category: it.type || it.category_type || it.group || null,
+      name: String(it.name || it.title || it.product_name || it.label || offer_id),
+      diamonds: Number(it.diamonds ?? it.amount ?? it.qty ?? it.value ?? 0) || 0,
+      bonus_diamonds: Number(it.bonus ?? it.bonus_diamonds ?? it.bonusDiamonds ?? 0) || 0,
+      currency_name: it.currency_name || it.currencyName || it.currency || null,
       cost_usd: cost != null ? Number(cost) : null,
       regions,
-      active: it.active !== false && it.enabled !== false,
+      active: it.active !== false && it.enabled !== false && it.status !== "inactive",
       raw: it,
     };
   }
