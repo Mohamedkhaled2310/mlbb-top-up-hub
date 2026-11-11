@@ -34,6 +34,8 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
 
   const total = cart.reduce((s, i) => s + i.qty * (isMerchant ? i.package.merchantBasePriceEgp : i.package.retailPriceEgp), 0);
 
+  const [regionLocked, setRegionLocked] = useState(false);
+
   const validate = async () => {
     if (!player.id) { toast({ title: "بيانات ناقصة", description: "أدخل معرف اللاعب" }); return; }
     if (!cart.length) { toast({ title: "السلة فارغة", description: "اختر باقة واحدة على الأقل" }); return; }
@@ -41,12 +43,15 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
     try {
       const res = await validatePlayerApi(player.id, player.zoneId, cart[0]?.package.gameId || "mlbb", region || undefined);
       if (res.valid) {
-        const detectedRegion = (res as any).accountRegion || region || "";
-        if (!detectedRegion) {
+        const accRegion = (res as any).accountRegion || "";
+        const finalRegion = accRegion || region || "";
+        if (accRegion) setRegionLocked(true);
+        if (!finalRegion) {
+          setRegionLocked(false);
           toast({ title: "المنطقة مطلوبة", description: "لم يتم تحديد منطقة الحساب تلقائيًا، يرجى إدخالها يدويًا" });
         } else {
-          setPlayer({ ...player, name: res.username || player.name, region: detectedRegion });
-          setRegion(detectedRegion);
+          setPlayer({ ...player, name: res.username || player.name, region: finalRegion });
+          setRegion(finalRegion);
           setStep("review");
         }
       } else {
@@ -108,8 +113,18 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
             </div>
             <div>
               <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region)</label>
-              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="سيتم تحديدها تلقائيًا عند التحقق (أو أدخلها يدويًا)" className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500" />
-              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> اضغط "تحقق ومتابعة" وسيتم تحديد المنطقة من المعرف إن أمكن.</p>
+              {regionLocked && region ? (
+                <div className="mt-1 w-full rounded-xl border border-emerald-600/40 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 shrink-0"/>
+                  <span className="font-semibold">{region}</span>
+                  <span className="text-[11px] text-emerald-400/80">(تم التحديد تلقائيًا)</span>
+                </div>
+              ) : (
+                <>
+                  <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="سيتم تحديدها تلقائيًا عند التحقق (أو أدخلها يدويًا)" className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500" />
+                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> اضغط "تحقق ومتابعة" وسيتم تحديد المنطقة من المعرف إن أمكن.</p>
+                </>
+              )}
             </div>
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/40">
