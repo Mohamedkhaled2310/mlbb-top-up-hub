@@ -11,6 +11,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { Toaster } from "../components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -85,7 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "متجر METO STORE لشحن جواهر وبطاقات ويكلي وعروض دبل Mobile Legends: Bang Bang بالجنيه المصري و USDT عبر FazerCards و Binance Pay",
+          "متجر METO STORE لشحن جواهر وبطاقات ويكلي وعروض دبل Mobile Legends: Bang Bang بالجنيه المصري مع تنفيذ آمن عبر FazerCards",
       },
       { name: "author", content: "METO STORE" },
       { property: "og:title", content: "METO STORE - MLBB Diamonds Top Up" },
@@ -133,6 +134,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster richColors position="top-center" />
     </QueryClientProvider>
   );
 }

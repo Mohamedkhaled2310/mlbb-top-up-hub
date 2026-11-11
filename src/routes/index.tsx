@@ -1,838 +1,255 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
-import { CheckoutModal } from "../components/CheckoutModal";
+import CheckoutModal from "../components/CheckoutModal";
 import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
 import { GamesSection } from "../components/GamesSection";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { useStore } from "../lib/store/useStore";
-import { TopUpPackage, PackageCategory } from "../types/store";
-import { validatePlayerApi } from "../lib/api-client";
+import type { TopUpPackage, PackageCategory } from "../types/store";
+import { getStoreApi } from "../lib/api-client";
 import metoPoster from "../assets/meto-poster.jpg";
 import metoLogo from "../assets/meto-logo.jpg";
 import {
-  Gem,
-  Calendar,
-  Sparkles,
-  Package,
-  Layers,
-  HelpCircle,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  ShieldCheck,
-  Zap,
-  Clock,
-  ChevronRight,
-  Search,
-  Image as ImageIcon,
-  MessageCircle,
-  LayoutGrid,
-  List,
-  ChevronDown,
-  ChevronUp,
-  X,
+  Gem, Calendar, Sparkles, Package, Layers, HelpCircle, ShieldCheck, Clock, ChevronRight, Search, Image as ImageIcon, MessageCircle, LayoutGrid, List, ChevronDown, ChevronUp, X, ShoppingCart, Plus
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
+import { toast } from "../hooks/use-toast";
 
-export const Route = createFileRoute("/")({
-  component: CustomerStorePage,
-});
+export const Route = createFileRoute("/")({ component: CustomerStorePage });
 
-interface GameConfig {
-  name: string;
-  currency: string;
-  idLabel: string;
-  idPlaceholder: string;
-  needsZone: boolean;
-  zoneLabel?: string;
-  zonePlaceholder?: string;
-  guideTitle: string;
-  badgeText: string;
-}
-
-const GAME_CONFIG: Record<string, GameConfig> = {
-  mlbb: {
-    name: "Mobile Legends: Bang Bang",
-    currency: "جوهرة",
-    idLabel: "معرف اللاعب (User ID)",
-    idPlaceholder: "مثال: 12345678",
-    needsZone: true,
-    zoneLabel: "رقم السيرفر (Zone ID)",
-    zonePlaceholder: "مثال: 2024",
-    guideTitle: "أين أجد الـ User ID والـ Zone ID؟",
-    badgeText: "MLBB DIAMONDS",
-  },
-  pubg: {
-    name: "PUBG Mobile (ببجي موبايل)",
-    currency: "شدة (UC)",
-    idLabel: "معرف اللاعب ببجي (Character ID)",
-    idPlaceholder: "مثال: 5123456789",
-    needsZone: false,
-    guideTitle: "كيف أجد معرف ببجي (Character ID)؟",
-    badgeText: "PUBG MOBILE UC",
-  },
-  freefire: {
-    name: "Free Fire (فري فاير)",
-    currency: "جوهرة",
-    idLabel: "معرف لاعب فري فاير (Player ID)",
-    idPlaceholder: "مثال: 1234567890",
-    needsZone: false,
-    guideTitle: "كيف أجد معرف فري فاير (Player ID)؟",
-    badgeText: "FREE FIRE DIAMONDS",
-  },
-  hok: {
-    name: "Honor of Kings (أونر أوف كينجز)",
-    currency: "توكنز (Tokens)",
-    idLabel: "معرف لاعب Honor of Kings (Player ID)",
-    idPlaceholder: "مثال: 987654321",
-    needsZone: false,
-    guideTitle: "كيف أجد معرف أونر أوف كينجز؟",
-    badgeText: "HOK TOKENS",
-  },
+const GAME_CONFIG: Record<string, any> = {
+  mlbb: { name: "Mobile Legends: Bang Bang", currency: "جوهرة", idLabel: "معرف اللاعب (User ID)", idPlaceholder: "مثال: 12345678", needsZone: true, zoneLabel: "رقم السيرفر (Zone ID)", zonePlaceholder: "مثال: 2024", guideTitle: "أين أجد الـ User ID والـ Zone ID؟" },
+  pubg: { name: "PUBG Mobile", currency: "UC", idLabel: "معرف اللاعب (Character ID)", idPlaceholder: "مثال: 5123456789", needsZone: false, guideTitle: "كيف أجد Character ID؟" },
+  freefire: { name: "Free Fire", currency: "جوهرة", idLabel: "معرف اللاعب (Player ID)", idPlaceholder: "مثال: 1234567890", needsZone: false, guideTitle: "كيف أجد Player ID؟" },
+  hok: { name: "Honor of Kings", currency: "Tokens", idLabel: "معرف اللاعب (Player ID)", idPlaceholder: "مثال: 987654321", needsZone: false, guideTitle: "كيف أجد Player ID؟" },
 };
 
 function CustomerStorePage() {
-  const { packages, settings } = useStore();
-
-  // Selected game (defaults to MLBB)
-  const [selectedGameId, setSelectedGameId] = useState<string>("mlbb");
+  const { packages, setPackages, settings, setSettings, player, setPlayer, cart, addToCart, updateCartQty, removeFromCart, clearCart, isMerchant } = useStore();
+  const [selectedGameId, setSelectedGameId] = useState("mlbb");
   const activeGame = GAME_CONFIG[selectedGameId] || GAME_CONFIG.mlbb;
-
-  // Form states
-  const [userId, setUserId] = useState<string>("");
-  const [zoneId, setZoneId] = useState<string>("");
-  const [verifiedName, setVerifiedName] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState<boolean>(false);
-  const [verifyError, setVerifyError] = useState<string | null>(null);
-
-  // Category filter & View mode
+  const [region, setRegion] = useState(player.region || "");
   const [selectedCategory, setSelectedCategory] = useState<PackageCategory | "all">("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [showAllInAllCategory, setShowAllInAllCategory] = useState<boolean>(false);
+  const [showAllInAllCategory, setShowAllInAllCategory] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [posterOpen, setPosterOpen] = useState(false);
+  const [loadingPkgs, setLoadingPkgs] = useState(false);
 
-  // Modals
-  const [selectedPackage, setSelectedPackage] = useState<TopUpPackage | null>(null);
-  const [checkoutOpen, setCheckoutOpen] = useState<boolean>(false);
-  const [guideOpen, setGuideOpen] = useState<boolean>(false);
-  const [posterOpen, setPosterOpen] = useState<boolean>(false);
+  useEffect(() => { setPlayer({ ...player, region }); }, [region]);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoadingPkgs(true);
+      try {
+        const data = await getStoreApi();
+        if (mounted && data?.packages) setPackages(data.packages);
+        if (mounted && data?.settings) setSettings(data.settings);
+      } catch { /* ignore */ } finally { if (mounted) setLoadingPkgs(false); }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
-  // When game switches
   const handleGameSelect = (gameId: string) => {
     setSelectedGameId(gameId);
     setSelectedCategory("all");
     setShowAllInAllCategory(false);
-    setVerifiedName(null);
-    setVerifyError(null);
   };
 
-  // Validate Player ID
-  const handleVerifyPlayer = async () => {
-    if (!userId.trim()) {
-      setVerifyError("يرجى إدخال معرف الحساب أولاً");
-      return;
-    }
-
-    if (activeGame.needsZone && !zoneId.trim()) {
-      setVerifyError("يرجى إدخال كل من User ID و Zone ID");
-      return;
-    }
-
-    setVerifying(true);
-    setVerifyError(null);
-    setVerifiedName(null);
-
-    try {
-      const res = await validatePlayerApi(
-        userId.trim(),
-        activeGame.needsZone ? zoneId.trim() : "",
-        selectedGameId,
-      );
-      if (res.valid && res.username) {
-        setVerifiedName(res.username);
-      } else {
-        setVerifyError(res.error || "تعذر التحقق من الحساب، تأكد من البيانات المدخلة");
-      }
-    } catch (e: unknown) {
-      setVerifyError(e instanceof Error ? e.message : "حدث خطأ أثناء الاتصال بالخادم");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  // Open checkout modal
-  const handleSelectPackage = (pkg: TopUpPackage) => {
-    if (activeGame.needsZone) {
-      if (!userId.trim() || !zoneId.trim()) {
-        setVerifyError(
-          "يرجى إدخال معرف اللاعب (User ID) ورقم السيرفر (Zone ID) أولاً قبل اختيار الباقة",
-        );
-        const elem = document.getElementById("player-input-card");
-        if (elem) elem.scrollIntoView({ behavior: "smooth" });
-        return;
-      }
-    } else {
-      if (!userId.trim()) {
-        setVerifyError(
-          `يرجى إدخال ${activeGame.idLabel} أولاً قبل اختيار الباقة`,
-        );
-        const elem = document.getElementById("player-input-card");
-        if (elem) elem.scrollIntoView({ behavior: "smooth" });
-        return;
-      }
-    }
-
-    setSelectedPackage(pkg);
-    setCheckoutOpen(true);
-  };
-
-  // Filter packages based on active game and category
-  const filteredPackages = packages.filter((pkg) => {
-    if (!pkg.active && pkg.active !== undefined) return false;
-
-    // Game filter
-    const matchGame =
-      selectedGameId === "mlbb"
-        ? !pkg.gameId || pkg.gameId === "mlbb"
-        : pkg.gameId === selectedGameId;
-    if (!matchGame) return false;
-
-    // Category filter
-    const matchCat = selectedCategory === "all" || pkg.category === selectedCategory;
-
-    // Search query
-    const matchQuery =
-      pkg.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      pkg.diamonds.toString().includes(searchQuery) ||
-      (pkg.bonusDiamonds && pkg.bonusDiamonds.toString().includes(searchQuery));
-
-    return matchCat && matchQuery;
-  });
-
-  // Calculate package count per category for current active game
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: 0 };
-    packages.forEach((pkg) => {
-      if (!pkg.active && pkg.active !== undefined) return;
-      const matchGame =
-        selectedGameId === "mlbb"
-          ? !pkg.gameId || pkg.gameId === "mlbb"
-          : pkg.gameId === selectedGameId;
-      if (!matchGame) return;
-
-      counts.all = (counts.all || 0) + 1;
-      counts[pkg.category] = (counts[pkg.category] || 0) + 1;
-    });
-    return counts;
-  }, [packages, selectedGameId]);
-
-  // Dynamic categories per game
   const categories = useMemo(() => {
-    switch (selectedGameId) {
-      case "pubg":
-        return [
-          { id: "all", label: "جميع باقات ببجي", icon: Layers },
-          { id: "diamonds", label: "شدات UC الأساسية", icon: Gem },
-          { id: "weekly_pass", label: "الرويال باس والباكجات", icon: Calendar },
-        ];
-      case "freefire":
-        return [
-          { id: "all", label: "جميع باقات فري فاير", icon: Layers },
-          { id: "diamonds", label: "جواهر فري فاير", icon: Gem },
-          { id: "weekly_pass", label: "العضويات (Weekly & Monthly)", icon: Calendar },
-        ];
-      case "hok":
-        return [
-          { id: "all", label: "جميع باقات HOK", icon: Layers },
-          { id: "diamonds", label: "توكنز Tokens", icon: Gem },
-          { id: "weekly_pass", label: "بطاقات التحدي", icon: Calendar },
-        ];
-      case "mlbb":
-      default:
-        return [
-          { id: "all", label: "جميع الباقات", icon: Layers },
-          { id: "diamonds", label: "الجواهر الأساسية", icon: Gem },
-          { id: "weekly_pass", label: "بطاقات الويكلي", icon: Calendar },
-          { id: "double_diamonds", label: "الجواهر المضاعفة (x2)", icon: Sparkles },
-          { id: "bundles", label: "الحزم (The Bundle)", icon: Package },
-        ];
-    }
+    const base = [
+      { id: "all", label: "الكل", icon: Layers },
+      { id: "diamonds", label: "جواهر/عملات", icon: Gem },
+      { id: "weekly_pass", label: "بطاقات/اشتراكات", icon: Calendar },
+      { id: "double_diamonds", label: "مضاعفة x2", icon: Sparkles },
+      { id: "bundles", label: "حزم", icon: Package },
+    ];
+    return base;
   }, [selectedGameId]);
 
-  // Avoid endless scrolling on mobile: display top 10 on 'all' by default, or all if expanded
+  const gamePackages = useMemo(() => packages.filter((p) => p.active && (p.gameId === selectedGameId || (selectedGameId === "mlbb" && (!p.gameId || p.gameId === "mlbb")))), [packages, selectedGameId]);
+
+  const filteredPackages = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return gamePackages.filter((p) => {
+      const matchCat = selectedCategory === "all" || p.category === selectedCategory;
+      const matchQ = !q || p.name.toLowerCase().includes(q) || String(p.diamonds || "").includes(q);
+      return matchCat && matchQ;
+    });
+  }, [gamePackages, selectedCategory, searchQuery]);
+
   const displayedPackages = useMemo(() => {
-    if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory) {
-      return filteredPackages.slice(0, 10);
-    }
+    if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory) return filteredPackages.slice(0, 10);
     return filteredPackages;
   }, [filteredPackages, selectedCategory, searchQuery, showAllInAllCategory]);
+  const hasHiddenPackages = selectedCategory === "all" && !searchQuery.trim() && filteredPackages.length > 10;
 
-  const hasHiddenPackages =
-    selectedCategory === "all" && !searchQuery.trim() && filteredPackages.length > 10;
+  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+  const cartTotal = cart.reduce((s, i) => s + i.qty * (isMerchant ? i.package.merchantBasePriceEgp : i.package.retailPriceEgp), 0);
+
+  const onAdd = (pkg: TopUpPackage) => {
+    addToCart(pkg);
+    toast({ title: "أُضيف للسلة", description: pkg.name });
+  };
 
   return (
-    <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans selection:bg-rose-500/30 selection:text-rose-200">
+    <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans">
       <Navbar />
-
-      {/* Hero Section with METO STORE Branding */}
       <div className="relative overflow-hidden border-b border-rose-500/20">
-        {/* Background Image & Lighting */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-20 mix-blend-screen scale-105 filter blur-[2px]"
-          style={{ backgroundImage: `url(${metoPoster})` }}
-        />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20 mix-blend-screen scale-105 blur-[2px]" style={{ backgroundImage: `url(${metoPoster})` }} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#070914] via-[#070914]/90 to-[#070914]/70" />
-        <div className="absolute -top-32 left-1/4 h-96 w-96 rounded-full bg-rose-600/15 blur-[130px] pointer-events-none" />
-        <div className="absolute top-10 right-1/4 h-96 w-96 rounded-full bg-cyan-500/15 blur-[130px] pointer-events-none" />
-
-        <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8 text-center">
-          {/* Brand Logo & Slogans from the poster */}
-          <div className="flex flex-col items-center justify-center mb-4">
-            <div className="relative mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 via-red-600 to-cyan-400 p-1 shadow-2xl shadow-rose-600/40">
-              <img
-                src={metoLogo}
-                alt="METO STORE Logo"
-                className="h-full w-full rounded-xl object-cover bg-white"
-              />
-              <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-[11px] font-black text-white shadow">
-                👑
-              </span>
-            </div>
-
-            <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/40 bg-rose-950/40 px-4 py-1 text-xs text-rose-300 backdrop-blur-md shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-rose-400" />
-              <span>Your MLBB Top Up Store ♡ • Play More Spend Less ♡</span>
-            </div>
+        <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 text-center">
+          <div className="flex flex-col items-center mb-4">
+            <div className="relative mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 via-red-600 to-cyan-400 p-1 shadow-2xl"><img src={metoLogo} alt="METO STORE" className="h-full w-full rounded-xl object-cover bg-white" /></div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/40 bg-rose-950/40 px-4 py-1 text-xs text-rose-300"><Sparkles className="h-3.5 w-3.5"/> <span>شحن فوري وآمن • أسعار محدثة من Fazer</span></div>
           </div>
-
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white mb-3">
-            <span className="text-rose-500">METO</span> STORE •{" "}
-            <span className="meto-gradient-text">MLBB DIAMONDS</span>
-          </h1>
-
-          <p className="mx-auto max-w-2xl text-xs sm:text-base text-slate-300 mb-6 leading-relaxed">
-            الأسعار الرسمية المعتمدة لمتجر ميتو لشحن ألعاب Mobile Legends: Bang Bang. شحن فوري وآمن
-            بالجنيه المصري و USDT عبر FazerCards و Binance Pay.
-          </p>
-
-          {/* Quick Buttons: View Original Poster + WhatsApp */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto mb-6 px-1">
-            <button
-              onClick={() => setPosterOpen(true)}
-              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-500/50 bg-cyan-950/50 hover:bg-cyan-900/60 text-cyan-300 py-2.5 px-3 text-xs font-bold transition-all shadow-md shadow-cyan-500/20 cursor-pointer"
-            >
-              <ImageIcon className="h-4 w-4 text-cyan-400 shrink-0" />
-              <span>عرض بوستر الأسعار الرسمي</span>
-            </button>
-
-            <a
-              href="https://wa.me/201070459339"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-950/50 hover:bg-emerald-900/60 text-emerald-300 py-2.5 px-3 text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
-            >
-              <MessageCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span>الدعم الفني واتساب: 01070459339</span>
-            </a>
+          <h1 className="text-3xl sm:text-5xl font-black text-white mb-2"><span className="text-rose-500">METO</span> STORE</h1>
+          <p className="mx-auto max-w-2xl text-xs sm:text-sm text-slate-300 mb-4">اختر اللعبة والباقة، أدخل بيانات اللاعب ومنطقته، وأضف للسلة لإتمام الطلب.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto text-[11px] text-slate-300">
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5"><Clock className="h-3.5 w-3.5 text-rose-400"/> تنفيذ سريع</div>
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5"><ShieldCheck className="h-3.5 w-3.5 text-cyan-400"/> تحقق من الحساب والمنطقة</div>
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5"><Gem className="h-3.5 w-3.5 text-purple-400"/> سعر الصرف: {settings.egp_rate} ج.م/$</div>
           </div>
-
-          {/* Value Props */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto text-[11px] sm:text-xs text-slate-300 px-1">
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <Clock className="h-3.5 w-3.5 text-rose-400 shrink-0" />
-              <span>شحن آلي وفوري خلال ثوانٍ</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <ShieldCheck className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-              <span>دفع مشفر بـ Binance Pay</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-800 bg-[#0c1224]/80 p-2.5 backdrop-blur-sm">
-              <Gem className="h-3.5 w-3.5 text-purple-400 shrink-0" />
-              <span>بطاقات الويكلي وعروض الدبل x2</span>
-            </div>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center mt-4">
+            <button onClick={() => setPosterOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-500/50 bg-cyan-950/40 text-cyan-300 py-2 px-3 text-xs font-bold"><ImageIcon className="h-4 w-4"/> بوستر الأسعار</button>
+            <a href="https://wa.me/201070459339" target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-950/40 text-emerald-300 py-2 px-3 text-xs font-bold"><MessageCircle className="h-4 w-4"/> تواصل واتساب</a>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
-        {/* Games Showcase Section */}
-        <GamesSection
-          selectedGameId={selectedGameId}
-          onSelectGame={handleGameSelect}
-        />
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-6 pb-28">
+        <GamesSection selectedGameId={selectedGameId} onSelectGame={handleGameSelect} />
 
-        {/* Step 1: Player ID Card */}
-        <section
-          id="player-input-card"
-          className="relative rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-7 shadow-xl shadow-rose-950/20 backdrop-blur-xl"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-800/80 pb-4">
+        <section id="player-input-card" className="rounded-2xl border border-rose-500/25 bg-[#0a0f20]/90 p-4 sm:p-6 shadow-xl">
+          <div className="flex items-center justify-between gap-3 mb-4 border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">
-                1
-              </div>
+              <div className="h-8 w-8 flex items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 font-extrabold text-sm border border-rose-500/30">1</div>
               <div>
-                <h2 className="text-sm sm:text-lg font-bold text-white flex items-center flex-wrap gap-1.5">
-                  <span>أدخل معرف حساب {activeGame.name}</span>
-                  <span className="font-mono text-cyan-400 text-xs sm:text-sm font-semibold">
-                    ({activeGame.needsZone ? "User ID & Zone" : "Player ID"})
-                  </span>
-                </h2>
-                <p className="text-[11px] sm:text-xs text-slate-400">
-                  تحقق من المعرف لتفادي إرسال الشحن لحساب آخر بالخطأ
-                </p>
+                <h2 className="text-sm sm:text-lg font-bold text-white">بيانات اللاعب لـ {activeGame.name}</h2>
+                <p className="text-[11px] text-slate-400">أدخل المعرف والمنطقة (مطلوبة للتحقق ومنع الشحن الخاطئ)</p>
               </div>
             </div>
-
-            <button
-              onClick={() => setGuideOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition-colors self-start sm:self-auto cursor-pointer"
-            >
-              <HelpCircle className="h-4 w-4 shrink-0" />
-              <span>{activeGame.guideTitle}</span>
-            </button>
+            <button onClick={() => setGuideOpen(true)} className="inline-flex items-center gap-1.5 text-xs text-cyan-400"><HelpCircle className="h-4 w-4"/> {activeGame.guideTitle}</button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            {/* Player ID / User ID */}
-            <div className={`${activeGame.needsZone ? "sm:col-span-5" : "sm:col-span-9"} space-y-1.5`}>
-              <label className="text-xs font-semibold text-slate-300">{activeGame.idLabel}</label>
-              <input
-                type="text"
-                placeholder={activeGame.idPlaceholder}
-                value={userId}
-                onChange={(e) => {
-                  setUserId(e.target.value);
-                  setVerifiedName(null);
-                  setVerifyError(null);
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition-all font-mono"
-              />
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className={`${activeGame.needsZone ? "sm:col-span-5" : "sm:col-span-6"} space-y-1.5`}>
+              <label className="text-xs font-semibold text-slate-300">{activeGame.idLabel} *</label>
+              <input value={player.id} onChange={(e) => setPlayer({ ...player, id: e.target.value })} placeholder={activeGame.idPlaceholder} className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none font-mono" />
             </div>
-
-            {/* Zone ID (Only if needed, e.g. MLBB) */}
             {activeGame.needsZone && (
-              <div className="sm:col-span-4 space-y-1.5">
+              <div className="sm:col-span-3 space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">{activeGame.zoneLabel}</label>
-                <input
-                  type="text"
-                  placeholder={activeGame.zonePlaceholder}
-                  value={zoneId}
-                  onChange={(e) => {
-                    setZoneId(e.target.value);
-                    setVerifiedName(null);
-                    setVerifyError(null);
-                  }}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 focus:ring-2 focus:ring-rose-500/20 outline-none transition-all font-mono"
-                />
+                <input value={player.zoneId || ""} onChange={(e) => setPlayer({ ...player, zoneId: e.target.value })} placeholder={activeGame.zonePlaceholder} className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none font-mono" />
               </div>
             )}
-
-            {/* Verification Button */}
-            <div className="sm:col-span-3">
-              <button
-                onClick={handleVerifyPlayer}
-                disabled={verifying || !userId || (activeGame.needsZone && !zoneId)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 disabled:opacity-50 text-white font-bold py-3 px-4 text-xs sm:text-sm transition-all shadow-md shadow-rose-600/25 cursor-pointer"
-              >
-                {verifying ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>جاري التحقق...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>تحقق من الحساب</span>
-                  </>
-                )}
-              </button>
+            <div className={`${activeGame.needsZone ? "sm:col-span-4" : "sm:col-span-6"} space-y-1.5`}>
+              <label className="text-xs font-semibold text-slate-300">منطقة الحساب (Region) *</label>
+              <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="مثال: EG / MENA / Global" className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none" />
+              <p className="text-[11px] text-slate-400">لازم تطابق منطقة الحساب الحقيقية، وإلا الطلب هيفشل.</p>
             </div>
           </div>
-
-          {/* Verification feedback */}
-          {verifiedName && (
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-3 text-xs text-emerald-300 animate-fadeIn">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span>
-                تم التحقق بنجاح! اسم الحساب داخل اللعبة:{" "}
-                <strong className="font-bold text-white underline">{verifiedName}</strong>
-              </span>
-            </div>
-          )}
-
-          {verifyError && (
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 text-xs text-rose-300 animate-fadeIn">
-              <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
-              <span>{verifyError}</span>
-            </div>
-          )}
         </section>
 
-        {/* Step 2: Choose Package Section */}
-        <section id="packages-section" className="space-y-5">
+        <section id="packages-section" className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 font-extrabold text-sm border border-cyan-500/30">
-                2
-              </div>
+              <div className="h-8 w-8 flex items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-400 font-extrabold text-sm border border-cyan-500/30">2</div>
               <div>
-                <h2 className="text-base sm:text-xl font-bold text-white flex items-center flex-wrap gap-2">
-                  <span>اختر باقة {activeGame.name}</span>
-                  <span className="text-xs font-semibold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
-                    {filteredPackages.length} باقة متاحة
-                  </span>
-                </h2>
-                <p className="text-[11px] sm:text-xs text-slate-400">
-                  قوائم الأسعار الرسمية المعتمدة لـ METO STORE (الأسعار بالجنيه المصري و USDT)
-                </p>
+                <h2 className="text-base sm:text-xl font-bold text-white">اختر الباقات وأضف للسلة <span className="text-xs text-rose-400">({filteredPackages.length})</span></h2>
+                <p className="text-[11px] text-slate-400">{loadingPkgs ? "جاري تحميل الباقات من Fazer..." : (settings.packages_synced_at ? `آخر مزامنة: ${new Date(settings.packages_synced_at).toLocaleString('ar-EG')}` : "الباقات يتم مزامنتها من Fazer تلقائيًا")}</p>
               </div>
             </div>
-
-            {/* View Mode & Search Bar */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              {/* Search Input */}
-              <div className="relative flex-1 sm:w-60">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="ابحث عن باقة أو الكمية..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-900/90 pr-8 pl-8 py-2 text-xs text-white placeholder-slate-500 focus:border-rose-400 outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 cursor-pointer"
-                    title="مسح البحث"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
+              <div className="relative flex-1 sm:w-56">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400"/>
+                <input value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="ابحث..." className="w-full rounded-xl border border-slate-800 bg-slate-900/90 pr-8 pl-8 py-2 text-xs text-white focus:border-rose-400 outline-none"/>
+                {searchQuery && <button onClick={()=>setSearchQuery("")} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"><X className="h-3.5 w-3.5"/></button>}
               </div>
-
-              {/* View Toggle (Grid / List) */}
-              <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900/90 p-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("grid")}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === "grid"
-                      ? "bg-rose-500/25 text-rose-300 shadow-sm"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                  title="عرض الكروت المدمجة (Grid)"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("list")}
-                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                    viewMode === "list"
-                      ? "bg-rose-500/25 text-rose-300 shadow-sm"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                  title="عرض القائمة السريعة بدون سكرول (List)"
-                >
-                  <List className="h-4 w-4" />
-                </button>
+              <div className="flex items-center rounded-xl border border-slate-800 bg-slate-900/90 p-1">
+                <button onClick={()=>setViewMode("grid")} className={`p-1.5 rounded-lg ${viewMode==='grid'?'bg-rose-500/25 text-rose-300':'text-slate-400'}`}><LayoutGrid className="h-4 w-4"/></button>
+                <button onClick={()=>setViewMode("list")} className={`p-1.5 rounded-lg ${viewMode==='list'?'bg-rose-500/25 text-rose-300':'text-slate-400'}`}><List className="h-4 w-4"/></button>
               </div>
             </div>
           </div>
 
-          {/* Categories Tab Bar with package count badges */}
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {categories.map((cat) => {
-              const Icon = cat.icon;
-              const isActive = selectedCategory === cat.id;
-              const count = categoryCounts[cat.id] ?? 0;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setSelectedCategory(cat.id as PackageCategory | "all");
-                    setShowAllInAllCategory(false);
-                  }}
-                  className={`flex shrink-0 items-center gap-1.5 sm:gap-2 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-gradient-to-r from-rose-500/20 to-cyan-500/20 text-rose-300 border border-rose-500/50 shadow-md shadow-rose-500/15"
-                      : "border border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200"
-                  }`}
-                >
-                  <Icon className={`h-3.5 w-3.5 ${isActive ? "text-rose-400" : "text-slate-400"}`} />
-                  <span>{cat.label}</span>
-                  <span
-                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                      isActive ? "bg-rose-500/30 text-rose-200" : "bg-slate-800 text-slate-400"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+            {categories.map((cat:any)=>{
+              const Icon = cat.icon; const active = selectedCategory===cat.id;
+              return <button key={cat.id} onClick={()=>{setSelectedCategory(cat.id); setShowAllInAllCategory(false);}} className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold ${active?'bg-rose-500/20 text-rose-300 border border-rose-500/50':'border border-slate-800 bg-slate-900/60 text-slate-400'}`}><Icon className="h-3.5 w-3.5"/>{cat.label}</button>;
             })}
           </div>
 
-          {/* 1. Fast Compact List View (Ultra-low scroll for mobile) */}
-          {viewMode === "list" && (
+          {viewMode === "list" ? (
             <div className="space-y-2">
-              {displayedPackages.map((p) => {
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => handleSelectPackage(p)}
-                    className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-slate-800/90 bg-[#0a0f1d]/90 hover:border-rose-500/50 hover:bg-[#0f162c] transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <GamePackageIcon
-                        category={p.category}
-                        diamonds={p.diamonds}
-                        bonusDiamonds={p.bonusDiamonds}
-                        gameId={p.gameId || selectedGameId}
-                        currencyName={p.currencyName || activeGame.currency}
-                        size="sm"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-xs sm:text-sm truncate group-hover:text-rose-300 transition-colors">
-                            {p.name}
-                          </h4>
-                          {p.badge && (
-                            <span className="shrink-0 rounded-full bg-rose-500/20 border border-rose-500/30 px-1.5 py-0.2 text-[9px] font-bold text-rose-300">
-                              {p.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] sm:text-[11px] text-slate-400 truncate mt-0.5">
-                          {p.bonusDiamonds
-                            ? `${p.diamonds} + ${p.bonusDiamonds} إضافي مجاني`
-                            : p.diamonds > 0
-                              ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
-                              : p.description?.slice(0, 30) || "باقة مميزة"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <div className="text-xs sm:text-sm font-black text-white group-hover:text-rose-400 transition-colors">
-                          {p.retailPriceEgp}{" "}
-                          <span className="text-[10px] text-slate-400 font-normal">EGP</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400">≈ {p.retailPriceUsdt} USDT</div>
-                      </div>
-                      <div className="h-7 w-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-all">
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </div>
-                    </div>
+              {displayedPackages.map((p)=> (
+                <div key={p.id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-800/90 bg-[#0a0f1d]/90">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <GamePackageIcon category={p.category} diamonds={p.diamonds} bonusDiamonds={p.bonusDiamonds} gameId={p.gameId||selectedGameId} currencyName={p.currencyName||activeGame.currency} size="sm" />
+                    <div className="min-w-0"><div className="font-bold text-white text-xs sm:text-sm truncate">{p.name}</div><div className="text-[10px] text-slate-400">{p.bonusDiamonds?`${p.diamonds}+${p.bonusDiamonds}`:p.diamonds?`${p.diamonds} ${p.currencyName||activeGame.currency}`:"باقة"}</div></div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* 2. Compact Grid View */}
-          {viewMode === "grid" && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
-              {displayedPackages.map((p) => {
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => handleSelectPackage(p)}
-                    className={`group relative flex flex-col justify-between rounded-xl sm:rounded-2xl border p-2.5 sm:p-3.5 transition-all duration-200 cursor-pointer overflow-hidden ${
-                      p.popular
-                        ? "border-rose-500/40 bg-gradient-to-b from-[#170e24] to-[#0a0f1d] hover:border-rose-400 hover:shadow-md hover:shadow-rose-500/20 -translate-y-0.5"
-                        : "border-slate-800/90 bg-[#0a0f1d]/90 hover:border-slate-700 hover:bg-[#0e1428] hover:-translate-y-0.5"
-                    }`}
-                  >
-                    {/* Glowing corner accent */}
-                    <div className="absolute -top-12 -right-12 h-20 w-20 rounded-full bg-rose-500/10 blur-xl group-hover:bg-rose-500/20 transition-all pointer-events-none" />
-
-                    {/* Badge */}
-                    {p.badge && (
-                      <span className="absolute top-1.5 left-1.5 rounded-full bg-rose-500/20 border border-rose-500/40 px-1.5 py-0.2 text-[8px] sm:text-[9px] font-bold text-rose-300 shadow-sm z-10">
-                        {p.badge}
-                      </span>
-                    )}
-
-                    {/* Top: Professional 3D Game Asset Icon & Name */}
-                    <div className="pt-1">
-                      <div className="mb-1.5 flex items-center justify-start group-hover:scale-105 transition-transform">
-                        <GamePackageIcon
-                          category={p.category}
-                          diamonds={p.diamonds}
-                          bonusDiamonds={p.bonusDiamonds}
-                          gameId={p.gameId || selectedGameId}
-                          currencyName={p.currencyName || activeGame.currency}
-                          size="sm"
-                        />
-                      </div>
-
-                      <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-1 group-hover:text-rose-300 transition-colors">
-                        {p.name}
-                      </h3>
-
-                      {p.bonusDiamonds ? (
-                        <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-amber-400 font-semibold mt-0.5">
-                          <span>{p.diamonds}</span>
-                          <span className="text-emerald-400">+{p.bonusDiamonds} إضافي</span>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-                          {p.diamonds > 0
-                            ? `${p.diamonds} ${p.currencyName || activeGame.currency}`
-                            : p.description?.slice(0, 20) || "باقة مميزة"}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Bottom: Pricing & Action */}
-                    <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-baseline justify-between">
-                      <div>
-                        <div className="text-xs sm:text-sm font-black text-white group-hover:text-rose-400 transition-colors">
-                          {p.retailPriceEgp}{" "}
-                          <span className="text-[9px] text-slate-400 font-normal">EGP</span>
-                        </div>
-                        <div className="text-[9px] text-slate-400">≈ {p.retailPriceUsdt} USDT</div>
-                      </div>
-                      <div className="h-6 w-6 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-all">
-                        <ChevronRight className="h-3 w-3" />
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right"><div className="text-xs font-black text-white">{isMerchant?p.merchantBasePriceEgp:p.retailPriceEgp} ج.م</div></div>
+                    <Button size="sm" onClick={()=>onAdd(p)} className="h-8"><Plus className="w-4 h-4"/></Button>
                   </div>
-                );
-              })}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+              {displayedPackages.map((p)=> (
+                <div key={p.id} className="group relative flex flex-col justify-between rounded-xl border p-3 border-slate-800/90 bg-[#0a0f1d]/90">
+                  <div className="pt-1">
+                    <div className="mb-1.5"><GamePackageIcon category={p.category} diamonds={p.diamonds} bonusDiamonds={p.bonusDiamonds} gameId={p.gameId||selectedGameId} currencyName={p.currencyName||activeGame.currency} size="sm" /></div>
+                    <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2">{p.name}</h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{p.bonusDiamonds?`${p.diamonds}+${p.bonusDiamonds} إضافي`: (p.diamonds?`${p.diamonds} ${p.currencyName||activeGame.currency}`:"")}</p>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                    <div className="text-xs font-black text-white">{isMerchant?p.merchantBasePriceEgp:p.retailPriceEgp} <span className="text-[9px] text-slate-400 font-normal">ج.م</span></div>
+                    <Button size="sm" onClick={()=>onAdd(p)} className="h-7 px-2"><Plus className="w-4 h-4"/></Button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Empty search results state */}
-          {displayedPackages.length === 0 && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-center text-xs text-slate-400">
-              <Package className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-              <p>لا توجد باقات مطابقة لبحثك في {activeGame.name}.</p>
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setSelectedCategory("all");
-                }}
-                className="mt-3 text-xs text-rose-400 underline font-bold cursor-pointer"
-              >
-                إعادة ضبط البحث وعرض كافة الباقات
-              </button>
-            </div>
+          {displayedPackages.length===0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-8 text-center text-xs text-slate-400">لا توجد باقات متاحة لهذه اللعبة الآن. {settings.packages_synced_at?"":"(لم تتم المزامنة بعد من Fazer)"}</div>
           )}
-
-          {/* Show more / Collapse button when in 'all' category with > 10 packages */}
           {hasHiddenPackages && (
-            <div className="flex flex-col items-center justify-center pt-2">
+            <div className="flex justify-center pt-1">
               {!showAllInAllCategory ? (
-                <button
-                  type="button"
-                  onClick={() => setShowAllInAllCategory(true)}
-                  className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-gradient-to-r from-rose-950/40 via-slate-900 to-cyan-950/40 hover:from-rose-900/50 hover:to-cyan-900/50 px-5 py-2.5 text-xs font-bold text-slate-200 transition-all shadow-md active:scale-98 cursor-pointer"
-                >
-                  <span>عرض جميع باقات {activeGame.name} (متبقي {filteredPackages.length - 10} باقة)</span>
-                  <ChevronDown className="h-4 w-4 text-rose-400" />
-                </button>
+                <button onClick={()=>setShowAllInAllCategory(true)} className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-950/30 px-4 py-2 text-xs font-bold">عرض الكل ({filteredPackages.length-10}+)<ChevronDown className="h-4 w-4"/></button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAllInAllCategory(false);
-                    const elem = document.getElementById("packages-section");
-                    if (elem) elem.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/90 hover:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-all cursor-pointer"
-                >
-                  <span>عرض الباقات الأكثر طلباً فقط (تقليل القائمة)</span>
-                  <ChevronUp className="h-4 w-4" />
-                </button>
+                <button onClick={()=>{setShowAllInAllCategory(false); document.getElementById('packages-section')?.scrollIntoView({behavior:'smooth'});}} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/90 px-4 py-2 text-xs">عرض أقل <ChevronUp className="h-4 w-4"/></button>
               )}
-              <p className="text-[11px] text-slate-500 mt-2 text-center">
-                💡 نصيحة: يمكنك الضغط على تصنيفات الباقات أعلاه للانتقال المباشر بدون سكرول طويل
-              </p>
             </div>
           )}
-        </section>
-
-        {/* Poster Callout Banner */}
-        <section className="rounded-2xl border border-rose-500/30 bg-gradient-to-r from-[#170e22] via-[#0d1428] to-[#170e22] p-6 sm:p-8 shadow-xl">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            <div className="md:col-span-8 space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full bg-rose-500/20 border border-rose-500/40 px-3 py-1 text-xs text-rose-300">
-                <Sparkles className="h-3.5 w-3.5 text-rose-400" />
-                <span>عروض الجملة والتجار</span>
-              </div>
-              <h3 className="text-2xl font-black text-white">
-                هل أنت تاجر أو صاحب متجر شحن ألعاب؟
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                وفر في كل عملية شحن مع بوابة التاجر الرسمية لـ METO STORE بأسعار الجملة المخفضة
-                وتنفيذ فوري عبر FazerCards.
-              </p>
-            </div>
-            <div className="md:col-span-4 flex flex-col sm:flex-row md:justify-end gap-2.5">
-              <button
-                onClick={() => setPosterOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 font-bold px-4 py-3 text-xs transition-all"
-              >
-                <ImageIcon className="h-4 w-4" />
-                <span>عرض البوستر</span>
-              </button>
-              <a
-                href="/merchant"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold px-5 py-3 text-xs shadow-lg shadow-rose-600/30 transition-all hover:scale-105"
-              >
-                <span>بوابة التاجر</span>
-                <ChevronRight className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
         </section>
       </main>
 
-      <Footer className="mt-16" />
+      {cart.length>0 && (
+        <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-3xl">
+          <div className="rounded-2xl border border-rose-500/40 bg-[#0d1022]/95 backdrop-blur p-3 flex items-center justify-between gap-3 shadow-2xl">
+            <div className="flex items-center gap-3 min-w-0"><div className="h-10 w-10 rounded-xl bg-rose-500/20 flex items-center justify-center"><ShoppingCart className="w-5 h-5 text-rose-300"/></div><div className="min-w-0"><div className="font-bold text-sm">{cartCount} عنصر في السلة</div><div className="text-xs text-slate-300">الإجمالي: <span className="text-rose-300 font-bold">{cartTotal} ج.م</span></div></div></div>
+            <div className="flex items-center gap-2"><Button variant="outline" size="sm" onClick={clearCart}>تفريغ</Button><Button onClick={()=>setCheckoutOpen(true)}>إتمام الطلب</Button></div>
+          </div>
+        </div>
+      )}
 
-      {/* Checkout Modal */}
-      <CheckoutModal
-        open={checkoutOpen}
-        onOpenChange={setCheckoutOpen}
-        pkg={selectedPackage}
-        userId={userId}
-        zoneId={activeGame.needsZone ? zoneId : ""}
-        gameId={selectedGameId}
-        username={verifiedName || undefined}
-        isMerchant={false}
-      />
+      <Footer className="mt-10" />
 
-      {/* Guide Modal */}
-      <PlayerIdGuideModal
-        open={guideOpen}
-        onOpenChange={setGuideOpen}
-        gameId={selectedGameId}
-      />
+      <CheckoutModal open={checkoutOpen} onClose={()=>setCheckoutOpen(false)} cart={cart} onUpdateQty={updateCartQty} onRemove={removeFromCart} onClear={clearCart} />
+      <PlayerIdGuideModal open={guideOpen} onOpenChange={setGuideOpen} gameId={selectedGameId} />
 
-      {/* Poster High-Res Modal */}
       <Dialog open={posterOpen} onOpenChange={setPosterOpen}>
         <DialogContent className="max-w-2xl bg-[#0a0e1c] border border-cyan-500/40 text-slate-100 p-4 rounded-2xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader className="mb-2">
-            <DialogTitle className="text-base font-bold text-white flex items-center gap-2">
-              <ImageIcon className="h-4 w-4 text-cyan-400" />
-              <span>بوستر أسعار METO STORE الرسمي - Mobile Legends</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="rounded-xl overflow-hidden border border-slate-800 shadow-2xl">
-            <img
-              src={metoPoster}
-              alt="METO STORE Official MLBB Diamonds Poster"
-              className="w-full h-auto object-contain"
-            />
-          </div>
+          <DialogHeader className="mb-2"><DialogTitle className="text-base font-bold text-white flex items-center gap-2"><ImageIcon className="h-4 w-4 text-cyan-400"/> بوستر الأسعار</DialogTitle></DialogHeader>
+          <div className="rounded-xl overflow-hidden border border-slate-800"><img src={metoPoster} alt="Poster" className="w-full h-auto object-contain"/></div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,512 +1,195 @@
 import { useState, useEffect, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
-import { TopUpPackage, TopUpOrder } from "../types/store";
-import { createPaymentOrderApi, checkPaymentStatusApi, executeTopUpApi } from "../lib/api-client";
-import { useStore } from "../lib/store/useStore";
-import { GamePackageIcon } from "./GamePackageIcon";
-import {
-  CheckCircle2,
-  Loader2,
-  QrCode,
-  ExternalLink,
-  Copy,
-  Check,
-  AlertCircle,
-  Sparkles,
-  ShieldCheck,
-  RefreshCw,
-} from "lucide-react";
+import { X, Loader2, CheckCircle2, XCircle, User, Package, CreditCard, AlertTriangle } from "lucide-react";
+import { useStore } from "@/lib/store";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "../hooks/use-toast";
+import { validatePlayerApi, submitOrderApi } from "@/lib/api-client";
+import type { CartItem } from "@/types/store";
 
-interface CheckoutModalProps {
+type CheckoutStep = "form" | "review" | "processing" | "success" | "failed";
+
+interface Props {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-  pkg: TopUpPackage | null;
-  userId: string;
-  zoneId?: string;
-  gameId?: string;
-  username?: string;
-  isMerchant?: boolean;
+  onClose: () => void;
+  cart: CartItem[];
+  onUpdateQty: (packageId: string, qty: number) => void;
+  onRemove: (packageId: string) => void;
+  onClear: () => void;
 }
 
-export function CheckoutModal({
-  open,
-  onOpenChange,
-  pkg,
-  userId,
-  zoneId = "",
-  gameId,
-  username,
-  isMerchant = false,
-}: CheckoutModalProps) {
-  const { addOrder, updateOrderStatus } = useStore();
+export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemove, onClear }: Props) {
+  const { player, setPlayer, isMerchant, accessToken } = useStore();
+  const [step, setStep] = useState<CheckoutStep>("form");
+  const [region, setRegion] = useState(player.region || "");
+  const [isValidating, setIsValidating] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const submitted = useRef(false);
 
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<boolean>(false);
-  const [orderData, setOrderData] = useState<{
-    merchantTradeNo: string;
-    prepayId?: string;
-    qrCodeUrl?: string;
-    checkoutUrl?: string;
-    deeplink?: string;
-    totalFee: number;
-    currency: string;
-  } | null>(null);
-
-  const [paymentStatus, setPaymentStatus] = useState<
-    "INITIAL" | "AWAITING_PAYMENT" | "PAYMENT_RECEIVED" | "TOPPING_UP" | "SUCCESS" | "FAILED"
-  >("INITIAL");
-  const [topUpResult, setTopUpResult] = useState<{
-    transactionId?: string;
-    orderId?: string;
-  } | null>(null);
-  const [timeLeft, setTimeLeft] = useState<number>(900); // 15 mins
-
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const localOrderIdRef = useRef<string | null>(null);
-
-  const effectiveGameId = gameId || pkg?.gameId || "mlbb";
-  const normalizedZoneId = zoneId?.trim() || (effectiveGameId === "mlbb" ? "" : "-");
-
-  // Price calculations based on mode
-  const priceEgp = pkg ? (isMerchant ? pkg.merchantPriceEgp : pkg.retailPriceEgp) : 0;
-  const priceUsdt = pkg ? (isMerchant ? pkg.merchantPriceUsdt : pkg.retailPriceUsdt) : 0;
-
-  // Initialize or reset when modal opens
   useEffect(() => {
-    if (!open || !pkg) {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-      setPaymentStatus("INITIAL");
-      setOrderData(null);
-      setError(null);
-      setTopUpResult(null);
-      return;
-    }
+    if (open) { setStep("form"); setResult(null); submitted.current = false; }
+  }, [open]);
 
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
-    setPaymentStatus("AWAITING_PAYMENT");
-    setTimeLeft(900);
+  if (!open) return null;
 
-    const tradeNo = `MLBB_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
-    const newOrderId = `ORD-${Date.now()}`;
-    localOrderIdRef.current = newOrderId;
+  const total = cart.reduce((s, i) => s + i.qty * (isMerchant ? i.package.merchantBasePriceEgp : i.package.retailPriceEgp), 0);
 
-    // Create Binance Pay order
-    createPaymentOrderApi({
-      merchantTradeNo: tradeNo,
-      orderAmount: priceUsdt,
-      currency: "USDT",
-      goodsTitle: `${pkg.name} - METO STORE`,
-      goodsDetail: `Top up for UID ${userId}${normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""} [${effectiveGameId}]`,
-    })
-      .then((res) => {
-        if (!isMounted) return;
-        if (res.success && res.qrCodeUrl) {
-          setOrderData({
-            merchantTradeNo: res.merchantTradeNo,
-            prepayId: res.prepayId,
-            qrCodeUrl: res.qrCodeUrl,
-            checkoutUrl: res.checkoutUrl,
-            deeplink: res.deeplink,
-            totalFee: res.totalFee,
-            currency: res.currency,
-          });
-
-          // Save initial order in local store
-          const initialOrder: TopUpOrder = {
-            id: newOrderId,
-            userId,
-            zoneId: normalizedZoneId,
-            username: username || "Player",
-            packageId: pkg.id,
-            packageName: pkg.name,
-            diamonds: pkg.diamonds + (pkg.bonusDiamonds || 0),
-            priceEgp,
-            priceUsdt,
-            isMerchantOrder: isMerchant,
-            binanceTradeNo: res.merchantTradeNo,
-            binancePrepayId: res.prepayId,
-            status: "PENDING",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          addOrder(initialOrder);
-
-          // Start polling for payment confirmation
-          startPolling(res.merchantTradeNo, newOrderId);
-        } else {
-          setError(res.error || "تعذر إنشاء معاملة الدفع عبر Binance Pay");
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setError(err.message || "حدث خطأ في الاتصال بالخادم");
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
-
-    // Start countdown
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => {
-      isMounted = false;
-      if (pollingRef.current) clearInterval(pollingRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [
-    open,
-    pkg,
-    userId,
-    zoneId,
-    gameId,
-    isMerchant,
-    priceUsdt,
-    priceEgp,
-    username,
-    addOrder,
-    effectiveGameId,
-    normalizedZoneId,
-  ]);
-
-  // Fulfill Top-up via FazerCards
-  const fulfillTopUp = async (tradeNo: string, currentOrderId: string) => {
-    if (!pkg) return;
-    setPaymentStatus("TOPPING_UP");
-    updateOrderStatus(currentOrderId, "TOPPING_UP");
-
+  const validate = async () => {
+    if (!player.id || !region) { toast({ title: "بيانات ناقصة", description: "أدخل معرف اللاعب والمنطقة" }); return; }
+    if (!cart.length) { toast({ title: "السلة فارغة", description: "اختر باقة واحدة على الأقل" }); return; }
+    setIsValidating(true);
     try {
-      const topUpRes = await executeTopUpApi({
-        offerId: pkg.fazerProductId,
-        playerId: userId,
-        zoneId: normalizedZoneId,
-        gameId: effectiveGameId,
-        idempotencyKey: tradeNo,
-      });
-
-      if (topUpRes.success) {
-        setTopUpResult({
-          transactionId: topUpRes.transactionId,
-          orderId: topUpRes.orderId,
-        });
-        setPaymentStatus("SUCCESS");
-        updateOrderStatus(currentOrderId, "SUCCESS", {
-          fazerTransactionId: topUpRes.transactionId,
-        });
+      const res = await validatePlayerApi(player.id, player.zoneId, cart[0]?.package.gameId || "mlbb", region);
+      if (res.valid) {
+        setPlayer({ ...player, name: res.username || player.name, region: (res as any).accountRegion || region });
+        setRegion((res as any).accountRegion || region);
+        setStep("review");
       } else {
-        setError(
-          topUpRes.error ||
-            "تم استلام الدفع ولكن واجه مزود الشحن FazerCards مشكلة. تواصل مع الدعم برقم المعاملة.",
-        );
-        setPaymentStatus("FAILED");
-        updateOrderStatus(currentOrderId, "FAILED", {
-          errorMessage: topUpRes.error,
-        });
+        toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من اللاعب/المنطقة" });
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "حدث خطأ أثناء تنفيذ الشحن";
-      setError(message);
-      setPaymentStatus("FAILED");
-      updateOrderStatus(currentOrderId, "FAILED", {
-        errorMessage: message,
-      });
+    } catch {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم" });
+    } finally { setIsValidating(false); }
+  };
+
+  const submit = async () => {
+    if (submitted.current) return;
+    submitted.current = true;
+    setStep("processing");
+    try {
+      const body = {
+        playerId: player.id,
+        zoneId: player.zoneId || "",
+        gameId: cart[0]?.package.gameId || "mlbb",
+        region,
+        items: cart.map((c) => ({ offerId: c.package.offerId, qty: c.qty })),
+        asMerchant: isMerchant,
+      };
+      const res = await submitOrderApi(body, accessToken);
+      setResult(res);
+      if (res.success) {
+        setStep("success");
+        onClear();
+      } else {
+        setStep("failed");
+      }
+    } catch (e: any) {
+      setResult({ error: e?.message || "حدث خطأ" });
+      setStep("failed");
+    } finally {
+      submitted.current = false;
     }
-  };
-
-  const copyReceipt = () => {
-    const text = `
-إيصال شحن METO STORE الرسمي
-------------------------------------
-رقم الطلب: ${localOrderIdRef.current || ""}
-معرف اللاعب: ${userId}${normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""}
-اسم الحساب: ${username || "Player"}
-الباقة: ${pkg?.name || ""}
-الكمية: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} ${pkg?.currencyName || "وحدة"}
-المبلغ: ${priceUsdt} USDT (${priceEgp} EGP)
-معاملة Binance: ${orderData?.merchantTradeNo || ""}
-معاملة المزود: ${topUpResult?.transactionId || "قيد المعالجة"}
-الحالة: ناجحة ومكتملة ✓
-خدمة العملاء واتساب: 01070459339
-------------------------------------
-METO STORE • نشاطاتنا تميزنا ثقة ♡
-    `.trim();
-
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Format time (MM:SS)
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-[#0b0f1d] border border-cyan-500/30 text-slate-100 p-0 overflow-hidden rounded-2xl shadow-2xl shadow-cyan-950/60 max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-[#0d162d] to-[#17102e] border-b border-cyan-500/20 px-4 sm:px-6 py-3.5 sm:py-4">
-          <DialogHeader className="text-right sm:text-right">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/20 text-cyan-400">
-                  <QrCode className="h-4 w-4" />
-                </div>
-                <div>
-                  <DialogTitle className="text-sm sm:text-base font-bold text-white">
-                    {isMerchant ? "شحن فوري - بوابة التاجر" : "تأكيد الشحن والدفع بـ Binance Pay"}
-                  </DialogTitle>
-                  <DialogDescription className="text-[11px] sm:text-xs text-slate-400">
-                    دفع مشفر آمن وفوري 100%
-                  </DialogDescription>
-                </div>
-              </div>
-              <span className="font-mono text-[11px] sm:text-xs text-cyan-300 rounded bg-cyan-950/60 px-2 py-0.5 sm:py-1 border border-cyan-500/30">
-                {formatTime(timeLeft)}
-              </span>
-            </div>
-          </DialogHeader>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={step !== "processing" ? onClose : undefined} />
+      <div className="relative w-full max-w-xl glass-card rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <button onClick={onClose} disabled={step === "processing"} className="absolute top-4 end-4 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
 
-        {/* Body Container */}
-        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4">
-          {/* Order Details Card */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                {pkg && (
-                  <GamePackageIcon
-                    category={pkg.category}
-                    diamonds={pkg.diamonds}
-                    bonusDiamonds={pkg.bonusDiamonds}
-                    gameId={pkg.gameId}
-                    currencyName={pkg.currencyName}
-                    size="md"
-                  />
-                )}
-                <div>
-                  <span className="text-xs font-medium text-cyan-400">الباقة المختارة:</span>
-                  <h4 className="font-bold text-white text-base mt-0.5">{pkg?.name}</h4>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
-                    <span className="text-purple-400 font-semibold">
-                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0}{" "}
-                      {pkg?.currencyName || "وحدة"}
-                    </span>
-                    <span>•</span>
-                    <span>
-                      حساب: <span className="font-mono text-cyan-300">{userId}</span>
-                      {normalizedZoneId && normalizedZoneId !== "-" && (
-                        <span> ({normalizedZoneId})</span>
-                      )}
-                    </span>
-                  </div>
-                  {username && (
-                    <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>
-                        الاسم داخل اللعبة: <strong>{username}</strong>
-                      </span>
+        {step === "form" && (
+          <div className="space-y-4">
+            <h3 className="font-display text-xl font-bold flex items-center gap-2"><User className="w-5 h-5 text-primary"/> بيانات الشحن</h3>
+            <div>
+              <label className="text-sm text-muted-foreground">معرف اللاعب (Player ID) *</label>
+              <Input value={player.id} onChange={(e) => setPlayer({ ...player, id: e.target.value })} placeholder="مثال: 12345678" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">معرف السيرفر/المنطقة داخل اللعبة (Zone ID) إن وجد</label>
+              <Input value={player.zoneId || ""} onChange={(e) => setPlayer({ ...player, zoneId: e.target.value })} placeholder="مثال: 1234" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">منطقة الحساب (Region) *</label>
+              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="مثال: EG / MENA / Global (حسب اللعبة)" />
+              <p className="text-xs text-muted-foreground mt-1">يجب أن تطابق منطقة الحساب الحقيقية لتجنب فشل الشحن.</p>
+            </div>
+
+            <div className="border border-border rounded-xl p-3 space-y-2">
+              <div className="font-semibold flex items-center gap-2"><Package className="w-4 h-4"/> السلة ({cart.length})</div>
+              {cart.length === 0 && <p className="text-sm text-muted-foreground">السلة فارغة. اختر باقات من القائمة.</p>}
+              {cart.map((it) => {
+                const unit = isMerchant ? it.package.merchantBasePriceEgp : it.package.retailPriceEgp;
+                return (
+                  <div key={it.package.id} className="flex items-center justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{it.package.name}</div>
+                      <div className="text-muted-foreground">{unit} ج.م ×</div>
                     </div>
-                  )}
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400">المبلغ المطلوب:</span>
-                <div className="text-lg font-extrabold text-cyan-400">{priceUsdt} USDT</div>
-                <div className="text-xs text-slate-400">{priceEgp} EGP</div>
-              </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="outline" onClick={() => onUpdateQty(it.package.id, Math.max(1, it.qty - 1))}>-</Button>
+                      <span className="w-6 text-center">{it.qty}</span>
+                      <Button size="sm" variant="outline" onClick={() => onUpdateQty(it.package.id, it.qty + 1)}>+</Button>
+                      <Button size="sm" variant="ghost" onClick={() => onRemove(it.package.id)}><X className="w-4 h-4"/></Button>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex justify-between pt-2 border-t border-border font-bold"><span>الإجمالي</span><span className="text-primary">{total} ج.م</span></div>
+            </div>
+
+            <Button className="w-full" onClick={validate} disabled={isValidating || !cart.length || !player.id || !region}>
+              {isValidating ? <><Loader2 className="w-4 h-4 animate-spin"/> جاري التحقق...</> : "تحقق ومتابعة"}
+            </Button>
+          </div>
+        )}
+
+        {step === "review" && (
+          <div className="space-y-4">
+            <h3 className="font-display text-xl font-bold flex items-center gap-2"><CreditCard className="w-5 h-5 text-primary"/> مراجعة الطلب</h3>
+            <div className="text-sm space-y-1 bg-muted/30 rounded-lg p-3">
+              <div><span className="text-muted-foreground">اللاعب:</span> <b>{player.name || player.id}</b> ({player.id}{player.zoneId ? ` / ${player.zoneId}` : ""})</div>
+              <div><span className="text-muted-foreground">المنطقة:</span> <b>{region}</b></div>
+            </div>
+            <div className="space-y-1 text-sm">
+              {cart.map((it) => {
+                const unit = isMerchant ? it.package.merchantBasePriceEgp : it.package.retailPriceEgp;
+                return <div key={it.package.id} className="flex justify-between"><span>{it.package.name} × {it.qty}</span><span>{unit * it.qty} ج.م</span></div>;
+              })}
+              <div className="flex justify-between font-bold pt-2 border-t border-border"><span>الإجمالي</span><span className="text-primary">{total} ج.م</span></div>
+            </div>
+            {!isMerchant && (
+              <div className="flex gap-2 text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg"><AlertTriangle className="w-4 h-4 shrink-0"/> سيتم تنفيذ الشحن بعد تأكيد الدفع. (وسيلة الدفع البديلة ستُفعّل قريبًا؛ يمكنك التواصل معنا لتأكيد الدفع يدويًا الآن.)</div>
+            )}
+            {isMerchant && (
+              <div className="flex gap-2 text-xs text-blue-600 bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg"><AlertTriangle className="w-4 h-4 shrink-0"/> كتاجر: سيتم خصم الإجمالي من رصيد محفظتك ذريًا قبل التنفيذ (لا يمكن تجاوزه عند عدم كفاية الرصيد).</div>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setStep("form")}>رجوع</Button>
+              <Button className="flex-1" onClick={submit}>تأكيد وإرسال الطلب</Button>
             </div>
           </div>
+        )}
 
-          {/* Conditional Content based on status */}
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-10 space-y-3">
-              <Loader2 className="h-10 w-10 text-cyan-400 animate-spin" />
-              <p className="text-sm text-slate-300">جاري إنشاء جلسة دفع Binance Pay المشفرة...</p>
+        {step === "processing" && (
+          <div className="py-10 text-center space-y-3">
+            <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary"/>
+            <div className="font-semibold">جاري معالجة الطلب...</div>
+            <div className="text-sm text-muted-foreground">يتم التحقق والخصم/التنفيذ بشكل آمن على الخادم.</div>
+          </div>
+        )}
+
+        {step === "success" && (
+          <div className="py-8 text-center space-y-3">
+            <CheckCircle2 className="w-12 h-12 mx-auto text-green-500"/>
+            <div className="font-bold text-lg">تم استلام/تنفيذ الطلب</div>
+            <div className="text-sm text-muted-foreground">{result?.message || "تمت العملية بنجاح."}</div>
+            {result?.order_ref && <div className="text-xs font-mono bg-muted p-2 rounded">رقم الطلب: {result.order_ref}</div>}
+            <Button className="mt-2" onClick={onClose}>إغلاق</Button>
+          </div>
+        )}
+
+        {step === "failed" && (
+          <div className="py-8 text-center space-y-3">
+            <XCircle className="w-12 h-12 mx-auto text-destructive"/>
+            <div className="font-bold text-lg">تعذر إتمام الطلب</div>
+            <div className="text-sm text-muted-foreground">{result?.error || "حدث خطأ غير متوقع."}</div>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" onClick={() => setStep("form")}>تعديل</Button>
+              <Button onClick={onClose}>إغلاق</Button>
             </div>
-          )}
-
-          {error && !loading && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-4 text-sm text-rose-300 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 shrink-0 text-rose-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold">حدث خطأ</p>
-                <p className="text-xs text-rose-200">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Payment Pending Stage */}
-          {!loading && !error && paymentStatus === "AWAITING_PAYMENT" && orderData && (
-            <div className="space-y-4">
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-cyan-500/30 bg-gradient-to-b from-[#0e1628] to-[#0b101d] p-5 shadow-lg">
-                <p className="text-xs text-slate-300 mb-3 text-center">
-                  امسح الرمز بواسطة تطبيق <strong className="text-amber-400">Binance</strong> لإتمام
-                  السداد الفوري
-                </p>
-
-                {/* QR Code Container */}
-                <div className="relative rounded-xl bg-white p-2.5 sm:p-3 shadow-xl ring-4 ring-cyan-500/20">
-                  <img
-                    src={orderData.qrCodeUrl}
-                    alt="Binance Pay QR Code"
-                    className="h-44 w-44 sm:h-52 sm:w-52 object-contain"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="h-10 w-10 rounded-full bg-slate-900/90 border border-amber-400 flex items-center justify-center shadow-lg">
-                      <span className="font-bold text-amber-400 text-xs">PAY</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Polling Indicator */}
-                <div className="mt-4 flex items-center gap-2 text-xs text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3 py-1.5 rounded-full">
-                  <RefreshCw className="h-3 w-3 animate-spin text-cyan-400" />
-                  <span>بانتظار تأكيد الدفع التلقائي...</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {orderData.deeplink && (
-                  <a
-                    href={orderData.deeplink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-2.5 px-4 text-xs transition-colors shadow-md shadow-amber-500/20"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    <span>فتح تطبيق Binance Pay</span>
-                  </a>
-                )}
-
-                {orderData.checkoutUrl && (
-                  <a
-                    href={orderData.checkoutUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 px-4 text-xs transition-colors"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    <span>الدفع عبر المتصفح</span>
-                  </a>
-                )}
-              </div>
-
-              <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 text-[11px] text-slate-400 space-y-1">
-                <div className="flex justify-between">
-                  <span>رقم المعاملة:</span>
-                  <span className="font-mono text-slate-300">{orderData.merchantTradeNo}</span>
-                </div>
-                {orderData.prepayId && (
-                  <div className="flex justify-between">
-                    <span>Prepay ID:</span>
-                    <span className="font-mono text-slate-300">{orderData.prepayId}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Payment Received / Topping Up */}
-          {(paymentStatus === "PAYMENT_RECEIVED" || paymentStatus === "TOPPING_UP") && (
-            <div className="flex flex-col items-center justify-center py-12 space-y-4 text-center">
-              <div className="relative">
-                <div className="h-16 w-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-400 animate-pulse" />
-                </div>
-                <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-cyan-500 flex items-center justify-center">
-                  <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
-                </div>
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">تم استلام الدفعة بنجاح!</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  جاري الآن إرسال أمر الشحن الفوري إلى خوادم FazerCards...
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Success Screen */}
-          {paymentStatus === "SUCCESS" && (
-            <div className="space-y-4 py-2">
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/20 to-[#0c1622] p-6 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 mb-3 shadow-lg shadow-emerald-500/20">
-                  <ShieldCheck className="h-8 w-8" />
-                </div>
-
-                <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-lg">
-                  <Sparkles className="h-5 w-5" />
-                  <span>تم الشحن بنجاح وفورياً!</span>
-                </div>
-                <p className="text-xs text-slate-300 mt-1">
-                  تم شحن {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} جوهرة لحساب اللاعب{" "}
-                  {userId} بنجاح.
-                </p>
-
-                {/* Details Breakdown */}
-                <div className="mt-4 w-full rounded-xl border border-slate-800 bg-slate-900/80 p-3.5 text-xs text-slate-300 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">حساب اللاعب:</span>
-                    <span className="font-bold text-white">
-                      {username || userId}
-                      {normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">رقم معاملة FazerCards:</span>
-                    <span className="font-mono text-cyan-400">
-                      {topUpResult?.transactionId || "FZR-OK"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">رقم معاملة Binance:</span>
-                    <span className="font-mono text-purple-400">{orderData?.merchantTradeNo}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">المبلغ المسدد:</span>
-                    <span className="font-bold text-emerald-400">
-                      {priceUsdt} USDT ({priceEgp} EGP)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={copyReceipt}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-950/40 hover:bg-cyan-900/40 text-cyan-300 font-semibold py-2.5 text-xs transition-colors"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-emerald-400" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  <span>{copied ? "تم نسخ الإيصال" : "نسخ إيصال العملية"}</span>
-                </button>
-
-                <button
-                  onClick={() => onOpenChange(false)}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-2.5 text-xs transition-all shadow-md shadow-cyan-500/20"
-                >
-                  إتمام وإغلاق
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
