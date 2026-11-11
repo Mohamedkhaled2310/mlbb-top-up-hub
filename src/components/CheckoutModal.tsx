@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, CheckCircle2, XCircle, User, Package, CreditCard, AlertTriangle } from "lucide-react";
+import { X, Loader2, CheckCircle2, XCircle, User, Package, CreditCard, AlertTriangle, MapPin } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,15 +35,20 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
   const total = cart.reduce((s, i) => s + i.qty * (isMerchant ? i.package.merchantBasePriceEgp : i.package.retailPriceEgp), 0);
 
   const validate = async () => {
-    if (!player.id || !region) { toast({ title: "بيانات ناقصة", description: "أدخل معرف اللاعب والمنطقة" }); return; }
+    if (!player.id) { toast({ title: "بيانات ناقصة", description: "أدخل معرف اللاعب" }); return; }
     if (!cart.length) { toast({ title: "السلة فارغة", description: "اختر باقة واحدة على الأقل" }); return; }
     setIsValidating(true);
     try {
-      const res = await validatePlayerApi(player.id, player.zoneId, cart[0]?.package.gameId || "mlbb", region);
+      const res = await validatePlayerApi(player.id, player.zoneId, cart[0]?.package.gameId || "mlbb", region || undefined);
       if (res.valid) {
-        setPlayer({ ...player, name: res.username || player.name, region: (res as any).accountRegion || region });
-        setRegion((res as any).accountRegion || region);
-        setStep("review");
+        const detectedRegion = (res as any).accountRegion || region || "";
+        if (!detectedRegion) {
+          toast({ title: "المنطقة مطلوبة", description: "لم يتم تحديد منطقة الحساب تلقائيًا، يرجى إدخالها يدويًا" });
+        } else {
+          setPlayer({ ...player, name: res.username || player.name, region: detectedRegion });
+          setRegion(detectedRegion);
+          setStep("review");
+        }
       } else {
         toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من اللاعب/المنطقة" });
       }
@@ -102,9 +107,9 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
               <Input value={player.zoneId || ""} onChange={(e) => setPlayer({ ...player, zoneId: e.target.value })} placeholder="مثال: 1234" className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500" />
             </div>
             <div>
-              <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region) *</label>
-              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="مثال: EG / MENA / Global (حسب اللعبة)" className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500" />
-              <p className="text-[11px] text-slate-400 mt-1">يجب أن تطابق منطقة الحساب الحقيقية لتجنب فشل الشحن.</p>
+              <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region)</label>
+              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="سيتم تحديدها تلقائيًا عند التحقق (أو أدخلها يدويًا)" className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500" />
+              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1"><MapPin className="w-3 h-3"/> اضغط "تحقق ومتابعة" وسيتم تحديد المنطقة من المعرف إن أمكن.</p>
             </div>
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/40">
@@ -130,7 +135,7 @@ export default function CheckoutModal({ open, onClose, cart, onUpdateQty, onRemo
               <div className="flex justify-between pt-2 border-t border-slate-700 font-bold"><span>الإجمالي</span><span className="text-rose-400">{total} ج.م</span></div>
             </div>
 
-            <Button className={`w-full h-11 ${primaryBtn}`} onClick={validate} disabled={isValidating || !cart.length || !player.id || !region}>
+            <Button className={`w-full h-11 ${primaryBtn}`} onClick={validate} disabled={isValidating || !cart.length || !player.id}>
               {isValidating ? <><Loader2 className="w-4 h-4 animate-spin"/> جاري التحقق...</> : "تحقق ومتابعة"}
             </Button>
           </div>

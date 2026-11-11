@@ -5,28 +5,26 @@ type FooterProps = {
 export function Footer({ className = "" }: FooterProps) {
   return (
     <footer
-      className={`border-t border-slate-800/80 bg-[#04060c] py-6 sm:py-8 pb-24 md:pb-8 text-xs text-slate-400 ${className}`.trim()}
+      className={`w-full border-t border-slate-800/80 bg-[#04060c] text-xs sm:text-sm text-slate-400 ${className}`.trim()}
     >
-      <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-center sm:text-start">
-        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-1">
-          <span className="font-extrabold text-white">METO STORE</span>
-          <span className="hidden sm:inline">•</span>
-          <span>نشاطاتنا تميزنا ثقة ♡</span>
-          <span className="hidden sm:inline">•</span>
-          <span>واتساب: 01070459339</span>
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:justify-between sm:text-start">
+          <div className="flex flex-col items-center gap-1 sm:items-start">
+            <span className="font-extrabold text-white text-sm sm:text-base tracking-wide">METO STORE</span>
+            <span className="text-slate-400">نشاطاتنا تميزنا ثقة ♡</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 sm:items-end">
+            <a href="https://wa.me/201070459339" target="_blank" rel="noreferrer" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">واتساب: 01070459339</a>
+            <span className="text-slate-500 text-[11px] sm:text-xs">شحن آلي فوري ومشفر 100%</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2 text-slate-500">
-          <span>شحن آلي فوري ومشفر 100%</span>
-          <span className="text-slate-700">•</span>
-          <a
-            href="/admin"
-            className="text-slate-600 hover:text-slate-400 transition-colors text-[11px]"
-            title="بوابة دخول المشرف (محمية)"
-          >
-            🔒 المشرف
-          </a>
+        <div className="mt-4 pt-4 border-t border-slate-800/60 flex flex-col items-center gap-2 text-[11px] sm:text-xs text-slate-500 sm:flex-row sm:justify-between">
+          <span>© {new Date().getFullYear()} METO STORE — جميع الحقوق محفوظة</span>
+          <a href="/admin" className="text-slate-600 hover:text-slate-400 transition-colors" title="بوابة دخول المشرف (محمية)">🔒 دخول المشرف</a>
         </div>
       </div>
+      {/* spacer for mobile fixed cart bar */}
+      <div className="h-20 sm:h-16 md:h-4" aria-hidden="true" />
     </footer>
   );
 }

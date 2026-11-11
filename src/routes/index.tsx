@@ -8,7 +8,8 @@ import { GamesSection } from "../components/GamesSection";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { useStore } from "../lib/store/useStore";
 import type { TopUpPackage, PackageCategory } from "../types/store";
-import { getStoreApi } from "../lib/api-client";
+import { getStoreApi, validatePlayerApi } from "../lib/api-client";
+import { MapPin, Loader2 } from "lucide-react";
 import metoPoster from "../assets/meto-poster.jpg";
 import metoLogo from "../assets/meto-logo.jpg";
 import {
@@ -40,6 +41,9 @@ function CustomerStorePage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
   const [loadingPkgs, setLoadingPkgs] = useState(false);
+  const [detectingRegion, setDetectingRegion] = useState(false);
+  const [detectedPlayer, setDetectedPlayer] = useState<string | null>(null);
+  const [regionError, setRegionError] = useState<string | null>(null);
 
   useEffect(() => { setPlayer({ ...player, region }); }, [region]);
   useEffect(() => {
@@ -91,6 +95,32 @@ function CustomerStorePage() {
 
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal = cart.reduce((s, i) => s + i.qty * (isMerchant ? i.package.merchantBasePriceEgp : i.package.retailPriceEgp), 0);
+
+  const detectRegion = async () => {
+    if (!player.id) { toast({ title: "أدخل معرف اللاعب أولاً" }); return; }
+    if (activeGame.needsZone && !player.zoneId) { toast({ title: "أدخل رقم السيرفر أولاً" }); return; }
+    setDetectingRegion(true);
+    setRegionError(null);
+    setDetectedPlayer(null);
+    try {
+      const res = await validatePlayerApi(player.id, player.zoneId, selectedGameId, region || undefined);
+      if (res.valid) {
+        const accRegion = (res as any).accountRegion || region || "";
+        if (accRegion) setRegion(accRegion);
+        if (res.username) setDetectedPlayer(res.username);
+        setPlayer({ ...player, name: res.username || player.name, region: accRegion || player.region });
+        toast({ title: "تم التحقق من الحساب", description: `${res.username || "اللاعب"}${accRegion ? ` • المنطقة: ${accRegion}` : ""}` });
+      } else {
+        setRegionError(res.error || "تعذر التحقق من الحساب");
+        toast({ title: "تعذر التحقق", description: res.error || "تحقق من المعرف والمنطقة" });
+      }
+    } catch {
+      setRegionError("تعذر الاتصال بالخادم");
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم" });
+    } finally {
+      setDetectingRegion(false);
+    }
+  };
 
   const onAdd = (pkg: TopUpPackage) => {
     addToCart(pkg);
@@ -226,8 +256,16 @@ function CustomerStorePage() {
             )}
             <div className={`${activeGame.needsZone ? "sm:col-span-4" : "sm:col-span-6"} space-y-1.5`}>
               <label className="text-xs font-semibold text-slate-300">منطقة الحساب (Region) *</label>
-              <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="مثال: EG / MENA / Global" className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none" />
-              <p className="text-[11px] text-slate-400">لازم تطابق منطقة الحساب الحقيقية، وإلا الطلب هيفشل.</p>
+              <div className="flex gap-2">
+                <input value={region} onChange={(e) => { setRegion(e.target.value); setRegionError(null); }} placeholder="سيتم تحديدها تلقائيًا" className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none" />
+                <button type="button" onClick={detectRegion} disabled={detectingRegion || !player.id || (activeGame.needsZone && !player.zoneId)} className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-600/50 bg-cyan-700/80 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-3 text-xs font-semibold text-white transition-colors" title="تحقق وحدد المنطقة تلقائيًا">
+                  {detectingRegion ? <Loader2 className="w-4 h-4 animate-spin"/> : <MapPin className="w-4 h-4"/>}
+                  <span className="hidden sm:inline">تحقق</span>
+                </button>
+              </div>
+              {detectedPlayer && <p className="text-[11px] text-emerald-400">تم التعرف: {detectedPlayer}{region ? ` • ${region}` : ""}</p>}
+              {regionError && <p className="text-[11px] text-rose-400">{regionError}</p>}
+              {!detectedPlayer && !regionError && <p className="text-[11px] text-slate-400">اضغط "تحقق" لتحديد المنطقة تلقائيًا من المعرف، أو أدخلها يدويًا.</p>}
             </div>
           </div>
         </section>
