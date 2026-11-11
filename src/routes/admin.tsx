@@ -139,12 +139,26 @@ function AdminPage() {
         </div>
 
         {!isAdmin ? (
-          <div className="max-w-md rounded-2xl border border-slate-800 bg-[#0a0f20] p-5 space-y-3">
-            <h2 className="font-bold flex items-center gap-2"><LogIn className="w-4 h-4 text-amber-400"/> دخول الأدمن</h2>
-            <Input type="email" placeholder="البريد الإلكتروني" value={email} onChange={(e)=>setEmail(e.target.value)} />
-            <Input type="password" placeholder="كلمة المرور" value={password} onChange={(e)=>setPassword(e.target.value)} />
-            <Button className="w-full bg-amber-600 hover:bg-amber-500 text-white" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
-            <p className="text-[11px] text-slate-400">يجب أن يكون للمستخدم `profiles.role = 'admin'` في Supabase.</p>
+          <div className="w-full max-w-md mx-auto rounded-2xl border border-slate-700/80 bg-gradient-to-b from-[#13172a] to-[#0a0f20] p-5 sm:p-7 shadow-xl shadow-amber-950/10">
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="h-14 w-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-3">
+                <Shield className="w-7 h-7 text-amber-400"/>
+              </div>
+              <h2 className="text-lg sm:text-xl font-extrabold text-white">دخول لوحة الأدمن</h2>
+              <p className="text-xs text-slate-400 mt-1">سجّل الدخول بحساب يملك دور <code className="text-amber-300">admin</code></p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-300">البريد الإلكتروني</label>
+                <Input type="email" placeholder="admin@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500 h-11" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-300">كلمة المرور</label>
+                <Input type="password" placeholder="••••••••" value={password} onChange={(e)=>setPassword(e.target.value)} className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500 h-11" />
+              </div>
+              <Button className="w-full h-11 bg-amber-600 hover:bg-amber-500 text-white font-bold" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
+            </div>
+            <p className="text-[11px] text-slate-400 text-center mt-4">يجب أن يكون للمستخدم <code>profiles.role = &apos;admin&apos;</code> في Supabase.</p>
           </div>
         ) : (
           <>

@@ -83,12 +83,26 @@ function MerchantPage() {
         </div>
 
         {!authed ? (
-          <div className="max-w-md rounded-2xl border border-slate-800 bg-[#0a0f20] p-5 space-y-3">
-            <h2 className="font-bold flex items-center gap-2"><LogIn className="w-4 h-4 text-purple-400"/> تسجيل دخول التاجر</h2>
-            <Input type="email" placeholder="البريد الإلكتروني" value={email} onChange={(e)=>setEmail(e.target.value)} />
-            <Input type="password" placeholder="كلمة المرور" value={password} onChange={(e)=>setPassword(e.target.value)} />
-            <Button className="w-full" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
-            <p className="text-[11px] text-slate-400">إذا لم يكن حسابك مفعّلًا كتاجر، تواصل مع الأدمن لتفعيل `merchant_accounts`.</p>
+          <div className="w-full max-w-md mx-auto rounded-2xl border border-slate-700/80 bg-gradient-to-b from-[#0d1224] to-[#0a0f20] p-5 sm:p-7 shadow-xl shadow-purple-950/20">
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="h-14 w-14 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center mb-3">
+                <LogIn className="w-7 h-7 text-purple-400"/>
+              </div>
+              <h2 className="text-lg sm:text-xl font-extrabold text-white">تسجيل دخول التاجر</h2>
+              <p className="text-xs text-slate-400 mt-1">ادخل إلى محفظتك وطلباتك عبر حساب Supabase</p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-300">البريد الإلكتروني</label>
+                <Input type="email" placeholder="name@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500 h-11" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-300">كلمة المرور</label>
+                <Input type="password" placeholder="••••••••" value={password} onChange={(e)=>setPassword(e.target.value)} className="mt-1 bg-slate-900/80 border-slate-700 text-slate-100 placeholder:text-slate-500 h-11" />
+              </div>
+              <Button className="w-full h-11 bg-purple-600 hover:bg-purple-500 text-white font-bold" onClick={signIn} disabled={loading || !email || !password}>{loading?"جارٍ الدخول...":"دخول"}</Button>
+            </div>
+            <p className="text-[11px] text-slate-400 text-center mt-4">إذا لم يكن حسابك مفعّلًا كتاجر، تواصل مع الأدمن لتفعيل `merchant_accounts`.</p>
           </div>
         ) : (
           <>
@@ -97,7 +111,7 @@ function MerchantPage() {
                 <div className="font-bold truncate">{store.profile?.full_name || store.profile?.phone || store.merchant?.user_id}</div>
                 <div className="text-xs text-slate-400">هامش التاجر: <b className="text-purple-300">{dash?.stats?.margin_percent ?? store.merchant?.margin_percent ?? 0}%</b></div>
               </div>
-              <Button variant="outline" onClick={signOut}><LogOut className="w-4 h-4"/> خروج</Button>
+              <Button variant="outline" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white" onClick={signOut}><LogOut className="w-4 h-4"/> خروج</Button>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -118,7 +132,7 @@ function MerchantPage() {
                 {pkgs.slice(0,60).map((p)=> (
                   <div key={p.id} className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
                     <div className="min-w-0"><div className="text-sm font-semibold truncate">{p.name}</div><div className="text-xs text-slate-400">تكلفة تقريبية: {p.costUsd || 0}$</div></div>
-                    <div className="flex items-center gap-2 shrink-0"><div className="text-sm font-bold text-purple-300">{p.merchantBasePriceEgp} ج.م</div><Button size="sm" className="h-8" onClick={()=>store.addToCart(p)}><Plus className="w-4 h-4"/></Button></div>
+                    <div className="flex items-center gap-2 shrink-0"><div className="text-sm font-bold text-purple-300">{p.merchantBasePriceEgp} ج.م</div><Button size="sm" className="h-8 bg-purple-600 hover:bg-purple-500 text-white" onClick={()=>store.addToCart(p)}><Plus className="w-4 h-4"/></Button></div>
                   </div>
                 ))}
                 {pkgs.length===0 && <div className="text-xs text-slate-400">لا توجد باقات متزامنة لهذه اللعبة.</div>}
@@ -159,7 +173,7 @@ function MerchantPage() {
         <div className="fixed bottom-4 inset-x-4 z-40 mx-auto max-w-3xl">
           <div className="rounded-2xl border border-purple-500/40 bg-[#0d1022]/95 backdrop-blur p-3 flex items-center justify-between gap-3 shadow-2xl">
             <div className="flex items-center gap-3"><div className="h-10 w-10 rounded-xl bg-purple-500/20 flex items-center justify-center"><ShoppingCart className="w-5 h-5 text-purple-300"/></div><div><div className="font-bold text-sm">{cartCount} عنصر</div><div className="text-xs text-slate-300">إجمالي الخصم من المحفظة: <span className="text-purple-300 font-bold">{cartTotal} ج.م</span></div></div></div>
-            <div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>store.clearCart()}>تفريغ</Button><Button onClick={()=>setCheckoutOpen(true)}>تنفيذ الآن</Button></div>
+            <div className="flex gap-2"><Button variant="outline" size="sm" className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700" onClick={()=>store.clearCart()}>تفريغ</Button><Button className="bg-purple-600 hover:bg-purple-500 text-white" onClick={()=>setCheckoutOpen(true)}>تنفيذ الآن</Button></div>
           </div>
         </div>
       )}
