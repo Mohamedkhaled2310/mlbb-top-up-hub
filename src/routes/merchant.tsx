@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
+import { Footer } from "../components/Footer";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
 import { GamePackageIcon } from "../components/GamePackageIcon";
@@ -64,7 +65,7 @@ function MerchantPage() {
     setVerifiedName(null);
 
     try {
-      const res = await validatePlayerApi(userId.trim(), zoneId.trim());
+      const res = await validatePlayerApi(userId.trim(), zoneId.trim(), "mlbb");
 
       if (res.valid && res.username) {
         setVerifiedName(res.username);
@@ -102,39 +103,41 @@ function MerchantPage() {
   const merchantOrders = orders.filter((o) => o.isMerchantOrder);
 
   return (
-    <div className="min-h-screen bg-[#070913] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200">
+    <div className="min-h-screen bg-[#070913] text-slate-100 flex flex-col font-sans selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden">
       <Navbar />
 
       {/* Merchant Header Bar */}
-      <div className="border-b border-purple-500/20 bg-gradient-to-r from-[#0d0f21] via-[#150e2a] to-[#0d0f21] px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-7xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-600 to-rose-500 p-0.5 shadow-lg shadow-purple-950/40">
+      <div className="border-b border-purple-500/20 bg-gradient-to-r from-[#0d0f21] via-[#150e2a] to-[#0d0f21] px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <div className="mx-auto max-w-7xl flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-3.5">
+            <div className="relative flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-600 to-rose-500 p-0.5 shadow-lg shadow-purple-950/40">
               <img
                 src={metoLogo}
                 alt="METO STORE Logo"
                 className="h-full w-full rounded-[14px] object-cover bg-white"
               />
             </div>
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-950/40 px-3 py-1 text-xs text-purple-300 mb-1">
-                <Zap className="h-3.5 w-3.5 text-purple-400" />
-                <span>بوابة تجار التجزئة والموزعين المعتمدة (B2B Portal)</span>
+            <div className="min-w-0">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-purple-500/40 bg-purple-950/40 px-2.5 py-1 text-[11px] sm:text-xs text-purple-300 mb-1.5">
+                <Zap className="h-3.5 w-3.5 shrink-0 text-purple-400" />
+                <span className="truncate sm:whitespace-normal">
+                  بوابة تجار التجزئة والموزعين المعتمدة (B2B)
+                </span>
               </div>
-              <h1 className="text-xl sm:text-3xl font-extrabold text-white">
+              <h1 className="text-lg sm:text-3xl font-extrabold text-white leading-snug">
                 بوابة التاجر • <span className="text-purple-400">أسعار الجملة المعتمدة</span>
               </h1>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
                 تنفيذ فوري مباشر عبر FazerCards وسداد فوري مشفر بـ Binance Pay بهوامش ربح تجارية
                 مخفضة.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex w-full md:w-auto">
             <button
               onClick={() => setPosterOpen(true)}
-              className="flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 px-4 py-3 text-xs font-bold transition-all shadow-sm cursor-pointer"
+              className="flex w-full md:w-auto items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50 text-purple-200 px-4 py-2.5 sm:py-3 text-xs font-bold transition-all shadow-sm cursor-pointer"
             >
               <ImageIcon className="h-4 w-4 text-purple-400" />
               <span>عرض بوستر الأسعار الرسمي</span>
@@ -144,17 +147,19 @@ function MerchantPage() {
       </div>
 
       {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-8 pb-24 md:pb-12">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-6 sm:space-y-8 py-6 sm:py-8 pb-24 md:pb-12">
         {/* Section 1: Fast Top-Up Panel */}
-        <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-b from-[#0e1224] to-[#090d1a] p-6 sm:p-8 shadow-xl shadow-purple-950/30">
-          <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/40">
+        <section className="rounded-2xl border border-purple-500/30 bg-gradient-to-b from-[#0e1224] to-[#090d1a] p-4 sm:p-8 shadow-xl shadow-purple-950/30">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5 sm:mb-6 border-b border-slate-800 pb-4">
+            <div className="flex min-w-0 items-start sm:items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/40">
                 <Zap className="h-5 w-5" />
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-white">نموذج الشحن السريع للتاجر</h2>
-                <p className="text-xs text-slate-400">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  نموذج الشحن السريع للتاجر
+                </h2>
+                <p className="text-xs text-slate-400 leading-relaxed">
                   أدخل بيانات العميل واختر الباقة بسعر الجملة المخفض
                 </p>
               </div>
@@ -162,7 +167,7 @@ function MerchantPage() {
 
             <button
               onClick={() => setGuideOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs text-purple-300 hover:text-purple-200"
+              className="inline-flex shrink-0 items-center gap-1.5 self-start sm:self-auto text-xs text-purple-300 hover:text-purple-200"
             >
               <HelpCircle className="h-4 w-4" />
               <span>إرشادات مكان المعرف</span>
@@ -437,7 +442,7 @@ function MerchantPage() {
 
         {/* Section 3: Recent Merchant Orders History */}
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <History className="h-5 w-5 text-purple-400" />
               <span>سجل شحنات التاجر الأخيرة</span>
@@ -521,6 +526,8 @@ function MerchantPage() {
         </section>
       </main>
 
+      <Footer />
+
       {/* Checkout Modal in Merchant mode */}
       <CheckoutModal
         open={checkoutOpen}
@@ -528,6 +535,7 @@ function MerchantPage() {
         pkg={selectedPkg}
         userId={userId}
         zoneId={zoneId}
+        gameId="mlbb"
         username={verifiedName || undefined}
         isMerchant={true}
       />

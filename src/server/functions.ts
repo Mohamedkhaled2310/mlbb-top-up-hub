@@ -3,9 +3,9 @@ import { FazerCardsService } from "./fazercards.service";
 import { BinancePayService } from "./binancepay.service";
 
 export const validatePlayerFn = createServerFn({ method: "POST" })
-  .validator((data: { userId: string; zoneId: string }) => data)
+  .validator((data: { userId: string; zoneId?: string; gameId?: string }) => data)
   .handler(async ({ data }) => {
-    return await FazerCardsService.validatePlayer(data.userId, data.zoneId);
+    return await FazerCardsService.validatePlayer(data.userId, data.zoneId, data.gameId);
   });
 
 export const createPaymentOrderFn = createServerFn({ method: "POST" })
@@ -30,7 +30,13 @@ export const checkPaymentStatusFn = createServerFn({ method: "POST" })
 
 export const executeTopUpFn = createServerFn({ method: "POST" })
   .validator(
-    (data: { offerId: string; playerId: string; zoneId: string; idempotencyKey?: string }) => data,
+    (data: {
+      offerId: string;
+      playerId: string;
+      zoneId?: string;
+      gameId?: string;
+      idempotencyKey?: string;
+    }) => data,
   )
   .handler(async ({ data }) => {
     return await FazerCardsService.executeTopUp(data);

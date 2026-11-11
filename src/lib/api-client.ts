@@ -7,12 +7,13 @@ import {
 
 export async function validatePlayerApi(
   userId: string,
-  zoneId: string,
+  zoneId?: string,
+  gameId?: string,
 ): Promise<PlayerValidationResult> {
   const res = await fetch("/api/fzr/validate-id", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, zoneId }),
+    body: JSON.stringify({ userId, zoneId: zoneId || "", gameId: gameId || "mlbb" }),
   });
   return await res.json();
 }
@@ -46,7 +47,8 @@ export async function checkPaymentStatusApi(
 export async function executeTopUpApi(data: {
   offerId: string;
   playerId: string;
-  zoneId: string;
+  zoneId?: string;
+  gameId?: string;
   idempotencyKey?: string;
 }): Promise<FazerTopUpResponse> {
   const res = await fetch("/api/fzr/order", {

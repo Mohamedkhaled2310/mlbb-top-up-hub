@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
+import { Footer } from "../components/Footer";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
 import { GamesSection } from "../components/GamesSection";
@@ -144,21 +145,15 @@ function CustomerStorePage() {
     setVerifiedName(null);
 
     try {
-      if (selectedGameId === "mlbb") {
-        const res = await validatePlayerApi(userId.trim(), zoneId.trim());
-        if (res.valid && res.username) {
-          setVerifiedName(res.username);
-        } else {
-          setVerifyError(res.error || "تعذر التحقق من الحساب، تأكد من الأرقام المدخلة");
-        }
+      const res = await validatePlayerApi(
+        userId.trim(),
+        activeGame.needsZone ? zoneId.trim() : "",
+        selectedGameId,
+      );
+      if (res.valid && res.username) {
+        setVerifiedName(res.username);
       } else {
-        // Validation check for non-MLBB numeric player IDs
-        await new Promise((r) => setTimeout(r, 500));
-        if (userId.trim().length < 5) {
-          setVerifyError("رقم المعرف المدخل قصير جداً، يرجى التأكد من نسخه من داخل اللعبة");
-        } else {
-          setVerifiedName(`Player_${userId.trim().slice(-4)}`);
-        }
+        setVerifyError(res.error || "تعذر التحقق من الحساب، تأكد من البيانات المدخلة");
       }
     } catch (e: unknown) {
       setVerifyError(e instanceof Error ? e.message : "حدث خطأ أثناء الاتصال بالخادم");
@@ -801,29 +796,7 @@ function CustomerStorePage() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="mt-16 border-t border-slate-800/80 bg-[#04060c] py-8 text-xs text-slate-400">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-white">METO STORE</span>
-            <span>•</span>
-            <span>نشاطاتنا تميزنا ثقة ♡</span>
-            <span>•</span>
-            <span>واتساب: 01070459339</span>
-          </div>
-          <div className="flex items-center gap-3 text-slate-400">
-            <span>شحن آلي فوري ومشفر 100%</span>
-            <span className="text-slate-600">•</span>
-            <a
-              href="/admin"
-              className="text-slate-600 hover:text-slate-400 transition-colors text-[11px]"
-              title="بوابة دخول المشرف (محمية)"
-            >
-              🔒 المشرف
-            </a>
-          </div>
-        </div>
-      </footer>
+      <Footer className="mt-16" />
 
       {/* Checkout Modal */}
       <CheckoutModal
@@ -831,7 +804,8 @@ function CustomerStorePage() {
         onOpenChange={setCheckoutOpen}
         pkg={selectedPackage}
         userId={userId}
-        zoneId={activeGame.needsZone ? zoneId : (zoneId || "")}
+        zoneId={activeGame.needsZone ? zoneId : ""}
+        gameId={selectedGameId}
         username={verifiedName || undefined}
         isMerchant={false}
       />

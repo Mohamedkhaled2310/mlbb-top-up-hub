@@ -41,6 +41,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       const result = await FazerCardsService.validatePlayer(
         body.userId || body.player_id,
         body.zoneId || body.zone_id,
+        body.gameId || body.game_id || "mlbb",
       );
       return json(result);
     } catch {
@@ -55,6 +56,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
         offerId: body.offerId || body.offer_id,
         playerId: body.playerId || body.player_id,
         zoneId: body.zoneId || body.zone_id,
+        gameId: body.gameId || body.game_id || "mlbb",
         idempotencyKey: body.idempotencyKey,
       });
       return json(result);

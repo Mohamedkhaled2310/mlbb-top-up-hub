@@ -150,9 +150,8 @@ export function Navbar() {
                 className="w-[85vw] max-w-sm bg-[#090d1c] border-l border-rose-500/30 text-slate-100 p-0 flex flex-col justify-between"
               >
                 <div>
-                  {/* Drawer Header */}
-                  <SheetHeader className="p-4 border-b border-slate-800 text-right">
-                    <div className="flex items-center gap-3">
+                  <SheetHeader className="p-4 pe-12 border-b border-slate-800 text-right">
+                    <div className="flex items-center gap-3 pe-1">
                       <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 via-red-600 to-cyan-500 p-0.5 shadow-md">
                         <img
                           src={metoLogo}
@@ -160,7 +159,7 @@ export function Navbar() {
                           className="h-full w-full rounded-[10px] object-cover bg-white"
                         />
                       </div>
-                      <div className="text-right">
+                      <div className="text-right min-w-0">
                         <SheetTitle className="text-white font-black text-base flex items-center gap-1.5">
                           METO <span className="text-rose-500">STORE</span>
                         </SheetTitle>

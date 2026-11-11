@@ -22,7 +22,8 @@ interface CheckoutModalProps {
   onOpenChange: (open: boolean) => void;
   pkg: TopUpPackage | null;
   userId: string;
-  zoneId: string;
+  zoneId?: string;
+  gameId?: string;
   username?: string;
   isMerchant?: boolean;
 }
@@ -32,7 +33,8 @@ export function CheckoutModal({
   onOpenChange,
   pkg,
   userId,
-  zoneId,
+  zoneId = "",
+  gameId,
   username,
   isMerchant = false,
 }: CheckoutModalProps) {
@@ -63,6 +65,9 @@ export function CheckoutModal({
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const localOrderIdRef = useRef<string | null>(null);
+
+  const effectiveGameId = gameId || pkg?.gameId || "mlbb";
+  const normalizedZoneId = zoneId?.trim() || (effectiveGameId === "mlbb" ? "" : "-");
 
   // Price calculations based on mode
   const priceEgp = pkg ? (isMerchant ? pkg.merchantPriceEgp : pkg.retailPriceEgp) : 0;
@@ -96,7 +101,7 @@ export function CheckoutModal({
       orderAmount: priceUsdt,
       currency: "USDT",
       goodsTitle: `${pkg.name} - METO STORE`,
-      goodsDetail: `Top up for UID ${userId}${zoneId && zoneId !== "-" ? ` (${zoneId})` : ""}`,
+      goodsDetail: `Top up for UID ${userId}${normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""} [${effectiveGameId}]`,
     })
       .then((res) => {
         if (!isMounted) return;
@@ -115,8 +120,8 @@ export function CheckoutModal({
           const initialOrder: TopUpOrder = {
             id: newOrderId,
             userId,
-            zoneId,
-            username: username || "MLBB Player",
+            zoneId: normalizedZoneId,
+            username: username || "Player",
             packageId: pkg.id,
             packageName: pkg.name,
             diamonds: pkg.diamonds + (pkg.bonusDiamonds || 0),
@@ -156,30 +161,20 @@ export function CheckoutModal({
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [open, pkg, userId, zoneId, isMerchant, priceUsdt, priceEgp, username, addOrder]);
-
-  // Polling mechanism
-  const startPolling = (tradeNo: string, currentOrderId: string) => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-
-    pollingRef.current = setInterval(async () => {
-      try {
-        const queryRes = await checkPaymentStatusApi(tradeNo);
-
-        if (queryRes.status === "PAID") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          setPaymentStatus("PAYMENT_RECEIVED");
-
-          // Trigger FazerCards topup
-          setTimeout(() => {
-            fulfillTopUp(tradeNo, currentOrderId);
-          }, 800);
-        }
-      } catch (e) {
-        console.warn("Payment polling error:", e);
-      }
-    }, 2500);
-  };
+  }, [
+    open,
+    pkg,
+    userId,
+    zoneId,
+    gameId,
+    isMerchant,
+    priceUsdt,
+    priceEgp,
+    username,
+    addOrder,
+    effectiveGameId,
+    normalizedZoneId,
+  ]);
 
   // Fulfill Top-up via FazerCards
   const fulfillTopUp = async (tradeNo: string, currentOrderId: string) => {
@@ -191,7 +186,8 @@ export function CheckoutModal({
       const topUpRes = await executeTopUpApi({
         offerId: pkg.fazerProductId,
         playerId: userId,
-        zoneId,
+        zoneId: normalizedZoneId,
+        gameId: effectiveGameId,
         idempotencyKey: tradeNo,
       });
 
@@ -229,10 +225,10 @@ export function CheckoutModal({
 إيصال شحن METO STORE الرسمي
 ------------------------------------
 رقم الطلب: ${localOrderIdRef.current || ""}
-معرف اللاعب: ${userId}${zoneId && zoneId !== "-" ? ` (${zoneId})` : ""}
+معرف اللاعب: ${userId}${normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""}
 اسم الحساب: ${username || "Player"}
 الباقة: ${pkg?.name || ""}
-الكمية: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} ${pkg?.currencyName || "جوهرة"}
+الكمية: ${pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : ""} ${pkg?.currencyName || "وحدة"}
 المبلغ: ${priceUsdt} USDT (${priceEgp} EGP)
 معاملة Binance: ${orderData?.merchantTradeNo || ""}
 معاملة المزود: ${topUpResult?.transactionId || "قيد المعالجة"}
@@ -302,12 +298,15 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
                   <h4 className="font-bold text-white text-base mt-0.5">{pkg?.name}</h4>
                   <div className="flex items-center gap-2 mt-1 text-xs text-slate-300">
                     <span className="text-purple-400 font-semibold">
-                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0} {pkg?.currencyName || "جوهرة"}
+                      {pkg ? pkg.diamonds + (pkg.bonusDiamonds || 0) : 0}{" "}
+                      {pkg?.currencyName || "وحدة"}
                     </span>
                     <span>•</span>
                     <span>
                       حساب: <span className="font-mono text-cyan-300">{userId}</span>
-                      {zoneId && zoneId !== "-" && <span> ({zoneId})</span>}
+                      {normalizedZoneId && normalizedZoneId !== "-" && (
+                        <span> ({normalizedZoneId})</span>
+                      )}
                     </span>
                   </div>
                   {username && (
@@ -460,7 +459,8 @@ METO STORE • نشاطاتنا تميزنا ثقة ♡
                   <div className="flex justify-between">
                     <span className="text-slate-400">حساب اللاعب:</span>
                     <span className="font-bold text-white">
-                      {username || userId} ({zoneId})
+                      {username || userId}
+                      {normalizedZoneId && normalizedZoneId !== "-" ? ` (${normalizedZoneId})` : ""}
                     </span>
                   </div>
                   <div className="flex justify-between">

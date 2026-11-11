@@ -190,11 +190,11 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
                   <span
                     className={`flex items-center gap-1 text-[11px] font-bold transition-all ${
                       isSelected
-                        ? "text-emerald-400 underline"
+                        ? "text-emerald-400"
                         : "text-rose-400 group-hover:translate-x-[-2px]"
                     }`}
                   >
-                    <span>{isSelected ? "الباقات معروضة بالأسفل" : "عرض الباقات"}</span>
+                    <span>{isSelected ? "الباقات معروضة بالأسفل" : "عرض الباقات والدفع"}</span>
                     <ArrowLeft className="h-3 w-3" />
                   </span>
                 </div>
