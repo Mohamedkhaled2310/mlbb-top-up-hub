@@ -3,8 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { TopUpPackage, CartItem, PlayerInfo } from "@/types/store";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.SUPABASE_URL || "";
-const supabaseAnon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.SUPABASE_ANON_KEY || "";
+const env: any = (import.meta as any).env || {};
+const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.M_TOO_SUPABASE_URL || (typeof process !== "undefined" ? (process.env?.SUPABASE_URL || process.env?.M_TOO_SUPABASE_URL || process.env?.NEXT_PUBLIC_SUPABASE_URL) : "") || "";
+const supabaseAnon = env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || env.M_TOO_SUPABASE_PUBLISHABLE_KEY || env.M_TOO_SUPABASE_ANON_KEY || (typeof process !== "undefined" ? (process.env?.SUPABASE_PUBLISHABLE_KEY || process.env?.SUPABASE_ANON_KEY || process.env?.M_TOO_SUPABASE_PUBLISHABLE_KEY || process.env?.M_TOO_SUPABASE_ANON_KEY || process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY) : "") || "";
 export const supabase = (supabaseUrl && supabaseAnon)
   ? createClient<Database>(supabaseUrl, supabaseAnon)
   : null;

@@ -3,13 +3,17 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-function getEnv(name: string) {
-  return process.env[name] || process.env[`VITE_${name}`] || "";
+function getEnv(...names: string[]) {
+  for (const name of names) {
+    const v = process.env[name] || process.env[`VITE_${name}`];
+    if (v) return v;
+  }
+  return "";
 }
 
 function getAuthedClient(token: string) {
-  const url = getEnv("SUPABASE_URL");
-  const anon = getEnv("SUPABASE_PUBLISHABLE_KEY") || getEnv("SUPABASE_ANON_KEY");
+  const url = getEnv("SUPABASE_URL", "M_TOO_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL");
+  const anon = getEnv("SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY", "M_TOO_SUPABASE_PUBLISHABLE_KEY", "M_TOO_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY");
   if (!url || !anon) throw new Error("Missing Supabase env");
   return createClient<Database>(url, anon, {
     global: { headers: { Authorization: `Bearer ${token}` } },
