@@ -29,6 +29,7 @@ import {
   refreshSessionApi,
   updateMyNationalityApi,
 } from "../lib/api-client";
+import { CopyButton } from "../components/CopyButton";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { toast } from "../hooks/use-toast";
@@ -636,7 +637,10 @@ function MerchantPage() {
                   {(dash?.orders || []).slice(0, 30).map((o: any) => (
                     <div key={o.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
                       <div className="min-w-0">
-                        <div className="font-mono text-cyan-300">{o.order_ref}</div>
+                        <div className="flex items-center gap-1.5 font-mono text-cyan-300">
+                          <span>{o.order_ref}</span>
+                          <CopyButton text={o.order_ref} />
+                        </div>
                         <div className="text-slate-400 truncate">
                           {o.player_id} • {o.game_id} • {o.total_egp} ج.م
                         </div>

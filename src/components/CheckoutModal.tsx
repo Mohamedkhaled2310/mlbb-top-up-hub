@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CreditCard, Loader2, MapPin, Package, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CreditCard, Loader2, MapPin, MessageCircle, Package, Share2, User, X, XCircle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcMerchantUnitPriceEgp } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
 import { submitOrderApi, validatePlayerApi } from "@/lib/api-client";
+import { CopyButton } from "./CopyButton";
+import { saveRecentAccount } from "../lib/recent-players";
 import type { CartItem } from "@/types/store";
 
 type CheckoutStep = "form" | "review" | "processing" | "success" | "failed";
@@ -100,6 +102,13 @@ export default function CheckoutModal({
         }
         setPlayer({ ...player, name: res.username || player.name, region: finalRegion });
         setRegion(finalRegion);
+        saveRecentAccount({
+          id: player.id.trim(),
+          zoneId: player.zoneId?.trim(),
+          name: res.username || undefined,
+          region: finalRegion,
+          gameId: activeGameId,
+        });
         setStep("review");
       } else {
         if (res.error && (res.error.includes("منطقة") || res.error.includes("region"))) {
@@ -378,18 +387,59 @@ export default function CheckoutModal({
         )}
 
         {step === "success" && (
-          <div className="py-8 text-center space-y-3">
-            <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-400" />
-            <div className="font-bold text-lg">تم استلام وتنفيذ الطلب</div>
-            <div className="text-sm text-slate-300">{result?.message || "تمت العملية بنجاح."}</div>
-            {result?.order_ref && (
-              <div className="text-xs font-mono bg-slate-900 border border-slate-700 p-2 rounded-lg" dir="ltr">
-                {result.order_ref}
+          <div className="py-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            <div>
+              <div className="font-extrabold text-xl text-white">تم شحن الحساب بنجاح! 🎉</div>
+              <div className="text-xs sm:text-sm text-emerald-300 mt-1">{result?.message || "تم تنفيذ الطلب وتسليم الباقات فورياً."}</div>
+            </div>
+
+            {/* Receipt Summary Card */}
+            <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3.5 text-xs text-right space-y-2 font-sans">
+              {result?.order_ref && (
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                  <span className="text-slate-400">رقم الطلب:</span>
+                  <div className="flex items-center gap-1.5 font-mono text-emerald-300">
+                    <span>{result.order_ref}</span>
+                    <CopyButton text={result.order_ref} />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <span className="text-slate-400">حساب اللاعب:</span>
+                <div className="flex items-center gap-1.5 font-mono text-white">
+                  <span>{player.name ? `${player.name} (${player.id})` : player.id}</span>
+                  <CopyButton text={player.id} />
+                </div>
               </div>
-            )}
-            <Button className={`mt-2 w-full sm:w-auto px-8 ${primaryBtn}`} onClick={onClose}>
-              إغلاق
-            </Button>
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <span className="text-slate-400">اللعبة والمنطقة:</span>
+                <span className="font-semibold text-slate-200">{activeGameId.toUpperCase()} • {region || "Global"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">المبلغ الإجمالي:</span>
+                <span className="font-bold text-base text-rose-400 font-mono">{total} ج.م</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <Button
+                type="button"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2"
+                onClick={() => {
+                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${activeGameId.toUpperCase()}\nالإجمالي: ${total} ج.م\nالحالة: تم الشحن بنجاح ✅\nhttps://meto-three.vercel.app`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
+                }}
+              >
+                <Share2 className="w-4 h-4" />
+                <span>مشاركة الإيصال عبر واتساب</span>
+              </Button>
+              <Button className={`sm:w-32 ${outlineBtn}`} onClick={onClose}>
+                إغلاق
+              </Button>
+            </div>
           </div>
         )}
 

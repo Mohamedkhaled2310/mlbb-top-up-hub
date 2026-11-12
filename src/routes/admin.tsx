@@ -18,6 +18,7 @@ import {
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
 import { ScrollReveal } from "../components/ScrollReveal";
+import { CopyButton } from "../components/CopyButton";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import {
   adminCreateMerchantApi,
@@ -828,7 +829,12 @@ function AdminPage() {
                   <tbody className="divide-y divide-slate-800/80">
                     {orders.map((o: any) => (
                       <tr key={o.id}>
-                        <td className="p-2.5 text-right font-mono text-cyan-300">{o.order_ref}</td>
+                        <td className="p-2.5 text-right font-mono text-cyan-300">
+                          <div className="flex items-center gap-1.5">
+                            <span>{o.order_ref}</span>
+                            <CopyButton text={o.order_ref} />
+                          </div>
+                        </td>
                         <td className="p-2.5 text-right">
                           <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
                         </td>

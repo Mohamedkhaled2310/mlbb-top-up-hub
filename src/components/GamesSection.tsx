@@ -1,8 +1,8 @@
 import React from "react";
-import mlbbCover from "../assets/mlbb-cover.jpg";
-import pubgCover from "../assets/pubg-cover.jpg";
-import freefireCover from "../assets/freefire-cover.jpg";
-import hokCover from "../assets/hok-cover.jpg";
+import mlbbCover from "../assets/mlbb-cover.webp";
+import pubgCover from "../assets/pubg-cover.webp";
+import freefireCover from "../assets/freefire-cover.webp";
+import hokCover from "../assets/hok-cover.webp";
 import { Zap, Gamepad2, ArrowLeft, Check, Sparkles } from "lucide-react";
 
 export interface GameItem {

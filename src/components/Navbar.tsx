@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Store, Zap, MessageCircle, Menu, Image as ImageIcon, ChevronLeft, Shield } from "lucide-react";
-import metoLogo from "../assets/meto-logo.jpg";
-import metoPoster from "../assets/meto-poster.jpg";
+import metoLogo from "../assets/meto-logo.webp";
+import metoPoster from "../assets/meto-poster.webp";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
 

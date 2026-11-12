@@ -30,12 +30,15 @@ import { PlayerIdGuideModal } from "../components/PlayerIdGuideModal";
 import { GamesSection } from "../components/GamesSection";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
+import { OfflineIndicator } from "../components/OfflineIndicator";
+import { PackageCardSkeleton } from "../components/PackageCardSkeleton";
+import { getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
 import { useStore } from "../lib/store/useStore";
 import { calcMerchantUnitPriceEgp } from "../lib/pricing";
 import type { PackageCategory, TopUpPackage } from "../types/store";
 import { getStoreApi, validatePlayerApi } from "../lib/api-client";
-import metoPoster from "../assets/meto-poster.jpg";
-import metoLogo from "../assets/meto-logo.jpg";
+import metoPoster from "../assets/meto-poster.webp";
+import metoLogo from "../assets/meto-logo.webp";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Button } from "../components/ui/button";
 import { toast } from "../hooks/use-toast";
@@ -124,6 +127,7 @@ function CustomerStorePage() {
   const [regionError, setRegionError] = useState<string | null>(null);
   const [regionLocked, setRegionLocked] = useState(false);
   const [needsManualRegion, setNeedsManualRegion] = useState(false);
+  const [recentAccounts, setRecentAccounts] = useState<SavedPlayerAccount[]>([]);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -178,6 +182,7 @@ function CustomerStorePage() {
     setRegionError(null);
     setRegion("");
     setNeedsManualRegion(false);
+    setRecentAccounts(getRecentAccounts(selectedGameId));
   }, [player.id, player.zoneId, selectedGameId]);
 
   const detectRegion = useCallback(
@@ -218,6 +223,14 @@ function CustomerStorePage() {
           }
           if (res.username) setDetectedPlayer(res.username);
           setPlayer({ ...player, name: res.username || player.name, region: accRegion || region || player.region });
+          saveRecentAccount({
+            id: player.id,
+            zoneId: player.zoneId,
+            name: res.username || undefined,
+            region: accRegion || region || undefined,
+            gameId: selectedGameId,
+          });
+          setRecentAccounts(getRecentAccounts(selectedGameId));
           if (!silent) {
             toast({
               title: "تم التحقق من الحساب",
@@ -351,6 +364,7 @@ function CustomerStorePage() {
 
   return (
     <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans">
+      <OfflineIndicator />
       <div
         aria-hidden="true"
         className="fixed top-0 inset-x-0 z-50 h-0.5 bg-transparent pointer-events-none"
@@ -533,13 +547,15 @@ function CustomerStorePage() {
             </div>
           )}
 
-          {viewMode === "list" ? (
+          {loadingPkgs && displayedPackages.length === 0 ? (
+            <PackageCardSkeleton count={8} viewMode={viewMode} />
+          ) : viewMode === "list" ? (
             <div className="space-y-2">
               {displayedPackages.map((p, idx) => (
                 <div
                   key={p.id}
                   style={{ animationDelay: `${Math.min(idx, 10) * 30}ms` }}
-                  className="animate-meto-card flex items-center justify-between gap-2 p-3 rounded-xl border border-slate-800/90 bg-[#0a0f1d]/90 hover:border-rose-500/35 hover:-translate-y-0.5 hover:shadow-md hover:shadow-rose-500/10 transition-all duration-200"
+                  className="animate-meto-card flex items-center justify-between gap-2 p-3 rounded-xl border border-slate-800/90 bg-[#0a0f1d]/90 hover:border-rose-500/35 hover:-translate-y-0.5 hover:shadow-md hover:shadow-rose-500/10 active:scale-[0.99] transition-all duration-200"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <GamePackageIcon
@@ -551,7 +567,19 @@ function CustomerStorePage() {
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <div className="font-bold text-white text-xs sm:text-sm truncate">{p.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs sm:text-sm truncate">{p.name}</span>
+                        {p.category === "weekly_pass" && (
+                          <span className="rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 text-[10px] font-bold shrink-0">
+                            بطاقة
+                          </span>
+                        )}
+                        {p.category === "double_diamonds" && (
+                          <span className="rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 text-[10px] font-bold shrink-0">
+                            2x
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400">
                         {p.bonusDiamonds
                           ? `${p.diamonds} + ${p.bonusDiamonds} إضافي`
@@ -565,7 +593,7 @@ function CustomerStorePage() {
                     <div className="text-left sm:text-right">
                       <div className="text-xs sm:text-sm font-black text-white font-mono">{getDisplayPrice(p)} ج.م</div>
                     </div>
-                    <Button size="sm" onClick={() => onAdd(p)} className="h-8 px-2.5 bg-rose-600 hover:bg-rose-500 text-white">
+                    <Button size="sm" onClick={() => onAdd(p)} className="h-8 px-2.5 bg-rose-600 hover:bg-rose-500 text-white active:scale-95">
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
@@ -581,7 +609,7 @@ function CustomerStorePage() {
                   className="animate-meto-card group relative flex flex-col justify-between rounded-xl border p-3 border-slate-800/90 bg-[#0a0f1d]/90 hover:border-rose-500/45 hover:-translate-y-1 hover:shadow-lg hover:shadow-rose-500/10 active:scale-[0.985] transition-all duration-200"
                 >
                   <div className="pt-0.5">
-                    <div className="mb-2">
+                    <div className="mb-2 flex items-center justify-between gap-1">
                       <GamePackageIcon
                         category={p.category}
                         diamonds={p.diamonds}
@@ -590,6 +618,16 @@ function CustomerStorePage() {
                         currencyName={p.currencyName || activeGame.currency}
                         size="sm"
                       />
+                      {p.category === "weekly_pass" && (
+                        <span className="rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold">
+                          بطاقة
+                        </span>
+                      )}
+                      {p.category === "double_diamonds" && (
+                        <span className="rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 text-[10px] font-bold">
+                          2x
+                        </span>
+                      )}
                     </div>
                     <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 min-h-[2.25rem]">{p.name}</h3>
                     <p className="text-[10px] text-slate-400 mt-1">
@@ -608,7 +646,7 @@ function CustomerStorePage() {
                       size="sm"
                       onClick={() => onAdd(p)}
                       aria-label={`إضافة ${p.name}`}
-                      className="h-8 px-2.5 bg-rose-600 hover:bg-rose-500 text-white"
+                      className="h-8 px-2.5 bg-rose-600 hover:bg-rose-500 text-white active:scale-95"
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
@@ -670,6 +708,39 @@ function CustomerStorePage() {
               <HelpCircle className="h-4 w-4" /> {activeGame.guideTitle}
             </button>
           </div>
+
+          {recentAccounts.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 shrink-0">
+                <Clock className="w-3.5 h-3.5 text-cyan-400" /> حسابات سابقة:
+              </span>
+              {recentAccounts.slice(0, 4).map((acc) => (
+                <button
+                  key={`${acc.id}-${acc.zoneId || ""}`}
+                  type="button"
+                  onClick={() => {
+                    const next = { ...player, id: acc.id, zoneId: acc.zoneId || "" };
+                    if (acc.name) next.name = acc.name;
+                    if (acc.region) next.region = acc.region;
+                    setPlayer(next);
+                    if (acc.name) setDetectedPlayer(acc.name);
+                    if (acc.region) {
+                      setRegion(acc.region);
+                      setSelectedPkgRegion(acc.region);
+                      setRegionLocked(true);
+                      setNeedsManualRegion(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 hover:border-cyan-500/50 px-2.5 py-1 text-[11px] text-slate-300 transition-all font-mono active:scale-95 shadow-sm"
+                  title="تعبئة بيانات الحساب تلقائياً"
+                >
+                  {acc.name ? <span className="font-sans font-bold text-white">{acc.name}</span> : null}
+                  <span className="text-cyan-300">({acc.id}{acc.zoneId ? `:${acc.zoneId}` : ""})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
             <div className={`${activeGame.needsZone ? "sm:col-span-7" : "sm:col-span-12"} space-y-1.5`}>
               <label className="text-xs font-semibold text-slate-300">{activeGame.idLabel} *</label>

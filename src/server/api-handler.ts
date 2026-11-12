@@ -1,4 +1,5 @@
 import { FazerCardsService } from "./fazercards.service";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "./rate-limit";
 import {
   adminCreateMerchant,
   adminCreditMerchant,
@@ -61,6 +62,13 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
   }
 
   if (path === "/api/auth/login" && request.method === "POST") {
+    if (!process.env["VITEST"]) {
+      const ip = getClientIp(request);
+      const rl = checkRateLimit(`auth:${ip}`, 8, 60_000);
+      if (!rl.allowed) {
+        return rateLimitResponse(rl.retryAfterSeconds, "محاولات تسجيل دخول كثيرة، يرجى الانتظار دقيقة والمحاولة ثانية.");
+      }
+    }
     try {
       const body = (await request.json()) as { email?: string; password?: string };
       const session = await loginWithPasswordServer(body.email || "", body.password || "");
@@ -80,12 +88,14 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
-  // Public store data (packages from Fazer cache + egp rate)
+  // Public store data (packages from Fazer cache + egp rate) with Edge SWR caching
   if (path === "/api/store" && request.method === "GET") {
     try {
       const gameId = url.searchParams.get("gameId") || undefined;
       const data = await getStoreData(gameId);
-      return json(data);
+      const response = json(data);
+      response.headers.set("Cache-Control", "public, max-age=10, stale-while-revalidate=30");
+      return response;
     } catch (e: any) {
       return json({ success: false, error: e?.message || "Failed to load store" }, 500);
     }
@@ -111,6 +121,13 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
   }
 
   if (path === "/api/fzr/validate-id" && request.method === "POST") {
+    if (!process.env["VITEST"]) {
+      const ip = getClientIp(request);
+      const rl = checkRateLimit(`val:${ip}`, 30, 60_000);
+      if (!rl.allowed) {
+        return rateLimitResponse(rl.retryAfterSeconds, "تجاوزت الحد المسموح لمحاولات التحقق، يرجى الانتظار دقيقة.");
+      }
+    }
     try {
       const body = (await request.json()) as Record<string, any>;
       const result = await FazerCardsService.validatePlayer(
@@ -155,6 +172,13 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
 
   // Customer/merchant order submission (cart, multi-package). Merchant flow debits wallet atomically server-side + refunds failed units.
   if (path === "/api/orders/submit" && request.method === "POST") {
+    if (!process.env["VITEST"]) {
+      const ip = getClientIp(request);
+      const rl = checkRateLimit(`order:${ip}`, 15, 60_000);
+      if (!rl.allowed) {
+        return rateLimitResponse(rl.retryAfterSeconds, "تم استقبال عدة طلبات متتالية، يرجى الانتظار لحظات لتجنب التكرار.");
+      }
+    }
     try {
       const token = getAuthToken(request);
       const body = await request.json();
