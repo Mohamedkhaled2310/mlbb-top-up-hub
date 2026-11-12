@@ -5,6 +5,7 @@ import {
   adminListMerchants,
   adminListRecentOrders,
   adminSetMerchantMargin,
+  adminSetMerchantRegion,
   adminToggleMerchantStatus,
   adminUpdateEgpRate,
   getMerchantDashboard,
@@ -16,6 +17,7 @@ import {
   refreshSessionServer,
   submitCustomerOrder,
   syncFazerPackagesAndBalance,
+  updateMyNationality,
 } from "./store.service";
 
 function json(data: unknown, status = 200) {
@@ -202,12 +204,41 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
         password: String(body["password"] || ""),
         fullName: body["fullName"] || body["full_name"],
         phone: body["phone"],
+        region: body["region"] || body["country"],
         marginPercent: body["marginPercent"] ?? body["margin_percent"],
         initialBalanceEgp: body["initialBalanceEgp"] ?? body["initial_balance_egp"],
       });
       return json(data);
     } catch (e: any) {
       return json({ error: e?.message || "فشل إنشاء حساب التاجر" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/region" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json()) as Record<string, any>;
+      const data = await adminSetMerchantRegion(token, {
+        merchantId: body["merchant_id"] || body["merchantId"],
+        userId: body["user_id"] || body["userId"],
+        region: String(body["region"] || body["country"] || "EG"),
+      });
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "فشل تحديث جنسية التاجر" }, 400);
+    }
+  }
+
+  if (path === "/api/merchant/nationality" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json()) as Record<string, any>;
+      const data = await updateMyNationality(token, String(body["region"] || body["country"] || "EG"));
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "فشل تحديث الجنسية" }, 400);
     }
   }
 
@@ -298,6 +329,8 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       fazer_balance: fazer.connected ? (fazer.balance ?? store?.settings?.fazer_balance ?? null) : (store?.settings?.fazer_balance ?? null),
       fazer_balance_currency: fazer.currency ?? store?.settings?.fazer_balance_currency ?? "USD",
       egp_rate: store?.settings?.egp_rate,
+      fx_rates: store?.settings?.fx_rates,
+      fx_updated_at: store?.settings?.fx_updated_at ?? null,
       packages_synced_at: store?.settings?.packages_synced_at,
       fazer_balance_updated_at: fazer.connected
         ? new Date().toISOString()

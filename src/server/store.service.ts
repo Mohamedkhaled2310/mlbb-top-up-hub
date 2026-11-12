@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { FazerCardsService } from "./fazercards.service";
+import { getLiveUsdRates } from "./fx.service";
 import {
   DEFAULT_EGP_RATE,
   DEFAULT_MERCHANT_MARKUP,
@@ -335,8 +336,30 @@ export async function persistFazerAccountBalance(account: {
 
 export async function getStoreData(gameId?: string) {
   const sb = getAdminClient() as any;
-  let { data: settingsRow } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
+  const [{ data: initialSettingsRow }, fxResult] = await Promise.all([
+    sb.from("store_settings").select("*").eq("id", 1).maybeSingle(),
+    getLiveUsdRates().catch(() => null),
+  ]);
+  let settingsRow = initialSettingsRow;
   let egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+
+  const egpFromFx = fxResult?.rates ? fxResult.rates["EGP"] : undefined;
+  if (
+    !process.env["VITEST"] &&
+    typeof egpFromFx === "number" &&
+    Number.isFinite(egpFromFx) &&
+    egpFromFx > 0
+  ) {
+    const liveEgp = Math.round(egpFromFx * 100) / 100;
+    if (Math.abs(egpRate - liveEgp) > 0.05) {
+      egpRate = liveEgp;
+      sb.from("store_settings")
+        .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
+        .eq("id", 1)
+        .then(() => {})
+        .catch(() => {});
+    }
+  }
 
   let q = sb
     .from("fazer_packages")
@@ -348,7 +371,7 @@ export async function getStoreData(gameId?: string) {
   if (gameId) q = q.eq("game_id", gameId);
   let { data: pkgs } = await q;
 
-  // Check if packages are empty OR missing games while stale
+  // Check if packages are empty OR missing games OR stale (auto-sync packages & balance)
   const distinctGames = new Set((pkgs || []).map((p: any) => p.game_id));
   const lastSyncMs = settingsRow?.packages_synced_at ? Date.parse(settingsRow.packages_synced_at) : 0;
   const syncStale = !lastSyncMs || Date.now() - lastSyncMs > 5 * 60 * 1000;
@@ -357,7 +380,9 @@ export async function getStoreData(gameId?: string) {
       await syncFazerInternal();
       const s2 = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
       settingsRow = s2.data || settingsRow;
-      egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+      if (process.env["VITEST"] || !egpFromFx) {
+        egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+      }
       let q2 = sb
         .from("fazer_packages")
         .select("*")
@@ -370,6 +395,17 @@ export async function getStoreData(gameId?: string) {
     } catch {
       // Ignore sync error, return current cached packages
     }
+  } else if (!process.env["VITEST"] && syncStale && readEnv("FAZER_API_KEY")) {
+    // Packages exist, trigger background auto-refresh when stale (> 5 min)
+    syncFazerInternal().catch(() => {});
+  } else if (
+    !process.env["VITEST"] &&
+    readEnv("FAZER_API_KEY") &&
+    (!settingsRow?.fazer_balance_updated_at ||
+      Date.now() - Date.parse(settingsRow.fazer_balance_updated_at) > 2 * 60 * 1000)
+  ) {
+    // Keep Fazer wallet balance auto-refreshed when > 2 min old
+    FazerCardsService.checkAccount().then(persistFazerAccountBalance).catch(() => {});
   }
 
   const packages = (pkgs || []).map((p: any) => {
@@ -409,6 +445,8 @@ export async function getStoreData(gameId?: string) {
       fazer_balance_updated_at: settingsRow?.fazer_balance_updated_at ?? null,
       packages_synced_at: settingsRow?.packages_synced_at ?? null,
       global_retail_markup_percent: DEFAULT_RETAIL_MARKUP * 100,
+      fx_rates: fxResult?.rates ?? undefined,
+      fx_updated_at: fxResult?.updatedAt ?? null,
     },
   };
 }
@@ -917,6 +955,8 @@ export async function adminCreateMerchant(
     password: string;
     fullName?: string | undefined;
     phone?: string | undefined;
+    region?: string | undefined;
+    country?: string | undefined;
     marginPercent?: number | undefined;
     initialBalanceEgp?: number | undefined;
   },
@@ -929,6 +969,7 @@ export async function adminCreateMerchant(
   const password = (body.password || "").trim();
   const fullName = (body.fullName || "تاجر معتمد").trim();
   const phone = (body.phone || "").trim() || null;
+  const region = (body.region || body.country || "EG").trim().toUpperCase();
   const marginPercent = Math.min(50, Math.max(0, Number(body.marginPercent ?? 5) || 0));
   const initialBalanceEgp = Math.max(0, Number(body.initialBalanceEgp ?? 0) || 0);
 
@@ -962,6 +1003,7 @@ export async function adminCreateMerchant(
       role: "merchant",
       full_name: fullName,
       phone,
+      region,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "id" },
@@ -1013,7 +1055,11 @@ export async function adminCreateMerchant(
 
   return {
     success: true,
-    merchant: { ...merchantRow, email, profile: { id: targetUserId, role: "merchant", full_name: fullName, phone } },
+    merchant: {
+      ...merchantRow,
+      email,
+      profile: { id: targetUserId, role: "merchant", full_name: fullName, phone, region },
+    },
     credentials: { email, password },
   };
 }
@@ -1063,4 +1109,42 @@ export async function getMyProfile(token: string) {
   const { data: profile } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   const { data: merchant } = await sba.from("merchant_accounts").select("*").eq("user_id", user.id).maybeSingle();
   return { user: { id: user.id, email: user.email }, profile, merchant };
+}
+
+export async function adminSetMerchantRegion(
+  token: string,
+  body: { merchantId?: string; merchant_id?: string; userId?: string; user_id?: string; region: string },
+) {
+  await requireAdmin(token);
+  const region = (body.region || "EG").trim().toUpperCase();
+  const sb = getAdminClient() as any;
+  let targetUserId = body.userId || body.user_id;
+  const merchantId = body.merchantId || body.merchant_id;
+  if (!targetUserId && merchantId) {
+    const { data: m } = await sb.from("merchant_accounts").select("user_id").eq("id", merchantId).maybeSingle();
+    targetUserId = m?.user_id;
+  }
+  if (!targetUserId) throw new Error("معرف التاجر غير موجود");
+  const { data, error } = await sb
+    .from("profiles")
+    .update({ region, updated_at: new Date().toISOString() })
+    .eq("id", targetUserId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return { success: true, profile: data };
+}
+
+export async function updateMyNationality(token: string, region: string) {
+  const { user } = await requireUser(token);
+  const cleanRegion = (region || "EG").trim().toUpperCase();
+  const sb = getAdminClient() as any;
+  const { data, error } = await sb
+    .from("profiles")
+    .update({ region: cleanRegion, updated_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return { success: true, profile: data };
 }

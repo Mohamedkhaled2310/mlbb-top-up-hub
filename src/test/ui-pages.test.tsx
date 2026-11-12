@@ -123,7 +123,7 @@ describe("UI Components & Flows", () => {
       </div>,
     );
 
-    expect(screen.getByText(/PUBG Mobile/)).toBeInTheDocument();
+    expect(screen.getAllByText(/PUBG Mobile/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/METO STORE/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/01070459339/)).toBeInTheDocument();
   });

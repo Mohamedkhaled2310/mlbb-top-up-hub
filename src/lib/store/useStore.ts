@@ -45,6 +45,8 @@ export type Settings = {
   fazer_balance_currency?: string | null | undefined;
   fazer_balance_updated_at?: string | null | undefined;
   packages_synced_at?: string | null | undefined;
+  fx_rates?: Record<string, number> | undefined;
+  fx_updated_at?: string | null | undefined;
 };
 
 interface StoreState {

@@ -123,6 +123,7 @@ function CustomerStorePage() {
   const [detectedPlayer, setDetectedPlayer] = useState<string | null>(null);
   const [regionError, setRegionError] = useState<string | null>(null);
   const [regionLocked, setRegionLocked] = useState(false);
+  const [needsManualRegion, setNeedsManualRegion] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -176,6 +177,7 @@ function CustomerStorePage() {
     setDetectedPlayer(null);
     setRegionError(null);
     setRegion("");
+    setNeedsManualRegion(false);
   }, [player.id, player.zoneId, selectedGameId]);
 
   const detectRegion = useCallback(
@@ -208,9 +210,11 @@ function CustomerStorePage() {
             setRegion(accRegion);
             setSelectedPkgRegion(accRegion);
             setRegionLocked(true);
+            setNeedsManualRegion(false);
             setRegionError(null);
           } else {
             setRegionLocked(false);
+            setNeedsManualRegion(true);
           }
           if (res.username) setDetectedPlayer(res.username);
           setPlayer({ ...player, name: res.username || player.name, region: accRegion || region || player.region });
@@ -222,6 +226,9 @@ function CustomerStorePage() {
           }
         } else {
           setRegionLocked(false);
+          if (res.error && (res.error.includes("منطقة") || res.error.includes("region") || res.error.includes("Region"))) {
+            setNeedsManualRegion(true);
+          }
           if (!silent) {
             setRegionError(res.error || "تعذر التحقق من الحساب");
             toast({ title: "تعذر التحقق", description: res.error || "تحقق من المعرف والمنطقة" });
@@ -664,7 +671,7 @@ function CustomerStorePage() {
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className={`${activeGame.needsZone ? "sm:col-span-5" : "sm:col-span-6"} space-y-1.5`}>
+            <div className={`${activeGame.needsZone ? "sm:col-span-7" : "sm:col-span-12"} space-y-1.5`}>
               <label className="text-xs font-semibold text-slate-300">{activeGame.idLabel} *</label>
               <input
                 value={player.id}
@@ -674,7 +681,7 @@ function CustomerStorePage() {
               />
             </div>
             {activeGame.needsZone && (
-              <div className="sm:col-span-3 space-y-1.5">
+              <div className="sm:col-span-5 space-y-1.5">
                 <label className="text-xs font-semibold text-slate-300">{activeGame.zoneLabel}</label>
                 <input
                   value={player.zoneId || ""}
@@ -684,15 +691,40 @@ function CustomerStorePage() {
                 />
               </div>
             )}
-            <div className={`${activeGame.needsZone ? "sm:col-span-4" : "sm:col-span-6"} space-y-1.5`}>
-              <label className="text-xs font-semibold text-slate-300">منطقة الحساب (Region)</label>
-              {regionLocked && region ? (
-                <div className="w-full rounded-xl border border-emerald-600/40 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-300 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 shrink-0" />
-                  <span className="font-semibold">{region}</span>
-                  <span className="text-[11px] text-emerald-400/80">(تلقائي)</span>
+          </div>
+
+          {/* Automatic verification feedback & conditional Region input */}
+          <div className="space-y-2.5">
+            {detectingRegion && (
+              <div className="flex items-center gap-2 text-xs text-cyan-400">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span>جاري التحقق التلقائي من بيانات الحساب...</span>
+              </div>
+            )}
+
+            {detectedPlayer && (
+              <div className="rounded-xl border border-emerald-500/35 bg-emerald-950/20 px-4 py-2.5 text-xs sm:text-sm text-emerald-300 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>
+                    تم التحقق من الحساب: <b className="text-white">{detectedPlayer}</b>
+                  </span>
                 </div>
-              ) : (
+                {region && (
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-900/50 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{region}</span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {needsManualRegion && !regionLocked && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3.5 space-y-2">
+                <label className="text-xs font-semibold text-amber-200 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>منطقة الحساب (Region) — لم تَرِد في معلومات الحساب، يرجى تحديدها:</span>
+                </label>
                 <div className="flex gap-2">
                   <input
                     value={region}
@@ -702,32 +734,23 @@ function CustomerStorePage() {
                       setPlayer({ ...player, region: val });
                       setRegionError(null);
                     }}
-                    placeholder="تلقائي عند التحقق (أو Global)"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none"
+                    placeholder="أدخل المنطقة (مثال: Global أو MENA أو ID أو TR)"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-rose-400 outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => detectRegion(false)}
                     disabled={detectingRegion || !player.id || (activeGame.needsZone && !player.zoneId)}
-                    className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-600/50 bg-cyan-700/80 hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-3 text-xs font-semibold text-white transition-colors"
-                    title="تحقق وحدد المنطقة تلقائياً"
+                    className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-cyan-600/50 bg-cyan-700/80 hover:bg-cyan-600 disabled:opacity-50 px-3.5 py-2.5 text-xs font-semibold text-white transition-colors"
                   >
                     {detectingRegion ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
-                    <span>تحقق</span>
+                    <span>تأكيد</span>
                   </button>
                 </div>
-              )}
-              {detectedPlayer && (
-                <p className="text-[11px] text-emerald-400">
-                  تم التعرف: <b>{detectedPlayer}</b>
-                  {region ? ` • ${region}` : ""}
-                </p>
-              )}
-              {regionError && <p className="text-[11px] text-rose-400">{regionError}</p>}
-              {!regionLocked && !detectedPlayer && !regionError && (
-                <p className="text-[11px] text-slate-400">أدخل المعرف للتحقق التلقائي من اسم اللاعب والمنطقة.</p>
-              )}
-            </div>
+              </div>
+            )}
+
+            {regionError && <p className="text-xs text-rose-400">{regionError}</p>}
           </div>
         </section>
         </ScrollReveal>

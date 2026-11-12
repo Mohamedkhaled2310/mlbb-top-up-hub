@@ -52,3 +52,47 @@ export function calcMerchantUnitPriceEgp(
   return roundUpPositive(merchantBasePriceEgp * (1 - safeMargin / 100));
 }
 
+export function calcConvertedPrice(
+  unitPriceEgp: number,
+  egpRate: number,
+  targetFxRate: number,
+  decimals = 2,
+  costUsd?: number,
+  merchantMarginPercent = 0,
+  merchantMarkup = DEFAULT_MERCHANT_MARKUP,
+): number {
+  const safeEgpRate = Number.isFinite(egpRate) && egpRate > 0 ? egpRate : DEFAULT_EGP_RATE;
+  const safeFx = Number.isFinite(targetFxRate) && targetFxRate > 0 ? targetFxRate : safeEgpRate;
+  const safeMargin = Number.isFinite(merchantMarginPercent)
+    ? Math.min(Math.max(merchantMarginPercent, 0), 50)
+    : 0;
+  const safeMarkup = Number.isFinite(merchantMarkup) && merchantMarkup >= 0 ? merchantMarkup : DEFAULT_MERCHANT_MARKUP;
+
+  const raw =
+    typeof costUsd === "number" && costUsd > 0
+      ? costUsd * safeFx * (1 + safeMarkup) * (1 - safeMargin / 100)
+      : (unitPriceEgp / safeEgpRate) * safeFx;
+
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  if (decimals <= 0) {
+    return Math.max(1, Math.ceil(raw));
+  }
+  const factor = Math.pow(10, decimals);
+  return Math.max(1 / factor, Math.ceil(raw * factor) / factor);
+}
+
+export function convertEgpToCurrency(
+  amountEgp: number,
+  egpRate: number,
+  targetFxRate: number,
+  decimals = 2,
+): number {
+  if (!Number.isFinite(amountEgp)) return 0;
+  const safeEgpRate = Number.isFinite(egpRate) && egpRate > 0 ? egpRate : DEFAULT_EGP_RATE;
+  const safeFx = Number.isFinite(targetFxRate) && targetFxRate > 0 ? targetFxRate : safeEgpRate;
+  const converted = (amountEgp / safeEgpRate) * safeFx;
+  if (decimals <= 0) return Math.round(converted);
+  const factor = Math.pow(10, decimals);
+  return Math.round(converted * factor) / factor;
+}
+

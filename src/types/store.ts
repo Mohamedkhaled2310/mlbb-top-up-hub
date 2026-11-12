@@ -130,6 +130,8 @@ export interface StoreSettings {
   fazer_balance_updated_at?: string | null | undefined;
   packages_synced_at?: string | null | undefined;
   global_retail_markup_percent: number; // client-side/display setting for retail
+  fx_rates?: Record<string, number> | undefined;
+  fx_updated_at?: string | null | undefined;
 }
 
 export interface FazerTopUpResponse {

@@ -432,5 +432,29 @@ describe("API routes & merchant/admin workflows", () => {
     expect(json.fazer.connected).toBe(true);
     expect(json.fazer_balance).toBe(342.8);
     expect(dbState.store_settings[0]!["fazer_balance"]).toBe(342.8);
+    expect(json.fx_rates).toBeDefined();
+    expect(json.fx_rates.SAR).toBeGreaterThan(0);
+  });
+
+  it("allows admin and merchant to set merchant nationality/region and currency", async () => {
+    const adminRes = await handleApiRoute(
+      new Request("http://localhost/api/admin/merchants/region", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer admin-token" },
+        body: JSON.stringify({ merchant_id: "m-acc-1", region: "SA" }),
+      }),
+    );
+    expect(adminRes?.status).toBe(200);
+    expect(dbState.profiles.find((p) => p["id"] === "merch-uuid-1")?.["region"]).toBe("SA");
+
+    const merchRes = await handleApiRoute(
+      new Request("http://localhost/api/merchant/nationality", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer merch-token" },
+        body: JSON.stringify({ region: "AE" }),
+      }),
+    );
+    expect(merchRes?.status).toBe(200);
+    expect(dbState.profiles.find((p) => p["id"] === "merch-uuid-1")?.["region"]).toBe("AE");
   });
 });

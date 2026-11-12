@@ -33,6 +33,7 @@ export default function CheckoutModal({
   const [step, setStep] = useState<CheckoutStep>("form");
   const [region, setRegion] = useState(player.region || "");
   const [regionLocked, setRegionLocked] = useState(false);
+  const [needsManualRegion, setNeedsManualRegion] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [result, setResult] = useState<any>(null);
   const submitted = useRef(false);
@@ -44,7 +45,8 @@ export default function CheckoutModal({
       setStep("form");
       setResult(null);
       setRegion(latestRegionRef.current);
-      setRegionLocked(false);
+      setRegionLocked(Boolean(latestRegionRef.current));
+      setNeedsManualRegion(false);
       submitted.current = false;
     }
   }, [open]);
@@ -90,11 +92,19 @@ export default function CheckoutModal({
       if (res.valid) {
         const accRegion = res.accountRegion || "";
         const finalRegion = accRegion || region.trim() || "global";
-        if (accRegion) setRegionLocked(true);
+        if (accRegion) {
+          setRegionLocked(true);
+          setNeedsManualRegion(false);
+        } else if (!region.trim()) {
+          setNeedsManualRegion(true);
+        }
         setPlayer({ ...player, name: res.username || player.name, region: finalRegion });
         setRegion(finalRegion);
         setStep("review");
       } else {
+        if (res.error && (res.error.includes("منطقة") || res.error.includes("region"))) {
+          setNeedsManualRegion(true);
+        }
         toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من اللاعب/المنطقة" });
       }
     } catch {
@@ -195,28 +205,29 @@ export default function CheckoutModal({
               </div>
             )}
 
-            <div>
-              <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region)</label>
-              {regionLocked && region ? (
+            {regionLocked && region ? (
+              <div>
+                <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region)</label>
                 <div className="mt-1 w-full rounded-xl border border-emerald-600/40 bg-emerald-950/20 px-4 py-2.5 text-sm text-emerald-300 flex items-center gap-2">
                   <MapPin className="w-4 h-4 shrink-0" />
                   <span className="font-semibold">{region}</span>
                   <span className="text-[11px] text-emerald-400/80">(تم التحديد تلقائياً)</span>
                 </div>
-              ) : (
-                <>
-                  <Input
-                    value={region}
-                    onChange={(e) => setRegion(e.target.value)}
-                    placeholder="تلقائي عند التحقق (أو Global / TR / ID)"
-                    className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 shrink-0" /> اضغط "تحقق ومتابعة" لاكتشاف الاسم والمنطقة تلقائياً.
-                  </p>
-                </>
-              )}
-            </div>
+              </div>
+            ) : needsManualRegion ? (
+              <div>
+                <label className="text-xs sm:text-sm text-amber-200">منطقة الحساب (Region)</label>
+                <Input
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  placeholder="أدخل المنطقة (مثال: Global أو MENA أو ID)"
+                  className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500"
+                />
+                <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 shrink-0" /> لم ترجع المنطقة من السيرفر، يرجى كتابتها للمتابعة.
+                </p>
+              </div>
+            ) : null}
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/50">
               <div className="font-semibold flex items-center justify-between text-sm">

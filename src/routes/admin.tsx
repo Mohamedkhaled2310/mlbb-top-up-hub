@@ -25,6 +25,7 @@ import {
   adminListMerchantsApi,
   adminListOrdersApi,
   adminSetMarginApi,
+  adminSetMerchantRegionApi,
   adminSyncFazerApi,
   adminToggleMerchantApi,
   adminUpdateEgpRateApi,
@@ -33,6 +34,7 @@ import {
   loginWithPasswordApi,
   refreshSessionApi,
 } from "../lib/api-client";
+import { MERCHANT_COUNTRIES, getCountryCurrencyInfo } from "../lib/currency";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -79,6 +81,7 @@ function AdminPage() {
     password: "",
     fullName: "",
     phone: "",
+    region: "EG",
     marginPercent: "5",
     initialBalanceEgp: "1000",
   });
@@ -359,6 +362,7 @@ function AdminPage() {
             password: generateTempPassword(),
             fullName: "تاجر تجريبي METO",
             phone: "01000000001",
+            region: "EG",
             marginPercent: 5,
             initialBalanceEgp: 1000,
           }
@@ -367,6 +371,7 @@ function AdminPage() {
             password: newMerchant.password.trim(),
             fullName: newMerchant.fullName.trim() || "تاجر معتمد",
             phone: newMerchant.phone.trim(),
+            region: newMerchant.region || "EG",
             marginPercent: Number(newMerchant.marginPercent || 0),
             initialBalanceEgp: Number(newMerchant.initialBalanceEgp || 0),
           };
@@ -379,6 +384,7 @@ function AdminPage() {
         password: "",
         fullName: "",
         phone: "",
+        region: "EG",
         marginPercent: "5",
         initialBalanceEgp: "1000",
       });
@@ -391,6 +397,22 @@ function AdminPage() {
       toast({ title: "فشل إنشاء التاجر", description: e?.message || "تحقق من البيانات" });
     } finally {
       setCreatingMerchant(false);
+    }
+  };
+
+  const handleChangeMerchantRegion = async (merchantId: string, newRegion: string) => {
+    if (!token) return;
+    try {
+      const res = await adminSetMerchantRegionApi(token, { merchant_id: merchantId, region: newRegion });
+      if (res?.error) throw new Error(res.error);
+      const info = getCountryCurrencyInfo(newRegion);
+      toast({
+        title: "تم تحديث جنسية التاجر وعملته",
+        description: `${info.labelAr} (${info.currency})`,
+      });
+      await loadMerchants(token, mPage, mQuery);
+    } catch (e: any) {
+      toast({ title: "فشل تحديث الجنسية", description: e?.message || "حدث خطأ" });
     }
   };
 
@@ -675,6 +697,7 @@ function AdminPage() {
                   <thead className="bg-[#0e1428] text-slate-300">
                     <tr>
                       <th className="p-3 text-right">التاجر</th>
+                      <th className="p-3">الجنسية / العملة</th>
                       <th className="p-3">الرصيد (ج.م)</th>
                       <th className="p-3">نسبة الخصم %</th>
                       <th className="p-3">الحالة</th>
@@ -689,6 +712,20 @@ function AdminPage() {
                           <div className="text-slate-400 font-mono text-[11px]">
                             {m.email || m.profile?.phone || m.user_id}
                           </div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <select
+                            value={m.profile?.region || "EG"}
+                            onChange={(e) => handleChangeMerchantRegion(m.id, e.target.value)}
+                            className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white outline-none focus:border-purple-400"
+                            title="تغيير جنسية التاجر والعملة"
+                          >
+                            {MERCHANT_COUNTRIES.map((c) => (
+                              <option key={c.code} value={c.code}>
+                                {c.labelAr} ({c.currency})
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-3 text-center font-mono font-bold text-emerald-300">{m.balance_egp}</td>
                         <td className="p-3 text-center font-mono text-purple-300">{m.margin_percent}%</td>
@@ -738,7 +775,7 @@ function AdminPage() {
                     ))}
                     {merchants.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-slate-400">
+                        <td colSpan={6} className="p-6 text-center text-slate-400">
                           لا يوجد تجار مسجلون بعد — اضغط "إضافة تاجر جديد" أو "توليد تاجر تجريبي".
                         </td>
                       </tr>
@@ -925,6 +962,20 @@ function AdminPage() {
                   توليد
                 </Button>
               </div>
+            </div>
+            <div>
+              <label className="text-slate-300 font-semibold">جنسية التاجر (لتحويل الأسعار تلقائياً لعملته)</label>
+              <select
+                value={newMerchant.region}
+                onChange={(e) => setNewMerchant((s) => ({ ...s, region: e.target.value }))}
+                className={`mt-1 w-full rounded-lg border px-3 py-2 text-xs outline-none ${DARK_INPUT}`}
+              >
+                {MERCHANT_COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.labelAr} — {c.currency} ({c.symbolAr})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>

@@ -99,6 +99,8 @@ export async function adminCreateMerchantApi(
     password: string;
     fullName?: string;
     phone?: string;
+    region?: string;
+    country?: string;
     marginPercent?: number;
     initialBalanceEgp?: number;
   },
@@ -107,6 +109,27 @@ export async function adminCreateMerchantApi(
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
+export async function adminSetMerchantRegionApi(
+  token: string,
+  body: { merchant_id?: string; user_id?: string; region: string },
+): Promise<any> {
+  const res = await fetch("/api/admin/merchants/region", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
+export async function updateMyNationalityApi(token: string, region: string): Promise<any> {
+  const res = await fetch("/api/merchant/nationality", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ region }),
   });
   return await res.json();
 }
