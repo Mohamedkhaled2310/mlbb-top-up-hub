@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Store, Zap, MessageCircle, Menu, Image as ImageIcon, ChevronLeft } from "lucide-react";
+import { Store, Zap, MessageCircle, Menu, Image as ImageIcon, ChevronLeft, Shield } from "lucide-react";
 import metoLogo from "../assets/meto-logo.jpg";
 import metoPoster from "../assets/meto-poster.jpg";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -15,6 +15,7 @@ export function Navbar() {
   const navLinks = [
     { to: "/", label: "متجر الزبائن", icon: Store, active: "bg-rose-500/20 text-rose-300 border-rose-500/40" },
     { to: "/merchant", label: "بوابة التاجر", icon: Zap, active: "bg-purple-500/20 text-purple-300 border-purple-500/40" },
+    { to: "/admin", label: "الإدارة", icon: Shield, active: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
   ];
 
   return (
@@ -76,7 +77,6 @@ export function Navbar() {
                   <a href="https://wa.me/201070459339" target="_blank" rel="noreferrer" onClick={()=>setMobileMenuOpen(false)} className="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/30 text-emerald-300">
                     <div className="flex items-center gap-2.5"><div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400"><MessageCircle className="h-4 w-4"/></div><span className="text-sm font-semibold">الدعم واتساب</span></div><ChevronLeft className="h-4 w-4 text-emerald-500/70"/>
                   </a>
-                  <Link to="/admin" onClick={()=>setMobileMenuOpen(false)} className="block text-[11px] text-slate-500 hover:text-slate-300 px-2 pt-2">دخول المشرف</Link>
                 </div>
               </SheetContent>
             </Sheet>

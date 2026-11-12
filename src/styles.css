@@ -11,6 +11,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+html {
+  scroll-behavior: smooth;
+}
+
 /*
  * Design system definition.
  *
@@ -30,6 +34,8 @@
  */
 
 @theme inline {
+  --font-sans: "Cairo", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cairo", ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -148,10 +154,19 @@
     border-color: var(--color-border);
   }
 
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
   body {
-    background-color: #080c16;
+    background-color: #070914;
     color: #e2e8f0;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
   }
 }
 
@@ -289,4 +304,64 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+/* Smooth GPU-accelerated storefront & scroll animations */
+@keyframes meto-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes meto-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+@keyframes meto-bounce-subtle {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, 5px, 0);
+  }
+}
+
+.animate-meto-enter {
+  animation: meto-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-meto-card {
+  animation: meto-fade-up 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-meto-float {
+  animation: meto-float 5.5s ease-in-out infinite;
+}
+
+.animate-meto-scroll-cue {
+  animation: meto-bounce-subtle 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-meto-enter,
+  .animate-meto-card,
+  .animate-meto-float,
+  .animate-meto-scroll-cue {
+    animation: none !important;
+  }
 }

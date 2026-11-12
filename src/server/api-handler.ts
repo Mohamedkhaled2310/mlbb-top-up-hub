@@ -1,24 +1,32 @@
 import { FazerCardsService } from "./fazercards.service";
 import {
-  getStoreData,
-  syncFazerPackagesAndBalance,
-  submitCustomerOrder,
-  getMerchantDashboard,
-  adminListMerchants,
+  adminCreateMerchant,
   adminCreditMerchant,
+  adminListMerchants,
+  adminListRecentOrders,
   adminSetMerchantMargin,
+  adminToggleMerchantStatus,
   adminUpdateEgpRate,
+  getMerchantDashboard,
   getMyProfile,
+  getPublicAuthConfig,
+  getStoreData,
+  loginWithPasswordServer,
+  persistFazerAccountBalance,
+  refreshSessionServer,
+  submitCustomerOrder,
+  syncFazerPackagesAndBalance,
 } from "./store.service";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Cron-Secret",
     },
   });
 }
@@ -40,9 +48,34 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Cron-Secret",
       },
     });
+  }
+
+  // Runtime Supabase public config & server-assisted authentication
+  if (path === "/api/auth/config" && request.method === "GET") {
+    return json(getPublicAuthConfig());
+  }
+
+  if (path === "/api/auth/login" && request.method === "POST") {
+    try {
+      const body = (await request.json()) as { email?: string; password?: string };
+      const session = await loginWithPasswordServer(body.email || "", body.password || "");
+      return json({ success: true, ...session });
+    } catch (e: any) {
+      return json({ success: false, error: e?.message || "بيانات الدخول غير صحيحة" }, 401);
+    }
+  }
+
+  if (path === "/api/auth/refresh" && request.method === "POST") {
+    try {
+      const body = (await request.json()) as { refreshToken?: string };
+      const session = await refreshSessionServer(body.refreshToken || "");
+      return json({ success: true, ...session });
+    } catch (e: any) {
+      return json({ success: false, error: e?.message || "انتهت صلاحية الجلسة" }, 401);
+    }
   }
 
   // Public store data (packages from Fazer cache + egp rate)
@@ -56,7 +89,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
-  // Sync Fazer catalog + balance (server-side, can be called by cron/Vercel)
+  // Sync Fazer catalog + balance (server-side, can be called by admin or cron/Vercel)
   if (path === "/api/admin/sync-fazer" && request.method === "POST") {
     try {
       const token = getAuthToken(request);
@@ -70,23 +103,29 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
 
   // Fazer routes
   if (path === "/api/fzr/me" && request.method === "GET") {
-    return json(await FazerCardsService.checkAccount());
+    const fazer = await FazerCardsService.checkAccount();
+    await persistFazerAccountBalance(fazer);
+    return json(fazer);
   }
 
   if (path === "/api/fzr/validate-id" && request.method === "POST") {
     try {
-      const body = await request.json();
+      const body = (await request.json()) as Record<string, any>;
       const result = await FazerCardsService.validatePlayer(
-        body.userId || body.player_id,
-        body.zoneId || body.zone_id,
-        body.gameId || body.game_id || "mlbb",
-        body.region,
+        body["userId"] || body["player_id"] || "",
+        body["zoneId"] || body["zone_id"],
+        body["gameId"] || body["game_id"] || "mlbb",
+        body["region"],
+        body["fazerCategoryId"] || body["category_id"],
       );
-      // enforce region match if both provided
-      const reqRegion = (body.region || "").trim().toLowerCase();
-      const accRegion = ((result as any).accountRegion || "").trim().toLowerCase();
-      if (reqRegion && accRegion && reqRegion !== accRegion) {
-        return json({ ...result, valid: false, error: `منطقة الحساب (${result.accountRegion}) لا تطابق المنطقة المختارة (${body.region}).` });
+      const reqRegion = String(body["region"] || "").trim().toLowerCase();
+      const accRegion = String(result.accountRegion || "").trim().toLowerCase();
+      if (reqRegion && reqRegion !== "global" && accRegion && reqRegion !== accRegion) {
+        return json({
+          ...result,
+          valid: false,
+          error: `منطقة الحساب (${result.accountRegion}) لا تطابق المنطقة المختارة (${body["region"]}).`,
+        });
       }
       return json(result);
     } catch {
@@ -96,14 +135,15 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
 
   if (path === "/api/fzr/order" && request.method === "POST") {
     try {
-      const body = await request.json();
+      const body = (await request.json()) as Record<string, any>;
       const result = await FazerCardsService.executeTopUp({
-        offerId: body.offerId || body.offer_id,
-        playerId: body.playerId || body.player_id,
-        zoneId: body.zoneId || body.zone_id,
-        gameId: body.gameId || body.game_id || "mlbb",
-        region: body.region,
-        idempotencyKey: body.idempotencyKey,
+        offerId: String(body["offerId"] || body["offer_id"] || ""),
+        playerId: String(body["playerId"] || body["player_id"] || ""),
+        zoneId: body["zoneId"] || body["zone_id"],
+        gameId: body["gameId"] || body["game_id"] || "mlbb",
+        fazerCategoryId: body["fazerCategoryId"] || body["category_id"],
+        region: body["region"],
+        idempotencyKey: body["idempotencyKey"],
       });
       return json(result);
     } catch {
@@ -111,7 +151,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
-  // Customer/merchant order submission (cart, multi-package). Merchant flow debits wallet atomically server-side.
+  // Customer/merchant order submission (cart, multi-package). Merchant flow debits wallet atomically server-side + refunds failed units.
   if (path === "/api/orders/submit" && request.method === "POST") {
     try {
       const token = getAuthToken(request);
@@ -148,7 +188,42 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       return json(data);
     } catch (e: any) {
       const msg = e?.message || "failed";
-      return json({ error: msg }, msg.includes("forbidden") ? 403 : 500);
+      return json({ error: msg }, msg.includes("forbidden") ? 403 : msg.includes("unauthorized") ? 401 : 500);
+    }
+  }
+
+  if (path === "/api/admin/merchants/create" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json()) as Record<string, any>;
+      const data = await adminCreateMerchant(token, {
+        email: String(body["email"] || ""),
+        password: String(body["password"] || ""),
+        fullName: body["fullName"] || body["full_name"],
+        phone: body["phone"],
+        marginPercent: body["marginPercent"] ?? body["margin_percent"],
+        initialBalanceEgp: body["initialBalanceEgp"] ?? body["initial_balance_egp"],
+      });
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "فشل إنشاء حساب التاجر" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/toggle" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json()) as Record<string, any>;
+      const data = await adminToggleMerchantStatus(
+        token,
+        String(body["merchant_id"] || body["merchantId"] || ""),
+        Boolean(body["is_active"] ?? body["isActive"]),
+      );
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "فشل تحديث حالة التاجر" }, 400);
     }
   }
 
@@ -176,11 +251,24 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
+  if (path === "/api/admin/orders" && request.method === "GET") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const limit = parseInt(url.searchParams.get("limit") || "30", 10);
+      const data = await adminListRecentOrders(token, limit);
+      return json(data);
+    } catch (e: any) {
+      const msg = e?.message || "failed";
+      return json({ error: msg }, msg.includes("forbidden") ? 403 : 400);
+    }
+  }
+
   if (path === "/api/admin/settings/egp-rate" && request.method === "POST") {
     try {
       const token = getAuthToken(request);
       if (!token) return json({ error: "unauthorized" }, 401);
-      const body = await request.json();
+      const body = (await request.json()) as { egp_rate?: number };
       const data = await adminUpdateEgpRate(token, Number(body.egp_rate));
       return json(data);
     } catch (e: any) {
@@ -200,13 +288,20 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
   }
 
   if (path === "/api/status" && request.method === "GET") {
-    const fazer = await FazerCardsService.checkAccount();
-    const store = await getStoreData().catch(() => null);
+    const [fazer, store] = await Promise.all([
+      FazerCardsService.checkAccount(),
+      getStoreData().catch(() => null),
+    ]);
+    await persistFazerAccountBalance(fazer);
     return json({
       fazer,
+      fazer_balance: fazer.connected ? (fazer.balance ?? store?.settings?.fazer_balance ?? null) : (store?.settings?.fazer_balance ?? null),
+      fazer_balance_currency: fazer.currency ?? store?.settings?.fazer_balance_currency ?? "USD",
       egp_rate: store?.settings?.egp_rate,
       packages_synced_at: store?.settings?.packages_synced_at,
-      fazer_balance_updated_at: store?.settings?.fazer_balance_updated_at,
+      fazer_balance_updated_at: fazer.connected
+        ? new Date().toISOString()
+        : (store?.settings?.fazer_balance_updated_at ?? null),
     });
   }
 

@@ -4,10 +4,10 @@ import { PackageCategory } from "../types/store";
 interface GamePackageIconProps {
   category: PackageCategory;
   diamonds: number;
-  bonusDiamonds?: number;
-  gameId?: string;
-  currencyName?: string;
-  className?: string;
+  bonusDiamonds?: number | undefined;
+  gameId?: string | undefined;
+  currencyName?: string | undefined;
+  className?: string | undefined;
   size?: "sm" | "md" | "lg";
 }
 

@@ -95,7 +95,7 @@ export function PlayerIdGuideModal({ open, onOpenChange, gameId = "mlbb" }: Play
     },
   };
 
-  const currentGuide = guides[gameId] || guides.mlbb;
+  const currentGuide = (guides[gameId] || guides["mlbb"])!;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -21,9 +21,10 @@ export interface GameItem {
 interface GamesSectionProps {
   selectedGameId?: string;
   onSelectGame?: (gameId: string) => void;
+  packageCounts?: Record<string, number>;
 }
 
-export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSectionProps) {
+export function GamesSection({ selectedGameId = "mlbb", onSelectGame, packageCounts }: GamesSectionProps) {
   const games: GameItem[] = [
     {
       id: "mlbb",
@@ -79,9 +80,8 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
     if (onSelectGame) {
       onSelectGame(gameId);
     }
-    // Smooth scroll down to player input card
     setTimeout(() => {
-      const elem = document.getElementById("player-input-card") || document.getElementById("packages-section");
+      const elem = document.getElementById("packages-section") || document.getElementById("player-input-card");
       if (elem) {
         elem.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -116,18 +116,20 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
       </div>
 
       {/* Games Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {games.map((game) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+        {games.map((game, idx) => {
           const isSelected = selectedGameId === game.id;
+          const pkgCount = packageCounts?.[game.id];
 
           return (
             <div
               key={game.id}
               onClick={() => handleGameClick(game.id)}
-              className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border transition-all duration-300 cursor-pointer ${
+              style={{ animationDelay: `${idx * 70}ms` }}
+              className={`animate-meto-card group relative flex flex-col justify-between overflow-hidden rounded-2xl border transition-all duration-300 cursor-pointer active:scale-[0.985] ${
                 isSelected
-                  ? `bg-gradient-to-b from-[#1c122a] to-[#0a0f1d] -translate-y-1 ${game.accentBorder}`
-                  : "border-slate-800 bg-[#0a0f1d]/80 hover:border-slate-700 hover:bg-[#0f162c] hover:-translate-y-0.5"
+                  ? `bg-gradient-to-b from-[#1c122a] to-[#0a0f1d] -translate-y-1 shadow-xl ${game.accentBorder}`
+                  : "border-slate-800 bg-[#0a0f1d]/85 hover:border-slate-700 hover:bg-[#0f162c] hover:-translate-y-1 hover:shadow-lg hover:shadow-black/40"
               }`}
             >
               {/* Cover Image with gradient overlay */}
@@ -141,60 +143,65 @@ export function GamesSection({ selectedGameId = "mlbb", onSelectGame }: GamesSec
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/40 to-transparent" />
 
                 {/* Status Badge */}
-                <div className="absolute top-2.5 right-2.5">
+                <div className="absolute top-2 right-2">
                   <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.8 text-[10px] font-bold shadow-md ${game.badgeBg}`}
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] sm:text-[10px] font-bold shadow-md ${game.badgeBg}`}
                   >
-                    <Zap className="h-3 w-3 fill-current" />
-                    <span>{game.statusText}</span>
+                    <Zap className="h-2.5 w-2.5 sm:h-3 sm:w-3 fill-current" />
+                    <span className="truncate max-w-[95px] sm:max-w-none">{game.statusText}</span>
                   </span>
                 </div>
 
                 {/* Selected Indicator */}
                 {isSelected && (
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1 bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full text-[10px] font-black shadow-lg">
-                    <Check className="h-3 w-3" />
-                    <span>تم الاختيار</span>
+                  <div className="absolute top-2 left-2 flex items-center gap-1 bg-emerald-500 text-slate-950 px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black shadow-lg">
+                    <Check className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                    <span className="hidden sm:inline">تم الاختيار</span>
                   </div>
                 )}
 
-                {/* Publisher */}
-                <div className="absolute bottom-2 right-2.5">
-                  <span className="rounded bg-black/60 backdrop-blur-md px-1.5 py-0.5 text-[9px] font-mono text-slate-300 border border-white/10">
+                {/* Publisher + Live Package Count */}
+                <div className="absolute bottom-1.5 inset-x-2 flex items-center justify-between gap-1">
+                  <span className="rounded bg-black/65 backdrop-blur-md px-1.5 py-0.5 text-[9px] font-mono text-slate-300 border border-white/10">
                     {game.publisher}
                   </span>
+                  {typeof pkgCount === "number" && (
+                    <span className="rounded bg-slate-900/85 backdrop-blur-md px-1.5 py-0.5 text-[9px] font-bold text-cyan-300 border border-cyan-500/30">
+                      {pkgCount} باقة
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Game Info */}
-              <div className="p-3.5 space-y-2">
+              <div className="p-2.5 sm:p-3.5 space-y-1.5 sm:space-y-2">
                 <div>
                   <h3
-                    className={`font-bold text-sm line-clamp-1 transition-colors ${
+                    className={`font-bold text-xs sm:text-sm line-clamp-1 transition-colors ${
                       isSelected ? "text-rose-300" : "text-white group-hover:text-rose-300"
                     }`}
                   >
                     {game.name}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 line-clamp-1">
                     {game.subtitle}
                   </p>
                 </div>
 
                 {/* Bottom Action Hint */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
-                  <span className="text-[11px] font-semibold text-cyan-400">
+                <div className="flex items-center justify-between pt-1.5 sm:pt-2 border-t border-slate-800/80 text-[10px] sm:text-xs">
+                  <span className="text-[10px] sm:text-[11px] font-semibold text-cyan-400 truncate hidden sm:inline">
                     {game.currencyName}
                   </span>
 
                   <span
-                    className={`flex items-center gap-1 text-[11px] font-bold transition-all ${
+                    className={`flex items-center gap-1 text-[10px] sm:text-[11px] font-bold transition-all ${
                       isSelected
                         ? "text-emerald-400"
                         : "text-rose-400 group-hover:translate-x-[-2px]"
                     }`}
                   >
-                    <span>{isSelected ? "الباقات معروضة بالأسفل" : "عرض الباقات والدفع"}</span>
+                    <span>{isSelected ? "الباقات نشطة" : "عرض الباقات"}</span>
                     <ArrowLeft className="h-3 w-3" />
                   </span>
                 </div>

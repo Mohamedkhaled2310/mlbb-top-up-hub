@@ -82,21 +82,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "METO STORE | متجر شحن Mobile Legends الرسمي" },
+      { title: "METO STORE | متجر شحن الألعاب الرسمي — شحن فوري وآمن" },
       {
         name: "description",
         content:
-          "متجر METO STORE لشحن جواهر وبطاقات ويكلي وعروض دبل Mobile Legends: Bang Bang بالجنيه المصري مع تنفيذ آمن عبر FazerCards",
+          "متجر METO STORE لشحن جواهر Mobile Legends وشدات PUBG Mobile وجواهر Free Fire وتوكنز Honor of Kings بالجنيه المصري مع تنفيذ آلي فوري عبر FazerCards.",
       },
       { name: "author", content: "METO STORE" },
-      { property: "og:title", content: "METO STORE - MLBB Diamonds Top Up" },
-      { property: "og:description", content: "Your MLBB Top Up Store ♡ • Play More Spend Less ♡" },
+      { property: "og:title", content: "METO STORE - متجر شحن الألعاب الفوري" },
+      { property: "og:description", content: "MLBB • PUBG Mobile • Free Fire • Honor of Kings" },
       { property: "og:type", content: "website" },
       { property: "og:image", content: "/meto-logo.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: "/meto-logo.png" },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap",
+      },
       {
         rel: "stylesheet",
         href: appCss,
@@ -115,7 +121,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" className="dark">
       <head>
         <HeadContent />
       </head>

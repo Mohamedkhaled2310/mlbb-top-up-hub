@@ -17,6 +17,7 @@ drop table if exists public.fazer_packages cascade;
 drop table if exists public.store_settings cascade;
 drop table if exists public.profiles cascade;
 
+drop function if exists public.refund_merchant_for_order(uuid, numeric, text, text) cascade;
 drop function if exists public.admin_set_merchant_margin(uuid, numeric) cascade;
 drop function if exists public.debit_merchant_for_order(uuid, numeric, text, text) cascade;
 drop function if exists public.admin_credit_merchant(uuid, numeric, text, text, text) cascade;
@@ -180,7 +181,7 @@ returns table (merchant_id uuid, new_balance numeric, ledger_id uuid)
 language plpgsql security definer set search_path = public as $$
 declare v_new_balance numeric(14,2); v_ledger_id uuid;
 begin
-  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if not (public.is_admin() or auth.role() = 'service_role') then raise exception 'forbidden'; end if;
   if p_amount is null or p_amount <= 0 then raise exception 'amount_must_be_positive'; end if;
   select (m.balance_egp + round(p_amount,2)) into v_new_balance
   from public.merchant_accounts m where m.id = p_merchant_id for update;
@@ -223,18 +224,46 @@ end; $$;
 create or replace function public.admin_set_merchant_margin(p_merchant_id uuid, p_margin_percent numeric)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if not (public.is_admin() or auth.role() = 'service_role') then raise exception 'forbidden'; end if;
   if p_margin_percent is null or p_margin_percent < 0 or p_margin_percent > 100 then raise exception 'invalid_margin'; end if;
   update public.merchant_accounts set margin_percent = round(p_margin_percent,2), updated_at = now()
   where id = p_merchant_id;
   if not found then raise exception 'merchant_not_found'; end if;
 end; $$;
 
+create or replace function public.refund_merchant_for_order(
+  p_merchant_id uuid, p_amount numeric, p_order_ref text, p_note text default null
+)
+returns table (merchant_id uuid, new_balance numeric, ledger_id uuid)
+language plpgsql security definer set search_path = public as $$
+declare v_new_balance numeric(14,2); v_ledger_id uuid; v_owner uuid;
+begin
+  if p_amount is null or p_amount <= 0 then raise exception 'amount_must_be_positive'; end if;
+  select m.user_id into v_owner from public.merchant_accounts m where m.id = p_merchant_id;
+  if not found then raise exception 'merchant_not_found'; end if;
+  if not (public.is_admin() or auth.uid() = v_owner or auth.role() = 'service_role') then
+    raise exception 'forbidden';
+  end if;
+  if exists (
+    select 1 from public.wallet_ledger wl
+    where wl.merchant_id = p_merchant_id and wl.entry_type = 'refund' and wl.reference_id = p_order_ref
+  ) then raise exception 'order_already_refunded'; end if;
+  select (m.balance_egp + round(p_amount,2)) into v_new_balance
+  from public.merchant_accounts m where m.id = p_merchant_id for update;
+  update public.merchant_accounts set balance_egp = v_new_balance, updated_at = now() where id = p_merchant_id;
+  insert into public.wallet_ledger (merchant_id, amount, entry_type, reference_type, reference_id, balance_after, note, created_by)
+  values (p_merchant_id, round(p_amount,2), 'refund', 'order', p_order_ref, v_new_balance, p_note, auth.uid())
+  returning id into v_ledger_id;
+  return query select p_merchant_id, v_new_balance, v_ledger_id;
+end; $$;
+
 revoke all on function public.admin_credit_merchant(uuid,numeric,text,text,text) from public, anon;
 revoke all on function public.debit_merchant_for_order(uuid,numeric,text,text) from public, anon;
+revoke all on function public.refund_merchant_for_order(uuid,numeric,text,text) from public, anon;
 revoke all on function public.admin_set_merchant_margin(uuid,numeric) from public, anon;
 grant execute on function public.admin_credit_merchant(uuid,numeric,text,text,text) to authenticated, service_role;
 grant execute on function public.debit_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
+grant execute on function public.refund_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
 grant execute on function public.admin_set_merchant_margin(uuid,numeric) to authenticated, service_role;
 
 alter table public.profiles enable row level security;
