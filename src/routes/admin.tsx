@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   DollarSign,
+  Lock,
   LogOut,
   Package,
   Power,
@@ -14,6 +15,7 @@ import {
   UserPlus,
   Users,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
@@ -27,6 +29,7 @@ import {
   adminListOrdersApi,
   adminSetMarginApi,
   adminSetMerchantRegionApi,
+  adminSyncBinanceRateApi,
   adminSyncFazerApi,
   adminToggleMerchantApi,
   adminUpdateEgpRateApi,
@@ -59,12 +62,15 @@ function AdminPage() {
   const store = useStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [status, setStatus] = useState<any>(null);
   const [lastBalanceCheck, setLastBalanceCheck] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
   const [egpRate, setEgpRate] = useState<number>(store.settings.egp_rate || 50);
+  const [rateMode, setRateMode] = useState<"manual" | "binance_auto">(store.settings.egp_rate_mode || "manual");
+  const [syncingBinance, setSyncingBinance] = useState(false);
 
   const [merchants, setMerchants] = useState<any[]>([]);
   const [mPage, setMPage] = useState(1);
@@ -96,6 +102,9 @@ function AdminPage() {
       if (d?.settings) {
         store.setSettings(d.settings);
         setEgpRate(d.settings.egp_rate || 50);
+        if (d.settings.egp_rate_mode) {
+          setRateMode(d.settings.egp_rate_mode);
+        }
       }
     } catch {
       // Ignore transient load error
@@ -140,6 +149,15 @@ function AdminPage() {
   useEffect(() => {
     loadStore();
     refreshStatus();
+
+    if (typeof window !== "undefined") {
+      try {
+        const savedEmail = localStorage.getItem("admin_saved_email");
+        if (savedEmail) setEmail(savedEmail);
+      } catch {
+        // ignore
+      }
+    }
 
     (async () => {
       const stored = loadStoredAuth();
@@ -221,6 +239,18 @@ function AdminPage() {
     if (!email.trim() || !password) return;
     setLoading(true);
     try {
+      if (typeof window !== "undefined") {
+        try {
+          if (rememberMe) {
+            localStorage.setItem("admin_saved_email", email.trim());
+          } else {
+            localStorage.removeItem("admin_saved_email");
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       let token: string | undefined;
       let sessionMeta: { refreshToken?: string | undefined; expiresAt?: number | undefined; email?: string | undefined } | undefined;
       let profileData: any = null;
@@ -252,7 +282,7 @@ function AdminPage() {
       if (!token) throw new Error("لم يتم إنشاء جلسة دخول");
       await loadMerchants(token, 1, "");
       await loadOrders(token);
-      store.setAuth(token, profileData, merchantData, sessionMeta);
+      store.setAuth(token, profileData, merchantData, sessionMeta, rememberMe);
       setIsAdmin(true);
       refreshStatus();
       toast({ title: "تم الدخول كأدمن بنجاح" });
@@ -296,15 +326,42 @@ function AdminPage() {
     }
   };
 
-  const saveRate = async () => {
+  const saveRate = async (modeToSave?: "manual" | "binance_auto") => {
     if (!token) return;
+    const mode = modeToSave || rateMode;
     try {
-      const r = await adminUpdateEgpRateApi(token, Number(egpRate));
+      const r = await adminUpdateEgpRateApi(token, { egp_rate: Number(egpRate), mode });
       if (r?.error) throw new Error(r.error);
-      toast({ title: "تم تحديث سعر الصرف", description: `${egpRate} ج.م / $` });
+      setRateMode(mode);
+      toast({
+        title: mode === "manual" ? "تم تثبيت سعر الصرف يدوياً (🔒 مقفل)" : "تم حفظ سعر الصرف وتفعيل التحديث التلقائي",
+        description: `${egpRate} ج.م / $ ${mode === "manual" ? "• لن يتغير تلقائياً" : ""}`,
+      });
       await loadStore();
     } catch (e: any) {
       toast({ title: "تعذر الحفظ", description: e?.message });
+    }
+  };
+
+  const syncBinance = async () => {
+    if (!token) return;
+    setSyncingBinance(true);
+    try {
+      const r = await adminSyncBinanceRateApi(token);
+      if (r?.error) throw new Error(r.error);
+      if (r?.egp_rate) {
+        setEgpRate(r.egp_rate);
+        setRateMode("binance_auto");
+        toast({
+          title: "تم تطبيق سعر دولار بينانس P2P بنجاح ⚡",
+          description: `السعر المطبق: ${r.egp_rate} ج.م / USDT (سوق بينانس مصر)`,
+        });
+      }
+      await loadStore();
+    } catch (e: any) {
+      toast({ title: "فشل جلب سعر بينانس", description: e?.message });
+    } finally {
+      setSyncingBinance(false);
     }
   };
 
@@ -502,6 +559,17 @@ function AdminPage() {
                   className={`mt-1 h-11 ${DARK_INPUT}`}
                 />
               </div>
+              <div className="flex items-center justify-between text-xs pt-0.5">
+                <label className="flex items-center gap-2 text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"
+                  />
+                  <span>تذكرني على هذا الجهاز</span>
+                </label>
+              </div>
               <Button
                 className="w-full h-11 bg-amber-600 hover:bg-amber-500 text-white font-bold"
                 onClick={signIn}
@@ -566,26 +634,91 @@ function AdminPage() {
               {/* Exchange Rate */}
               <div className="rounded-2xl border border-amber-500/25 bg-[#0c1020] p-4 sm:p-5 flex flex-col justify-between space-y-3">
                 <div className="space-y-3">
-                  <h3 className="font-bold flex items-center gap-2 text-white">
-                    <DollarSign className="w-4 h-4 text-amber-400" /> سعر الصرف العام
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      step="0.5"
-                      value={egpRate}
-                      onChange={(e) => setEgpRate(Number(e.target.value))}
-                      className={`font-mono ${DARK_INPUT}`}
-                    />
-                    <span className="text-xs text-slate-400 shrink-0 font-bold">ج.م / $</span>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold flex items-center gap-2 text-white">
+                      <DollarSign className="w-4 h-4 text-amber-400" /> سعر دولار المتجر
+                    </h3>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        rateMode === "manual"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      }`}
+                    >
+                      {rateMode === "manual" ? (
+                        <>
+                          <Lock className="w-3 h-3" /> تثبيت يدوي (مقفل)
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3 h-3" /> تلقائي من بينانس
+                        </>
+                      )}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
-                    يحدد أسعار البيع (+15%) وأسعار التجار (+7.5% قبل خصم التاجر) مباشرة على مستوى المتجر.
+
+                  {/* Binance P2P Live Rate Indicator & Sync */}
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 flex items-center justify-between text-xs">
+                    <div className="space-y-0.5">
+                      <div className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-400" /> سعر بينانس P2P الفعلي:
+                      </div>
+                      <div className="font-mono font-bold text-amber-300">
+                        {store.settings.binance_rate ? `${store.settings.binance_rate} ج.م / USDT` : "سوق مصر الحي"}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-bold gap-1"
+                      onClick={syncBinance}
+                      disabled={syncingBinance}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${syncingBinance ? "animate-spin" : ""}`} />
+                      {syncingBinance ? "جارٍ الجلب..." : "تطبيق سعر بينانس"}
+                    </Button>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block font-semibold mb-1">
+                      السعر الحالي المعتمد:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={egpRate}
+                        onChange={(e) => setEgpRate(Number(e.target.value))}
+                        className={`font-mono ${DARK_INPUT}`}
+                      />
+                      <span className="text-xs text-slate-400 shrink-0 font-bold">ج.م / $</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    {rateMode === "manual"
+                      ? "🔒 وضع التثبيت اليدوي مفعّل: لن يتغير السعر تلقائياً أبداً عند فتح المتجر، وسيبقى ثابتاً حتى تحديثه يدوياً."
+                      : "⚡ وضع التحديث التلقائي مفعّل: يتم تحديث السعر تلقائياً وفقاً لأسعار صفقات بينانس P2P الفعلية."}
                   </p>
                 </div>
-                <Button size="sm" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold" onClick={saveRate}>
-                  حفظ سعر الصرف
-                </Button>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold gap-1 text-xs"
+                    onClick={() => saveRate("manual")}
+                  >
+                    <Lock className="w-3.5 h-3.5" /> تثبيت يدوياً
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold gap-1 text-xs"
+                    onClick={() => saveRate("binance_auto")}
+                  >
+                    <Zap className="w-3.5 h-3.5" /> تفعيل التلقائي
+                  </Button>
+                </div>
               </div>
 
               {/* Packages breakdown */}

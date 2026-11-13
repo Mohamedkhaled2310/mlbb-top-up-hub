@@ -47,6 +47,9 @@ export type Settings = {
   packages_synced_at?: string | null | undefined;
   fx_rates?: Record<string, number> | undefined;
   fx_updated_at?: string | null | undefined;
+  egp_rate_mode?: "manual" | "binance_auto" | undefined;
+  binance_rate?: number | null | undefined;
+  binance_updated_at?: string | null | undefined;
 };
 
 interface StoreState {
@@ -68,7 +71,13 @@ interface StoreState {
   updateCartQty: (id: string, qty: number) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
-  setAuth: (token: string | null, profile?: any, merchant?: any, sessionMeta?: { refreshToken?: string | null | undefined; expiresAt?: number | null | undefined; email?: string | null | undefined }) => void;
+  setAuth: (
+    token: string | null,
+    profile?: any,
+    merchant?: any,
+    sessionMeta?: { refreshToken?: string | null | undefined; expiresAt?: number | null | undefined; email?: string | null | undefined },
+    rememberMe?: boolean
+  ) => void;
   logout: () => void;
 }
 
@@ -92,25 +101,48 @@ function saveStoredAuth(payload: {
   profile?: any;
   merchant?: any;
   userEmail?: string | null | undefined;
+  rememberMe?: boolean;
 }) {
   if (typeof window === "undefined") return;
   try {
     if (!payload.accessToken) {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
       window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
       return;
     }
-    window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(payload));
+    const data = JSON.stringify(payload);
+    if (payload.rememberMe !== false) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, data);
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } else {
+      window.sessionStorage.setItem(AUTH_STORAGE_KEY, data);
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
   } catch {
     // Ignore storage quota errors
   }
 }
 
-export function loadStoredAuth(): Partial<AuthSessionPayload> & { accessToken?: string | null; refreshToken?: string | null; expiresAt?: number | null; userEmail?: string | null } | null {
+export function loadStoredAuth(): (Partial<AuthSessionPayload> & {
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  expiresAt?: number | null;
+  userEmail?: string | null;
+  rememberMe?: boolean;
+}) | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    const fromLocal = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (fromLocal) {
+      const parsed = JSON.parse(fromLocal);
+      if (parsed?.accessToken) return { ...parsed, rememberMe: true };
+    }
+    const fromSession = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+    if (fromSession) {
+      const parsed = JSON.parse(fromSession);
+      if (parsed?.accessToken) return { ...parsed, rememberMe: false };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -152,7 +184,7 @@ state = {
     })),
   removeFromCart: (id) => setState((st) => ({ cart: st.cart.filter((c) => c.package.id !== id) })),
   clearCart: () => setState({ cart: [] }),
-  setAuth: (accessToken, profile, merchant, sessionMeta) => {
+  setAuth: (accessToken, profile, merchant, sessionMeta, rememberMe = true) => {
     const nextRefresh = sessionMeta?.refreshToken ?? (accessToken ? state.refreshToken : null);
     const nextExp = sessionMeta?.expiresAt ?? (accessToken ? state.expiresAt : null);
     const nextEmail = sessionMeta?.email ?? (accessToken ? state.userEmail : null);
@@ -163,6 +195,7 @@ state = {
       profile: profile ?? null,
       merchant: merchant ?? null,
       userEmail: nextEmail,
+      rememberMe,
     });
     setState({
       accessToken,
@@ -201,3 +234,6 @@ export function useStore<T = StoreState>(selector?: (s: StoreState) => T): T {
     () => (selector ? selector(getState()) : (getState() as unknown as T)),
   );
 }
+
+useStore.getState = getState;
+export { getState as getStoreState };

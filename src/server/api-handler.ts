@@ -9,6 +9,7 @@ import {
   adminSetMerchantRegion,
   adminToggleMerchantStatus,
   adminUpdateEgpRate,
+  adminSyncBinanceRate,
   getMerchantDashboard,
   getMyProfile,
   getPublicAuthConfig,
@@ -323,8 +324,22 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     try {
       const token = getAuthToken(request);
       if (!token) return json({ error: "unauthorized" }, 401);
-      const body = (await request.json()) as { egp_rate?: number };
-      const data = await adminUpdateEgpRate(token, Number(body.egp_rate));
+      const body = (await request.json()) as { egp_rate?: number; egpRate?: number; mode?: "manual" | "binance_auto" };
+      const data = await adminUpdateEgpRate(token, {
+        egpRate: Number(body.egp_rate ?? body.egpRate),
+        mode: body.mode || "manual",
+      });
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/settings/sync-binance" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const data = await adminSyncBinanceRate(token);
       return json(data);
     } catch (e: any) {
       return json({ error: e?.message || "failed" }, 400);

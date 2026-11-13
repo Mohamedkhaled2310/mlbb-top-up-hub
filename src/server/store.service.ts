@@ -343,21 +343,48 @@ export async function persistFazerAccountBalance(account: {
 
 export async function getStoreData(gameId?: string) {
   const sb = getAdminClient() as any;
-  const [{ data: initialSettingsRow }, fxResult] = await Promise.all([
+  const [{ data: initialSettingsRow }, fxResult, { data: fxConfigRow }] = await Promise.all([
     sb.from("store_settings").select("*").eq("id", 1).maybeSingle(),
     getLiveUsdRates().catch(() => null),
+    sb.from("fazer_packages").select("raw").eq("offer_id", "config:fx_settings").maybeSingle(),
   ]);
   let settingsRow = initialSettingsRow;
   let egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
 
-  const egpFromFx = fxResult?.rates ? fxResult.rates["EGP"] : undefined;
+  const fxConfig = (fxConfigRow?.raw as any) || { mode: "manual" };
+  const rateMode: "manual" | "binance_auto" = fxConfig.mode === "binance_auto" ? "binance_auto" : "manual";
+  const binanceEgp = fxResult?.rates ? (fxResult.rates["BINANCE_EGP"] ?? fxResult.rates["EGP"]) : undefined;
+
+  // Persist latest live binance rate in config if available
+  if (binanceEgp && typeof binanceEgp === "number" && binanceEgp > 0) {
+    if (Math.abs((fxConfig.binance_rate || 0) - binanceEgp) > 0.05) {
+      sb.from("fazer_packages")
+        .upsert({
+          offer_id: "config:fx_settings",
+          game_id: "system",
+          name: "FX Settings",
+          active: false,
+          raw: {
+            ...fxConfig,
+            binance_rate: binanceEgp,
+            binance_updated_at: new Date().toISOString(),
+          },
+        })
+        .then(() => {})
+        .catch(() => {});
+    }
+  }
+
+  // ONLY auto-update egp_rate if mode is 'binance_auto'!
+  // If mode is 'manual', NEVER overwrite the admin's manual rate!
   if (
     !process.env["VITEST"] &&
-    typeof egpFromFx === "number" &&
-    Number.isFinite(egpFromFx) &&
-    egpFromFx > 0
+    rateMode === "binance_auto" &&
+    typeof binanceEgp === "number" &&
+    Number.isFinite(binanceEgp) &&
+    binanceEgp > 0
   ) {
-    const liveEgp = Math.round(egpFromFx * 100) / 100;
+    const liveEgp = Math.round(binanceEgp * 100) / 100;
     if (Math.abs(egpRate - liveEgp) > 0.05) {
       egpRate = liveEgp;
       sb.from("store_settings")
@@ -409,7 +436,7 @@ export async function getStoreData(gameId?: string) {
       await syncFazerInternal();
       const s2 = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
       settingsRow = s2.data || settingsRow;
-      if (process.env["VITEST"] || !egpFromFx) {
+      if (process.env["VITEST"] || rateMode === "manual" || !binanceEgp) {
         egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
       }
       let q2 = sb
@@ -476,6 +503,9 @@ export async function getStoreData(gameId?: string) {
     packages,
     settings: {
       egp_rate: egpRate,
+      egp_rate_mode: rateMode,
+      binance_rate: binanceEgp ?? fxConfig.binance_rate ?? null,
+      binance_updated_at: fxConfig.binance_updated_at ?? null,
       fazer_balance: settingsRow?.fazer_balance ?? null,
       fazer_balance_currency: settingsRow?.fazer_balance_currency ?? null,
       fazer_balance_updated_at: settingsRow?.fazer_balance_updated_at ?? null,
@@ -1214,16 +1244,89 @@ export async function adminListRecentOrders(token: string, limit = 30) {
   return { orders: data || [] };
 }
 
-export async function adminUpdateEgpRate(token: string, egpRate: number) {
+export async function adminUpdateEgpRate(
+  token: string,
+  params: number | { egpRate?: number; egp_rate?: number; mode?: "manual" | "binance_auto" },
+) {
   await requireAdmin(token);
-  if (!(egpRate > 0)) throw new Error("سعر صرف غير صالح");
+  const targetRate =
+    typeof params === "number"
+      ? params
+      : Number(params.egpRate ?? params.egp_rate);
+  const mode = typeof params === "object" && params.mode ? params.mode : "manual";
+
+  if (!Number.isFinite(targetRate) || targetRate <= 0) throw new Error("سعر صرف غير صالح");
   const sb = getAdminClient() as any;
+  const nowIso = new Date().toISOString();
+
   const { error } = await sb
     .from("store_settings")
-    .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
+    .update({ egp_rate: targetRate, updated_at: nowIso })
     .eq("id", 1);
   if (error) throw new Error(error.message);
-  return { success: true, egp_rate: egpRate };
+
+  // Persist FX settings with mode: 'manual' (locks the rate from being auto-overwritten)
+  const { data: existing } = await sb
+    .from("fazer_packages")
+    .select("raw")
+    .eq("offer_id", "config:fx_settings")
+    .maybeSingle();
+
+  const prevRaw = (existing?.raw as any) || {};
+  await sb.from("fazer_packages").upsert({
+    offer_id: "config:fx_settings",
+    game_id: "system",
+    name: "FX Settings",
+    active: false,
+    raw: {
+      ...prevRaw,
+      mode,
+      manual_rate: targetRate,
+      manual_updated_at: nowIso,
+      updated_by: "admin",
+    },
+  });
+
+  return { success: true, egp_rate: targetRate, mode };
+}
+
+export async function adminSyncBinanceRate(token: string) {
+  await requireAdmin(token);
+  const sb = getAdminClient() as any;
+  const { fetchBinanceUsdtEgp } = await import("./fx.service");
+  const liveBinance = await fetchBinanceUsdtEgp();
+  if (!liveBinance || liveBinance <= 0) {
+    throw new Error("تعذر جلب سعر بينانس P2P اللحظي، يرجى المحاولة لاحقاً أو التحديد يدوياً.");
+  }
+
+  const nowIso = new Date().toISOString();
+  await sb
+    .from("store_settings")
+    .update({ egp_rate: liveBinance, updated_at: nowIso })
+    .eq("id", 1);
+
+  const { data: existing } = await sb
+    .from("fazer_packages")
+    .select("raw")
+    .eq("offer_id", "config:fx_settings")
+    .maybeSingle();
+
+  const prevRaw = (existing?.raw as any) || {};
+  await sb.from("fazer_packages").upsert({
+    offer_id: "config:fx_settings",
+    game_id: "system",
+    name: "FX Settings",
+    active: false,
+    raw: {
+      ...prevRaw,
+      mode: "binance_auto",
+      binance_rate: liveBinance,
+      binance_updated_at: nowIso,
+      updated_by: "admin",
+    },
+  });
+
+  return { success: true, egp_rate: liveBinance, binance_rate: liveBinance, mode: "binance_auto" };
 }
 
 export async function getMyProfile(token: string) {

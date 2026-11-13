@@ -83,6 +83,7 @@ function MerchantPage() {
   const store = useStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dash, setDash] = useState<any>(null);
@@ -90,6 +91,13 @@ function MerchantPage() {
   const [selectedPkgRegion, setSelectedPkgRegion] = useState("global");
   const [pkgSearch, setPkgSearch] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("meto_saved_merchant_email");
+      if (saved) setEmail(saved);
+    }
+  }, []);
 
   const loadStore = useCallback(async () => {
     try {
@@ -105,11 +113,12 @@ function MerchantPage() {
     async (
       token: string,
       sessionMeta?: { refreshToken?: string | null | undefined; expiresAt?: number | null | undefined; email?: string | null | undefined },
+      remember = true,
     ) => {
       const d = await getMerchantDashboardApi(token);
       if (d?.error) throw new Error(d.error);
       setDash(d);
-      store.setAuth(token, d.profile, d.merchant, sessionMeta);
+      store.setAuth(token, d.profile, d.merchant, sessionMeta, remember);
       return d;
     },
     [store],
@@ -197,13 +206,25 @@ function MerchantPage() {
     if (!email.trim() || !password) return;
     setLoading(true);
     try {
+      if (typeof window !== "undefined") {
+        if (rememberMe) {
+          localStorage.setItem("meto_saved_merchant_email", email.trim());
+        } else {
+          localStorage.removeItem("meto_saved_merchant_email");
+        }
+      }
+
       const authRes = await loginWithPasswordApi(email, password);
       if (authRes?.success && authRes?.accessToken) {
-        const d = await loadDashboard(authRes.accessToken, {
-          refreshToken: authRes.refreshToken,
-          expiresAt: authRes.expiresAt,
-          email: authRes.user?.email,
-        });
+        const d = await loadDashboard(
+          authRes.accessToken,
+          {
+            refreshToken: authRes.refreshToken,
+            expiresAt: authRes.expiresAt,
+            email: authRes.user?.email,
+          },
+          rememberMe,
+        );
         if (!d?.merchant) {
           toast({
             title: "الحساب غير مفعل كتاجر",
@@ -220,11 +241,15 @@ function MerchantPage() {
         if (error) throw error;
         const token = data.session?.access_token;
         if (!token) throw new Error("لم يتم إنشاء جلسة");
-        await loadDashboard(token, {
-          refreshToken: data.session?.refresh_token,
-          expiresAt: data.session?.expires_at,
-          email: data.session?.user?.email,
-        });
+        await loadDashboard(
+          token,
+          {
+            refreshToken: data.session?.refresh_token,
+            expiresAt: data.session?.expires_at,
+            email: data.session?.user?.email,
+          },
+          rememberMe,
+        );
         toast({ title: "تم تسجيل الدخول بنجاح" });
         return;
       }
@@ -421,6 +446,17 @@ function MerchantPage() {
                   className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 h-11"
                 />
               </div>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span>تذكرني على هذا الجهاز (Remember me)</span>
+                </label>
+              </div>
               <Button
                 className="w-full h-11 bg-purple-600 hover:bg-purple-500 text-white font-bold"
                 onClick={signIn}
@@ -528,224 +564,220 @@ function MerchantPage() {
 
             <ScrollReveal delayMs={70}>
               <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <h2 className="font-bold flex items-center gap-2 text-sm sm:text-base">
-                  <Package className="w-4 h-4 text-purple-400" /> باقات الشحن بأسعار التاجر
-                </h2>
-                <div className="relative w-full md:w-64">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    value={pkgSearch}
-                    onChange={(e) => setPkgSearch(e.target.value)}
-                    placeholder="ابحث بالاسم أو الكود..."
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pr-8 pl-3 py-2 text-xs text-white focus:border-purple-400 outline-none"
-                  />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <h2 className="font-bold flex items-center gap-2 text-sm sm:text-base">
+                    <Package className="w-4 h-4 text-purple-400" /> باقات الشحن بأسعار التاجر
+                  </h2>
+                  <div className="relative w-full md:w-64">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      value={pkgSearch}
+                      onChange={(e) => setPkgSearch(e.target.value)}
+                      placeholder="ابحث بالاسم أو الكود..."
+                      className="w-full rounded-xl border border-slate-700 bg-slate-900/90 pr-8 pl-3 py-2 text-xs text-white focus:border-purple-400 outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {MERCHANT_GAMES.map((g) => {
-                  const active = selectedGameId === g.id;
-                  const regions = gameRegions[g.id] || [g.id === "freefire" ? "mena" : "global"];
-                  const regionDisplay = regions.map((r) => r.toUpperCase()).join(" / ");
-                  return (
-                    <button
-                      key={g.id}
-                      onClick={() => {
-                        setSelectedGameId(g.id);
-                        const defReg = regions[0] || (g.id === "freefire" ? "mena" : "global");
-                        setSelectedPkgRegion(defReg);
-                      }}
-                      className={`flex flex-col justify-between gap-2 rounded-xl border p-2.5 sm:p-3 text-xs font-bold transition-all ${
-                        active
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {MERCHANT_GAMES.map((g) => {
+                    const active = selectedGameId === g.id;
+                    const regions = gameRegions[g.id] || [g.id === "freefire" ? "mena" : "global"];
+                    const regionDisplay = regions.map((r) => r.toUpperCase()).join(" / ");
+                    return (
+                      <button
+                        key={g.id}
+                        onClick={() => {
+                          setSelectedGameId(g.id);
+                          const defReg = regions[0] || (g.id === "freefire" ? "mena" : "global");
+                          setSelectedPkgRegion(defReg);
+                        }}
+                        className={`flex flex-col justify-between gap-2 rounded-xl border p-2.5 sm:p-3 text-xs font-bold transition-all ${active
                           ? "border-purple-500 bg-purple-500/20 text-purple-200 shadow-sm"
                           : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <Gamepad2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
-                          <span className="truncate">{g.label}</span>
-                        </span>
-                        <span className="font-mono text-[11px] rounded bg-slate-950/70 px-1.5 py-0.5 text-cyan-300">
-                          {gameCounts[g.id] ?? 0}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between w-full pt-1 border-t border-slate-800/60 text-[10px]">
-                        <span className="text-slate-400 font-normal">المنطقة (Region):</span>
-                        <span className="font-mono font-bold text-amber-300 uppercase">{regionDisplay}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                          }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <Gamepad2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                            <span className="truncate">{g.label}</span>
+                          </span>
+                          <span className="font-mono text-[11px] rounded bg-slate-950/70 px-1.5 py-0.5 text-cyan-300">
+                            {gameCounts[g.id] ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between w-full pt-1 border-t border-slate-800/60 text-[10px]">
+                          <span className="text-slate-400 font-normal">المنطقة (Region):</span>
+                          <span className="font-mono font-bold text-amber-300 uppercase">{regionDisplay}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
 
-              {availableRegions.length > 0 && (
-                <div className="flex items-center justify-between flex-wrap gap-2 rounded-xl border border-purple-500/20 bg-purple-950/20 p-2.5">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                    <Globe className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span className="font-medium text-slate-300">منطقة السيرفر المتاحة (Server Region):</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-                    {availableRegions.map(([reg, cnt]) => {
-                      const active = effectivePkgRegion === reg;
-                      return (
-                        <button
-                          key={reg}
-                          onClick={() => setSelectedPkgRegion(reg)}
-                          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold uppercase transition-all ${
-                            active
+                {availableRegions.length > 0 && (
+                  <div className="flex items-center justify-between flex-wrap gap-2 rounded-xl border border-purple-500/20 bg-purple-950/20 p-2.5">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                      <Globe className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <span className="font-medium text-slate-300">منطقة السيرفر المتاحة (Server Region):</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                      {availableRegions.map(([reg, cnt]) => {
+                        const active = effectivePkgRegion === reg;
+                        return (
+                          <button
+                            key={reg}
+                            onClick={() => setSelectedPkgRegion(reg)}
+                            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold uppercase transition-all ${active
                               ? "bg-purple-600 text-white shadow-sm shadow-purple-500/30 border border-purple-400/50"
                               : "border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200"
-                          }`}
-                        >
-                          <span>{getRegionBadgeLabel(reg)}</span>
-                          <span className={`text-[10px] font-mono px-1 rounded ${active ? "bg-purple-800 text-purple-100" : "bg-slate-950 text-slate-400"}`}>
-                            ({cnt})
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                {pkgs.slice(0, 60).map((p, idx) => {
-                  const prices = getMerchantPrices(p);
-                  const pkgRegion = (Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global");
-                  return (
-                    <div
-                      key={p.id}
-                      style={{ animationDelay: `${Math.min(idx, 11) * 25}ms` }}
-                      className="animate-meto-card flex items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-purple-500/45 hover:-translate-y-0.5 hover:shadow-md hover:shadow-purple-500/10 p-3 transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <GamePackageIcon
-                          category={p.category}
-                          diamonds={p.diamonds}
-                          bonusDiamonds={p.bonusDiamonds ?? 0}
-                          gameId={p.gameId || selectedGameId}
-                          currencyName={p.currencyName ?? undefined}
-                          size="sm"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                            <span className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</span>
-                            <span className="rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 text-[9px] font-mono uppercase font-bold shrink-0">
-                              {pkgRegion.toUpperCase()}
+                              }`}
+                          >
+                            <span>{getRegionBadgeLabel(reg)}</span>
+                            <span className={`text-[10px] font-mono px-1 rounded ${active ? "bg-purple-800 text-purple-100" : "bg-slate-950 text-slate-400"}`}>
+                              ({cnt})
                             </span>
-                            {Boolean(p.raw?.["is_composite"]) && (
-                              <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
-                                مجمعة
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                            تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م • سيرفر: <span className="text-slate-300 font-bold uppercase">{pkgRegion}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-left">
-                          {currencyInfo.currency === "EGP" ? (
-                            <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
-                              {prices.priceEgp} ج.م
-                            </div>
-                          ) : (
-                            <div>
-                              <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
-                                {prices.converted} {currencyInfo.symbolAr}
-                              </div>
-                              <div className="text-[10px] text-slate-400 font-mono">
-                                ({prices.priceEgp} ج.م)
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <Button
-                          size="sm"
-                          className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-500 text-white"
-                          onClick={() => store.addToCart(p)}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-                {pkgs.length === 0 && (
-                  <div className="col-span-full py-6 text-center text-xs text-slate-400">
-                    لا توجد باقات متزامنة حالياً لهذه اللعبة. قم بمزامنة Fazer من لوحة الإدارة.
                   </div>
                 )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {pkgs.slice(0, 60).map((p, idx) => {
+                    const prices = getMerchantPrices(p);
+                    const pkgRegion = (Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global");
+                    return (
+                      <div
+                        key={p.id}
+                        style={{ animationDelay: `${Math.min(idx, 11) * 25}ms` }}
+                        className="animate-meto-card flex items-center justify-between gap-2.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:border-purple-500/45 hover:-translate-y-0.5 hover:shadow-md hover:shadow-purple-500/10 p-3 transition-all duration-200"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <GamePackageIcon
+                            category={p.category}
+                            diamonds={p.diamonds}
+                            bonusDiamonds={p.bonusDiamonds ?? 0}
+                            gameId={p.gameId || selectedGameId}
+                            currencyName={p.currencyName ?? undefined}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                              <span className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</span>
+                              <span className="rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 text-[9px] font-mono uppercase font-bold shrink-0">
+                                {pkgRegion.toUpperCase()}
+                              </span>
+                              {Boolean(p.raw?.["is_composite"]) && (
+                                <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
+                                  مجمعة
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                              تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م • سيرفر: <span className="text-slate-300 font-bold uppercase">{pkgRegion}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="text-left">
+                            {currencyInfo.currency === "EGP" ? (
+                              <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
+                                {prices.priceEgp} ج.م
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
+                                  {prices.converted} {currencyInfo.symbolAr}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  ({prices.priceEgp} ج.م)
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-500 text-white"
+                            onClick={() => store.addToCart(p)}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {pkgs.length === 0 && (
+                    <div className="col-span-full py-6 text-center text-xs text-slate-400">
+                      لا توجد باقات متزامنة حالياً لهذه اللعبة. قم بمزامنة Fazer من لوحة الإدارة.
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             </ScrollReveal>
 
             <ScrollReveal delayMs={80}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
-                <h3 className="font-bold mb-3 text-sm sm:text-base">آخر الطلبات</h3>
-                <div className="space-y-2 max-h-80 overflow-auto text-xs">
-                  {(dash?.orders || []).slice(0, 30).map((o: any) => (
-                    <div key={o.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 font-mono text-cyan-300">
-                          <span>{o.order_ref}</span>
-                          <CopyButton text={o.order_ref} />
+                <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
+                  <h3 className="font-bold mb-3 text-sm sm:text-base">آخر الطلبات</h3>
+                  <div className="space-y-2 max-h-80 overflow-auto text-xs">
+                    {(dash?.orders || []).slice(0, 30).map((o: any) => (
+                      <div key={o.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 font-mono text-cyan-300">
+                            <span>{o.order_ref}</span>
+                            <CopyButton text={o.order_ref} />
+                          </div>
+                          <div className="text-slate-400 truncate">
+                            {o.player_id} • {o.game_id} • {o.total_egp} ج.م
+                          </div>
                         </div>
-                        <div className="text-slate-400 truncate">
-                          {o.player_id} • {o.game_id} • {o.total_egp} ج.م
-                        </div>
-                      </div>
-                      <span
-                        className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          o.status === "success"
+                        <span
+                          className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${o.status === "success"
                             ? "bg-emerald-500/20 text-emerald-300"
                             : o.status === "failed"
                               ? "bg-rose-500/20 text-rose-300"
                               : "bg-amber-500/20 text-amber-300"
-                        }`}
-                      >
-                        {ORDER_STATUS_LABEL[o.status] || o.status}
-                      </span>
-                    </div>
-                  ))}
-                  {(!dash?.orders || dash.orders.length === 0) && (
-                    <div className="text-slate-400 py-4 text-center">لا توجد طلبات مسجلة بعد.</div>
-                  )}
+                            }`}
+                        >
+                          {ORDER_STATUS_LABEL[o.status] || o.status}
+                        </span>
+                      </div>
+                    ))}
+                    {(!dash?.orders || dash.orders.length === 0) && (
+                      <div className="text-slate-400 py-4 text-center">لا توجد طلبات مسجلة بعد.</div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
-                <h3 className="font-bold mb-3 text-sm sm:text-base">حركات المحفظة (Ledger)</h3>
-                <div className="space-y-2 max-h-80 overflow-auto text-xs">
-                  {(dash?.transactions || []).slice(0, 30).map((t: any) => (
-                    <div key={t.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-white">
-                          {LEDGER_TYPE_LABEL[t.entry_type] || t.entry_type}
+                <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
+                  <h3 className="font-bold mb-3 text-sm sm:text-base">حركات المحفظة (Ledger)</h3>
+                  <div className="space-y-2 max-h-80 overflow-auto text-xs">
+                    {(dash?.transactions || []).slice(0, 30).map((t: any) => (
+                      <div key={t.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white">
+                            {LEDGER_TYPE_LABEL[t.entry_type] || t.entry_type}
+                          </div>
+                          <div className="text-slate-400 truncate">{t.note || t.reference_id || "-"}</div>
                         </div>
-                        <div className="text-slate-400 truncate">{t.note || t.reference_id || "-"}</div>
+                        <div
+                          className={`shrink-0 font-mono font-bold ${Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"
+                            }`}
+                        >
+                          {Number(t.amount) >= 0 ? "+" : ""}
+                          {t.amount}{" "}
+                          <span className="text-slate-400 font-normal">(بعدها: {t.balance_after})</span>
+                        </div>
                       </div>
-                      <div
-                        className={`shrink-0 font-mono font-bold ${
-                          Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"
-                        }`}
-                      >
-                        {Number(t.amount) >= 0 ? "+" : ""}
-                        {t.amount}{" "}
-                        <span className="text-slate-400 font-normal">(بعدها: {t.balance_after})</span>
-                      </div>
-                    </div>
-                  ))}
-                  {(!dash?.transactions || dash.transactions.length === 0) && (
-                    <div className="text-slate-400 py-4 text-center">لا توجد حركات مالية بعد.</div>
-                  )}
+                    ))}
+                    {(!dash?.transactions || dash.transactions.length === 0) && (
+                      <div className="text-slate-400 py-4 text-center">لا توجد حركات مالية بعد.</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
             </ScrollReveal>
           </>
         )}

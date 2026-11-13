@@ -125,6 +125,9 @@ export interface MerchantDashboardStats {
 
 export interface StoreSettings {
   egp_rate: number;
+  egp_rate_mode?: "manual" | "binance_auto" | undefined;
+  binance_rate?: number | null | undefined;
+  binance_updated_at?: string | null | undefined;
   fazer_balance?: number | null | undefined;
   fazer_balance_currency?: string | null | undefined;
   fazer_balance_updated_at?: string | null | undefined;

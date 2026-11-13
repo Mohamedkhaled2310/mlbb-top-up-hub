@@ -178,11 +178,26 @@ export async function adminSetMarginApi(
   return await res.json();
 }
 
-export async function adminUpdateEgpRateApi(token: string, egp_rate: number): Promise<any> {
+export async function adminUpdateEgpRateApi(
+  token: string,
+  rateOrParams: number | { egp_rate: number; mode?: "manual" | "binance_auto" },
+): Promise<any> {
+  const body =
+    typeof rateOrParams === "number"
+      ? { egp_rate: rateOrParams, mode: "manual" }
+      : { egp_rate: rateOrParams.egp_rate, mode: rateOrParams.mode || "manual" };
   const res = await fetch("/api/admin/settings/egp-rate", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ egp_rate }),
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
+export async function adminSyncBinanceRateApi(token: string): Promise<any> {
+  const res = await fetch("/api/admin/settings/sync-binance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
   });
   return await res.json();
 }
