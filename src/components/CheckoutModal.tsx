@@ -243,9 +243,9 @@ export default function CheckoutModal({
                 <span className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-cyan-400" /> السلة ({cart.length})
                 </span>
-                {isMerchant && merchantMargin > 0 && (
+                {isMerchant && (
                   <span className="text-[11px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5">
-                    خصم التاجر: {merchantMargin}%
+                    أسعار التاجر المعتمدة
                   </span>
                 )}
               </div>

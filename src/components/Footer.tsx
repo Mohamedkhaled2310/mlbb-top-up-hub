@@ -1,4 +1,5 @@
-import { Globe2, Headphones, Lock, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { Globe2, Headphones, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import metoLogo from "../assets/meto-logo.webp";
 
 type FooterProps = {
   className?: string;
@@ -13,12 +14,16 @@ export function Footer({ className = "" }: FooterProps) {
       className={`w-full border-t border-slate-800/80 bg-gradient-to-b from-[#070a14] to-[#04060c] text-slate-400 ${className}`.trim()}
     >
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {/* Brand Column */}
-          <div className="space-y-3 sm:col-span-2 lg:col-span-1">
+          <div className="space-y-3 col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-amber-500 flex items-center justify-center text-white font-black text-base shadow-lg shadow-rose-950/40">
-                M
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 via-red-600 to-cyan-500 p-0.5 shadow-lg shadow-rose-950/40 shrink-0">
+                <img
+                  src={metoLogo}
+                  alt="METO STORE"
+                  className="h-full w-full rounded-[10px] object-cover bg-white"
+                />
               </div>
               <div>
                 <h2 className="font-extrabold text-white text-base sm:text-lg tracking-wide">METO STORE</h2>
@@ -35,7 +40,7 @@ export function Footer({ className = "" }: FooterProps) {
           </div>
 
           {/* Supported Games */}
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-1">
             <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-rose-400" />
               <span>الألعاب المدعومة</span>
@@ -61,7 +66,7 @@ export function Footer({ className = "" }: FooterProps) {
           </div>
 
           {/* Quick Links & Portals */}
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-1">
             <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
               <Globe2 className="w-4 h-4 text-cyan-400" />
               <span>روابط سريعة وبوابات النظام</span>
@@ -80,21 +85,11 @@ export function Footer({ className = "" }: FooterProps) {
                   <span>بوابة التجار والعملات المتعددة</span>
                 </a>
               </li>
-              <li>
-                <a
-                  href="/admin"
-                  className="text-slate-400 hover:text-amber-300 transition-colors inline-flex items-center gap-1.5"
-                  title="بوابة دخول المشرف (محمية)"
-                >
-                  <Lock className="w-3.5 h-3.5 text-amber-400/80" />
-                  <span>دخول المشرف</span>
-                </a>
-              </li>
             </ul>
           </div>
 
           {/* Support & Contact */}
-          <div className="space-y-3">
+          <div className="space-y-3 col-span-2 lg:col-span-1">
             <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
               <Headphones className="w-4 h-4 text-emerald-400" />
               <span>الدعم الفني وخدمة العملاء</span>

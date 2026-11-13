@@ -9,7 +9,6 @@ import {
   LogOut,
   Package,
   Plus,
-  RefreshCw,
   Search,
   ShoppingCart,
   Wallet,
@@ -340,16 +339,6 @@ function MerchantPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => refreshAll(false)}
-                disabled={refreshing}
-                className="border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-                <span>تحديث</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
                 onClick={signOut}
               >
@@ -399,7 +388,7 @@ function MerchantPage() {
               </Button>
             </div>
             <p className="text-[11px] text-slate-400 text-center mt-4">
-              يمكن للأدمن إنشاء حساب تاجر جديد وتعبئة رصيده مباشرة من لوحة <a href="/admin" className="text-purple-300 underline">الإدارة</a>.
+              يتم إنشاء وتفعيل حسابات التجار وتعبئة الأرصدة مباشرة عبر إدارة المنصة.
             </p>
           </div>
         ) : (
@@ -414,10 +403,6 @@ function MerchantPage() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2 mt-1">
-                  <span>
-                    خصمك الخاص: <b className="text-purple-300">{marginPercent}%</b>
-                  </span>
-                  <span className="text-slate-600">•</span>
                   <span className={store.merchant?.is_active ? "text-emerald-400" : "text-rose-400"}>
                     {store.merchant?.is_active ? "الحساب مفعل" : "الحساب موقوف"}
                   </span>

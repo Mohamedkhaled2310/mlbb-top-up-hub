@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Store, Zap, MessageCircle, Menu, Image as ImageIcon, ChevronLeft, Shield } from "lucide-react";
+import { Store, Zap, MessageCircle, Menu, Image as ImageIcon, ChevronLeft } from "lucide-react";
 import metoLogo from "../assets/meto-logo.webp";
 import metoPoster from "../assets/meto-poster.webp";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -15,7 +15,6 @@ export function Navbar() {
   const navLinks = [
     { to: "/", label: "متجر الزبائن", icon: Store, active: "bg-rose-500/20 text-rose-300 border-rose-500/40" },
     { to: "/merchant", label: "بوابة التاجر", icon: Zap, active: "bg-purple-500/20 text-purple-300 border-purple-500/40" },
-    { to: "/admin", label: "الإدارة", icon: Shield, active: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
   ];
 
   return (
