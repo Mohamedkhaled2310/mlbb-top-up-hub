@@ -363,7 +363,7 @@ function CustomerStorePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070914] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen min-h-dvh bg-[#070914] text-slate-100 flex flex-col font-sans flex-1">
       <OfflineIndicator />
       <div
         aria-hidden="true"
@@ -434,7 +434,7 @@ function CustomerStorePage() {
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-6 py-6 pb-28">
+      <main className={`mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 flex-1 w-full space-y-6 py-6 ${cart.length > 0 ? "pb-24 sm:pb-28" : "pb-8 sm:pb-12"}`}>
         <ScrollReveal>
           <GamesSection selectedGameId={selectedGameId} onSelectGame={handleGameSelect} packageCounts={packageCounts} />
         </ScrollReveal>
@@ -871,7 +871,7 @@ function CustomerStorePage() {
         </div>
       )}
 
-      <Footer className="mt-6" />
+      <Footer className={cart.length > 0 ? "pb-20 md:pb-0" : ""} />
 
       <CheckoutModal
         open={checkoutOpen}

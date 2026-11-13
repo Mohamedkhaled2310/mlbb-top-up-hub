@@ -445,9 +445,9 @@ function AdminPage() {
   const liveCurrency = status?.fazer?.currency ?? status?.fazer_balance_currency ?? store.settings.fazer_balance_currency ?? "USD";
 
   return (
-    <div className="min-h-screen bg-[#070912] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen min-h-dvh bg-[#070912] text-slate-100 flex flex-col font-sans flex-1">
       <Navbar />
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 w-full flex-1 py-5 sm:py-6 space-y-5 sm:space-y-6 pb-16">
+      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 w-full flex-1 py-5 sm:py-6 space-y-5 sm:space-y-6 pb-8 sm:pb-10">
         <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-l from-[#14172b] to-[#0b1020] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-2xl font-extrabold flex items-center gap-2 text-white">

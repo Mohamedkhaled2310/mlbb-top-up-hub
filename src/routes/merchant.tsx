@@ -324,9 +324,9 @@ function MerchantPage() {
   const cartTotal = store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0);
 
   return (
-    <div className="min-h-screen bg-[#070913] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen min-h-dvh bg-[#070913] text-slate-100 flex flex-col font-sans flex-1">
       <Navbar />
-      <main className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 w-full flex-1 py-5 sm:py-6 space-y-5 sm:space-y-6 pb-28">
+      <main className={`mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 w-full flex-1 py-5 sm:py-6 space-y-5 sm:space-y-6 ${store.cart.length > 0 ? "pb-24 sm:pb-28" : "pb-8 sm:pb-12"}`}>
         <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-l from-[#141029] to-[#0b1022] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-2xl font-extrabold text-white">بوابة التاجر (B2B)</h1>
@@ -717,7 +717,7 @@ function MerchantPage() {
         </div>
       )}
 
-      <Footer />
+      <Footer className={store.cart.length > 0 ? "pb-20 md:pb-0" : ""} />
       <CheckoutModal
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}

@@ -11,9 +11,9 @@ export function Footer({ className = "" }: FooterProps) {
   return (
     <footer
       dir="rtl"
-      className={`w-full border-t border-slate-800/80 bg-gradient-to-b from-[#070a14] to-[#04060c] text-slate-400 ${className}`.trim()}
+      className={`w-full mt-auto border-t border-slate-800/80 bg-gradient-to-b from-[#070a14] to-[#04060c] text-slate-400 ${className}`.trim()}
     >
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12">
+      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 sm:pt-10 lg:pt-12 pb-6 sm:pb-8">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
           {/* Brand Column */}
           <div className="space-y-3 col-span-2 lg:col-span-1">
@@ -123,9 +123,6 @@ export function Footer({ className = "" }: FooterProps) {
           </div>
         </div>
       </div>
-
-      {/* Spacer for mobile fixed cart bar */}
-      <div className="h-20 sm:h-16 md:h-2" aria-hidden="true" />
     </footer>
   );
 }
