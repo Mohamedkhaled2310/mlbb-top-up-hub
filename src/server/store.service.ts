@@ -945,6 +945,8 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     order_ref: orderRef,
     status: finalStatus,
     total_egp: total,
+    game_id: effectiveGameId,
+    region,
     refunded_egp: asMerchant && failedAmount > 0 ? failedAmount : 0,
     balance_egp: updatedBalance,
     transaction_ids: txIds,

@@ -38,6 +38,9 @@ export default function CheckoutModal({
   const [needsManualRegion, setNeedsManualRegion] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [paidTotal, setPaidTotal] = useState<number>(0);
+  const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
+  const [summaryRegion, setSummaryRegion] = useState<string>("global");
   const submitted = useRef(false);
   const latestRegionRef = useRef(player.region || "");
   latestRegionRef.current = player.region || "";
@@ -46,6 +49,7 @@ export default function CheckoutModal({
     if (open) {
       setStep("form");
       setResult(null);
+      setPaidTotal(0);
       setRegion(latestRegionRef.current);
       setRegionLocked(Boolean(latestRegionRef.current));
       setNeedsManualRegion(false);
@@ -126,18 +130,27 @@ export default function CheckoutModal({
   const submit = async () => {
     if (submitted.current) return;
     submitted.current = true;
+    const currentTotal = total;
+    const currentGame = activeGameId;
+    const currentRegion = region.trim() || "global";
+    setPaidTotal(currentTotal);
+    setSummaryGameId(currentGame);
+    setSummaryRegion(currentRegion);
     setStep("processing");
     try {
       const body = {
         playerId: player.id.trim(),
         zoneId: (player.zoneId || "").trim(),
-        gameId: activeGameId,
-        region: region.trim() || "global",
+        gameId: currentGame,
+        region: currentRegion,
         items: cart.map((c) => ({ offerId: c.package.offerId, qty: c.qty })),
         asMerchant: isMerchant,
       };
       const res = await submitOrderApi(body, accessToken);
       setResult(res);
+      if (typeof res?.total_egp === "number" && res.total_egp > 0) {
+        setPaidTotal(res.total_egp);
+      }
       if (typeof res?.balance_egp === "number" && accessToken && merchant) {
         setAuth(accessToken, profile, { ...merchant, balance_egp: res.balance_egp });
       }
@@ -416,11 +429,15 @@ export default function CheckoutModal({
               </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">اللعبة والمنطقة:</span>
-                <span className="font-semibold text-slate-200">{activeGameId.toUpperCase()} • {region || "Global"}</span>
+                <span className="font-semibold text-slate-200">
+                  {(result?.game_id || summaryGameId || activeGameId).toUpperCase()} • {result?.region || summaryRegion || region || "Global"}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">المبلغ الإجمالي:</span>
-                <span className="font-bold text-base text-rose-400 font-mono">{total} ج.م</span>
+                <span className="font-bold text-base text-rose-400 font-mono">
+                  {typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total} ج.م
+                </span>
               </div>
             </div>
 
@@ -429,7 +446,9 @@ export default function CheckoutModal({
                 type="button"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2"
                 onClick={() => {
-                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${activeGameId.toUpperCase()}\nالإجمالي: ${total} ج.م\nالحالة: تم الشحن بنجاح ✅\nhttps://meto-three.vercel.app`;
+                  const finalPaid = typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total;
+                  const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
+                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: تم الشحن بنجاح ✅\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                 }}
               >
