@@ -258,7 +258,7 @@ function AdminPage() {
       toast({ title: "تم الدخول كأدمن بنجاح" });
     } catch (e: any) {
       setIsAdmin(false);
-      toast({ title: "فشل الدخول أو غير مصرح", description: e?.message || "تأكد أن الحساب يحمل دور admin" });
+      toast({ title: "فشل الدخول أو غير مصرح", description: e?.message || "بيانات الدخول غير صحيحة" });
     } finally {
       setLoading(false);
     }
@@ -477,7 +477,7 @@ function AdminPage() {
               </div>
               <h2 className="text-lg sm:text-xl font-extrabold text-white">دخول لوحة الأدمن</h2>
               <p className="text-xs text-slate-400 mt-1">
-                سجّل الدخول بحساب يحمل دور <code className="text-amber-300">admin</code>
+                تسجيل الدخول للمشرفين المصرح لهم فقط
               </p>
             </div>
             <div className="space-y-3">
@@ -510,9 +510,6 @@ function AdminPage() {
                 {loading ? "جارٍ الدخول..." : "دخول لوحة الإدارة"}
               </Button>
             </div>
-            <p className="text-[11px] text-slate-400 text-center mt-4">
-              تأكد أن للمستخدم <code>profiles.role = &apos;admin&apos;</code> في قاعدة بيانات Vercel / Supabase.
-            </p>
           </div>
         ) : (
           <>
