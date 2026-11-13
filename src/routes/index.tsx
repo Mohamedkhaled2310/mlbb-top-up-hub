@@ -521,7 +521,7 @@ function CustomerStorePage() {
             })}
           </div>
 
-          {availableRegions.length > 1 && (
+          {availableRegions.length > 0 && (
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               <span className="text-[11px] text-slate-500 shrink-0 pl-1">السيرفر / المنطقة:</span>
               {availableRegions.map(([reg, cnt]) => {
@@ -584,6 +584,9 @@ function CustomerStorePage() {
                             مجمعة
                           </span>
                         )}
+                        <span className="rounded bg-slate-800/80 text-cyan-300 border border-slate-700/60 px-1.5 py-0.2 text-[10px] font-mono uppercase font-bold shrink-0">
+                          {(Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global")}
+                        </span>
                       </div>
                       <div className="text-[11px] text-slate-400">
                         {p.bonusDiamonds
@@ -638,6 +641,9 @@ function CustomerStorePage() {
                           مجمعة
                         </span>
                       )}
+                      <span className="rounded bg-slate-800 text-cyan-300 border border-slate-700/60 px-1.5 py-0.5 text-[10px] font-mono uppercase font-bold">
+                        {(Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global")}
+                      </span>
                     </div>
                     <h3 className="font-bold text-white text-xs sm:text-sm line-clamp-2 min-h-[2.25rem]">{p.name}</h3>
                     <p className="text-[10px] text-slate-400 mt-1">

@@ -43,6 +43,26 @@ const MERCHANT_GAMES = [
   { id: "hok", label: "Honor of Kings", currency: "Tokens" },
 ];
 
+const REGION_LABELS: Record<string, string> = {
+  global: "عالمي (Global)",
+  mena: "الشرق الأوسط (MENA)",
+  br: "البرازيل (Brazil)",
+  id: "إندونيسيا (Indonesia)",
+  my: "ماليزيا (Malaysia)",
+  tr: "تركيا (Turkey)",
+  ph: "الفلبين (Philippines)",
+  ru: "روسيا (Russia)",
+  vn: "فيتنام (Vietnam)",
+  bd: "بنغلاديش (Bangladesh)",
+  eu: "أوروبا (Europe)",
+  us: "أمريكا (USA)",
+};
+
+function getRegionBadgeLabel(reg: string): string {
+  const r = (reg || "").trim().toLowerCase();
+  return REGION_LABELS[r] || r.toUpperCase();
+}
+
 const ORDER_STATUS_LABEL: Record<string, string> = {
   success: "مكتمل",
   failed: "فشل (مسترد)",
@@ -323,6 +343,28 @@ function MerchantPage() {
   const cartCount = store.cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal = store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0);
 
+  const gameRegions = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const p of store.packages) {
+      if (!p.active) continue;
+      const g = p.gameId || "mlbb";
+      const r = (Array.isArray(p.regions) && p.regions[0]) || (g === "freefire" ? "mena" : "global");
+      if (!map[g]) map[g] = [];
+      if (!map[g]!.includes(r)) map[g]!.push(r);
+    }
+    return map;
+  }, [store.packages]);
+
+  const cartRegions = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of store.cart) {
+      const p = item.package;
+      const r = (Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global");
+      if (r) set.add(r.toUpperCase());
+    }
+    return Array.from(set).join(", ");
+  }, [store.cart]);
+
   return (
     <div className="min-h-screen min-h-dvh bg-[#070913] text-slate-100 flex flex-col font-sans flex-1">
       <Navbar />
@@ -504,57 +546,74 @@ function MerchantPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {MERCHANT_GAMES.map((g) => {
                   const active = selectedGameId === g.id;
+                  const regions = gameRegions[g.id] || [g.id === "freefire" ? "mena" : "global"];
+                  const regionDisplay = regions.map((r) => r.toUpperCase()).join(" / ");
                   return (
                     <button
                       key={g.id}
                       onClick={() => {
                         setSelectedGameId(g.id);
-                        setSelectedPkgRegion(g.id === "freefire" ? "mena" : "global");
+                        const defReg = regions[0] || (g.id === "freefire" ? "mena" : "global");
+                        setSelectedPkgRegion(defReg);
                       }}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs font-bold transition-all ${
+                      className={`flex flex-col justify-between gap-2 rounded-xl border p-2.5 sm:p-3 text-xs font-bold transition-all ${
                         active
                           ? "border-purple-500 bg-purple-500/20 text-purple-200 shadow-sm"
                           : "border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200"
                       }`}
                     >
-                      <span className="flex items-center gap-1.5 truncate">
-                        <Gamepad2 className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{g.label}</span>
-                      </span>
-                      <span className="font-mono text-[11px] rounded bg-slate-950/70 px-1.5 py-0.5 text-cyan-300">
-                        {gameCounts[g.id] ?? 0}
-                      </span>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Gamepad2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                          <span className="truncate">{g.label}</span>
+                        </span>
+                        <span className="font-mono text-[11px] rounded bg-slate-950/70 px-1.5 py-0.5 text-cyan-300">
+                          {gameCounts[g.id] ?? 0}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between w-full pt-1 border-t border-slate-800/60 text-[10px]">
+                        <span className="text-slate-400 font-normal">المنطقة (Region):</span>
+                        <span className="font-mono font-bold text-amber-300 uppercase">{regionDisplay}</span>
+                      </div>
                     </button>
                   );
                 })}
               </div>
 
-              {availableRegions.length > 1 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  <span className="text-[11px] text-slate-400 shrink-0 pl-1">المنطقة:</span>
-                  {availableRegions.map(([reg, cnt]) => {
-                    const active = effectivePkgRegion === reg;
-                    return (
-                      <button
-                        key={reg}
-                        onClick={() => setSelectedPkgRegion(reg)}
-                        className={`flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase transition-all ${
-                          active
-                            ? "bg-purple-500/25 text-purple-200 border border-purple-500/50"
-                            : "border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200"
-                        }`}
-                      >
-                        <span>{reg}</span>
-                        <span className="text-[10px] opacity-75 font-mono">({cnt})</span>
-                      </button>
-                    );
-                  })}
+              {availableRegions.length > 0 && (
+                <div className="flex items-center justify-between flex-wrap gap-2 rounded-xl border border-purple-500/20 bg-purple-950/20 p-2.5">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                    <Globe className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span className="font-medium text-slate-300">منطقة السيرفر المتاحة (Server Region):</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                    {availableRegions.map(([reg, cnt]) => {
+                      const active = effectivePkgRegion === reg;
+                      return (
+                        <button
+                          key={reg}
+                          onClick={() => setSelectedPkgRegion(reg)}
+                          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold uppercase transition-all ${
+                            active
+                              ? "bg-purple-600 text-white shadow-sm shadow-purple-500/30 border border-purple-400/50"
+                              : "border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          <span>{getRegionBadgeLabel(reg)}</span>
+                          <span className={`text-[10px] font-mono px-1 rounded ${active ? "bg-purple-800 text-purple-100" : "bg-slate-950 text-slate-400"}`}>
+                            ({cnt})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {pkgs.slice(0, 60).map((p, idx) => {
                   const prices = getMerchantPrices(p);
+                  const pkgRegion = (Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global");
                   return (
                     <div
                       key={p.id}
@@ -571,16 +630,19 @@ function MerchantPage() {
                           size="sm"
                         />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                             <span className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</span>
+                            <span className="rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 text-[9px] font-mono uppercase font-bold shrink-0">
+                              {pkgRegion.toUpperCase()}
+                            </span>
                             {Boolean(p.raw?.["is_composite"]) && (
                               <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
                                 مجمعة
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 font-mono">
-                            تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م
+                          <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                            تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م • سيرفر: <span className="text-slate-300 font-bold uppercase">{pkgRegion}</span>
                           </div>
                         </div>
                       </div>
@@ -697,7 +759,14 @@ function MerchantPage() {
                 <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5 text-purple-300" />
               </div>
               <div className="min-w-0">
-                <div className="font-bold text-xs sm:text-sm truncate">{cartCount} عنصر في السلة</div>
+                <div className="font-bold text-xs sm:text-sm truncate flex items-center gap-1.5">
+                  <span>{cartCount} عنصر في السلة</span>
+                  {cartRegions && (
+                    <span className="text-[10px] bg-purple-950 text-cyan-300 border border-purple-500/40 px-1.5 py-0.2 rounded font-mono font-bold">
+                      {cartRegions}
+                    </span>
+                  )}
+                </div>
                 <div className="text-[11px] sm:text-xs text-slate-300">
                   إجمالي الخصم: <span className="text-purple-300 font-bold font-mono">{cartTotal} ج.م</span>
                 </div>
