@@ -286,7 +286,7 @@ begin
     raise exception 'merchant_not_found_or_inactive';
   end if;
 
-  if not (public.is_admin() or auth.uid() = v_owner or auth.role() = 'service_role') then
+  if not (public.is_admin() or auth.role() = 'service_role') then
     raise exception 'forbidden';
   end if;
 
@@ -380,7 +380,7 @@ begin
     raise exception 'merchant_not_found';
   end if;
 
-  if not (public.is_admin() or auth.uid() = v_owner or auth.role() = 'service_role') then
+  if not (public.is_admin() or auth.role() = 'service_role') then
     raise exception 'forbidden';
   end if;
 
@@ -391,6 +391,20 @@ begin
       and wl.reference_id = p_order_ref
   ) then
     raise exception 'order_already_refunded';
+  end if;
+
+  select abs(amount) into v_owner
+  from public.wallet_ledger
+  where merchant_id = p_merchant_id
+    and entry_type = 'order_debit'
+    and reference_id = p_order_ref;
+
+  if v_owner is null then
+    raise exception 'cannot_refund_order_that_was_never_debited';
+  end if;
+
+  if p_amount > v_owner then
+    raise exception 'refund_amount_exceeds_debited_amount';
   end if;
 
   select (m.balance_egp + round(p_amount,2))
@@ -413,29 +427,17 @@ begin
 end;
 $$;
 
--- 27) revoke function execute from public/anon
-revoke all on function public.admin_credit_merchant(uuid,numeric,text,text,text) from public, anon;
+-- 27) revoke function execute from public, anon, authenticated
+revoke all on function public.admin_credit_merchant(uuid,numeric,text,text,text) from public, anon, authenticated;
+revoke all on function public.debit_merchant_for_order(uuid,numeric,text,text) from public, anon, authenticated;
+revoke all on function public.admin_set_merchant_margin(uuid,numeric) from public, anon, authenticated;
+revoke all on function public.refund_merchant_for_order(uuid,numeric,text,text) from public, anon, authenticated;
 
--- 28)
-revoke all on function public.debit_merchant_for_order(uuid,numeric,text,text) from public, anon;
-
--- 29)
-revoke all on function public.admin_set_merchant_margin(uuid,numeric) from public, anon;
-
--- 29b)
-revoke all on function public.refund_merchant_for_order(uuid,numeric,text,text) from public, anon;
-
--- 30) grant execute to authenticated/service_role
-grant execute on function public.admin_credit_merchant(uuid,numeric,text,text,text) to authenticated, service_role;
-
--- 31)
-grant execute on function public.debit_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
-
--- 32)
-grant execute on function public.admin_set_merchant_margin(uuid,numeric) to authenticated, service_role;
-
--- 32b)
-grant execute on function public.refund_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
+-- 28) grant execute exclusively to service_role (trusted backend only)
+grant execute on function public.admin_credit_merchant(uuid,numeric,text,text,text) to service_role;
+grant execute on function public.debit_merchant_for_order(uuid,numeric,text,text) to service_role;
+grant execute on function public.admin_set_merchant_margin(uuid,numeric) to service_role;
+grant execute on function public.refund_merchant_for_order(uuid,numeric,text,text) to service_role;
 
 -- 33) enable RLS: profiles
 alter table public.profiles enable row level security;

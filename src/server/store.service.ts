@@ -531,10 +531,14 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     ? body.items
     : [];
   const items = rawItems
-    .map((i) => ({
-      offerId: String(i.offerId || i.packageId || "").trim(),
-      qty: Math.max(1, Math.min(20, Number(i.qty || 1))),
-    }))
+    .map((i) => {
+      const parsedQty = Math.floor(Number(i.qty));
+      const safeQty = Number.isFinite(parsedQty) && parsedQty >= 1 ? Math.min(20, parsedQty) : 1;
+      return {
+        offerId: String(i.offerId || i.packageId || "").trim(),
+        qty: safeQty,
+      };
+    })
     .filter((i) => i.offerId);
 
   const playerId = String(body?.playerId || "").trim();
@@ -659,7 +663,10 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     };
   });
 
-  const total = orderItems.reduce((s, i) => s + i.unit_price_egp * i.qty, 0);
+  const total = Math.round(orderItems.reduce((s, i) => s + i.unit_price_egp * i.qty, 0) * 100) / 100;
+  if (!Number.isFinite(total) || total <= 0) {
+    return { success: false, error: "قيمة الطلب غير صحيحة" };
+  }
   const orderRef = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
   const { data: order, error: oerr } = await sb

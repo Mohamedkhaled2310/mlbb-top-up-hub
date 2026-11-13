@@ -204,7 +204,7 @@ begin
   select m.user_id into v_owner from public.merchant_accounts m
   where m.id = p_merchant_id and m.is_active = true;
   if not found then raise exception 'merchant_not_found_or_inactive'; end if;
-  if not (public.is_admin() or auth.uid() = v_owner or auth.role() = 'service_role') then
+  if not (public.is_admin() or auth.role() = 'service_role') then
     raise exception 'forbidden';
   end if;
   if exists (
@@ -241,7 +241,7 @@ begin
   if p_amount is null or p_amount <= 0 then raise exception 'amount_must_be_positive'; end if;
   select m.user_id into v_owner from public.merchant_accounts m where m.id = p_merchant_id;
   if not found then raise exception 'merchant_not_found'; end if;
-  if not (public.is_admin() or auth.uid() = v_owner or auth.role() = 'service_role') then
+  if not (public.is_admin() or auth.role() = 'service_role') then
     raise exception 'forbidden';
   end if;
   if exists (
@@ -257,14 +257,14 @@ begin
   return query select p_merchant_id, v_new_balance, v_ledger_id;
 end; $$;
 
-revoke all on function public.admin_credit_merchant(uuid,numeric,text,text,text) from public, anon;
-revoke all on function public.debit_merchant_for_order(uuid,numeric,text,text) from public, anon;
-revoke all on function public.refund_merchant_for_order(uuid,numeric,text,text) from public, anon;
-revoke all on function public.admin_set_merchant_margin(uuid,numeric) from public, anon;
-grant execute on function public.admin_credit_merchant(uuid,numeric,text,text,text) to authenticated, service_role;
-grant execute on function public.debit_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
-grant execute on function public.refund_merchant_for_order(uuid,numeric,text,text) to authenticated, service_role;
-grant execute on function public.admin_set_merchant_margin(uuid,numeric) to authenticated, service_role;
+revoke all on function public.admin_credit_merchant(uuid,numeric,text,text,text) from public, anon, authenticated;
+revoke all on function public.debit_merchant_for_order(uuid,numeric,text,text) from public, anon, authenticated;
+revoke all on function public.refund_merchant_for_order(uuid,numeric,text,text) from public, anon, authenticated;
+revoke all on function public.admin_set_merchant_margin(uuid,numeric) from public, anon, authenticated;
+grant execute on function public.admin_credit_merchant(uuid,numeric,text,text,text) to service_role;
+grant execute on function public.debit_merchant_for_order(uuid,numeric,text,text) to service_role;
+grant execute on function public.refund_merchant_for_order(uuid,numeric,text,text) to service_role;
+grant execute on function public.admin_set_merchant_margin(uuid,numeric) to service_role;
 
 alter table public.profiles enable row level security;
 alter table public.merchant_accounts enable row level security;
