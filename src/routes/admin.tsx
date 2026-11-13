@@ -7,8 +7,10 @@ import {
   Lock,
   LogOut,
   Package,
+  Pencil,
   Power,
   RefreshCw,
+  Search,
   Server,
   Shield,
   Sparkles,
@@ -33,12 +35,14 @@ import {
   adminSyncFazerApi,
   adminToggleMerchantApi,
   adminUpdateEgpRateApi,
+  adminUpdatePackagePriceApi,
   checkSystemStatusApi,
   getStoreApi,
   loginWithPasswordApi,
   refreshSessionApi,
 } from "../lib/api-client";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo } from "../lib/currency";
+import { calcMerchantBasePriceEgp, calcRetailPriceEgp } from "../lib/pricing";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -78,6 +82,11 @@ function AdminPage() {
   const [mQuery, setMQuery] = useState("");
   const [orders, setOrders] = useState<any[]>([]);
   const [pkgGameFilter, setPkgGameFilter] = useState<string>("all");
+  const [pkgSearch, setPkgSearch] = useState<string>("");
+  const [editingPkg, setEditingPkg] = useState<any | null>(null);
+  const [editCostUsd, setEditCostUsd] = useState<string>("");
+  const [editPkgName, setEditPkgName] = useState<string>("");
+  const [savingPkg, setSavingPkg] = useState(false);
 
   const [credit, setCredit] = useState<{ id: string; amount: string; note: string } | null>(null);
   const [marginEdit, setMarginEdit] = useState<{ id: string; value: string } | null>(null);
@@ -484,6 +493,40 @@ function AdminPage() {
     }
   };
 
+  const openEditPkg = (p: any) => {
+    setEditingPkg(p);
+    setEditCostUsd(String(p.costUsd || ""));
+    setEditPkgName(p.name || "");
+  };
+
+  const submitPackagePrice = async () => {
+    if (!token || !editingPkg) return;
+    const cost = Number(editCostUsd);
+    if (!Number.isFinite(cost) || cost <= 0) {
+      toast({ title: "خطأ", description: "يرجى إدخال سعر تكلفة صحيح بالدولار أكبر من صفر" });
+      return;
+    }
+    setSavingPkg(true);
+    try {
+      const res = await adminUpdatePackagePriceApi(token, {
+        offerId: editingPkg.offerId || editingPkg.id,
+        costUsd: cost,
+        ...(editPkgName.trim() ? { name: editPkgName.trim() } : {}),
+      });
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: "تم تعديل وحفظ سعر الباقة بنجاح",
+        description: `${editingPkg.name} • التكلفة: $${cost}`,
+      });
+      setEditingPkg(null);
+      await loadStore();
+    } catch (e: any) {
+      toast({ title: "فشل تعديل السعر", description: e?.message });
+    } finally {
+      setSavingPkg(false);
+    }
+  };
+
   const groupedCounts = useMemo(() => {
     const m: Record<string, number> = {};
     for (const p of store.packages) {
@@ -494,9 +537,22 @@ function AdminPage() {
   }, [store.packages]);
 
   const filteredAdminPackages = useMemo(() => {
-    if (pkgGameFilter === "all") return store.packages;
-    return store.packages.filter((p) => (p.gameId || "mlbb") === pkgGameFilter);
-  }, [store.packages, pkgGameFilter]);
+    let list = store.packages;
+    if (pkgGameFilter !== "all") {
+      list = list.filter((p) => (p.gameId || "mlbb") === pkgGameFilter);
+    }
+    if (pkgSearch.trim()) {
+      const q = pkgSearch.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.name || "").toLowerCase().includes(q) ||
+          (p.offerId || "").toLowerCase().includes(q) ||
+          (p.gameId || "").toLowerCase().includes(q) ||
+          String(p.diamonds || "").includes(q),
+      );
+    }
+    return list;
+  }, [store.packages, pkgGameFilter, pkgSearch]);
 
   const liveBalance = status?.fazer?.balance ?? status?.fazer_balance ?? store.settings.fazer_balance ?? null;
   const liveCurrency = status?.fazer?.currency ?? status?.fazer_balance_currency ?? store.settings.fazer_balance_currency ?? "USD";
@@ -1001,28 +1057,39 @@ function AdminPage() {
             {/* Filterable packages table */}
             <ScrollReveal delayMs={70}>
               <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                 <h2 className="font-bold flex items-center gap-2 text-sm sm:text-base">
                   <Package className="w-4 h-4 text-cyan-400" /> الباقات المتزامنة ({filteredAdminPackages.length})
                 </h2>
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  {["all", "mlbb", "pubg", "freefire", "hok"].map((g) => (
-                    <button
-                      key={g}
-                      onClick={() => setPkgGameFilter(g)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${
-                        pkgGameFilter === g
-                          ? "bg-cyan-600 text-white"
-                          : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      {g === "all" ? "الكل" : g}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-56">
+                    <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <Input
+                      placeholder="بحث بالاسم أو الكود..."
+                      value={pkgSearch}
+                      onChange={(e) => setPkgSearch(e.target.value)}
+                      className={`pr-8 h-8 text-xs ${DARK_INPUT}`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    {["all", "mlbb", "pubg", "freefire", "hok"].map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setPkgGameFilter(g)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase ${
+                          pkgGameFilter === g
+                            ? "bg-cyan-600 text-white"
+                            : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {g === "all" ? "الكل" : g}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[420px]">
-                <table className="w-full text-xs min-w-[720px]">
+                <table className="w-full text-xs min-w-[760px]">
                   <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
                     <tr>
                       <th className="p-2.5 text-right">اللعبة</th>
@@ -1030,22 +1097,35 @@ function AdminPage() {
                       <th className="p-2.5">Offer ID</th>
                       <th className="p-2.5">تكلفة $</th>
                       <th className="p-2.5">سعر البيع (ج.م)</th>
+                      <th className="p-2.5">أساس التاجر (ج.م)</th>
+                      <th className="p-2.5">إجراء</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
                     {filteredAdminPackages.slice(0, 200).map((p) => (
-                      <tr key={p.id}>
+                      <tr key={p.id} className="hover:bg-slate-900/40">
                         <td className="p-2.5 text-right uppercase font-bold text-slate-300">{p.gameId}</td>
-                        <td className="p-2.5 text-right text-white">{p.name}</td>
+                        <td className="p-2.5 text-right text-white font-medium">{p.name}</td>
                         <td className="p-2.5 text-center font-mono text-[11px] text-slate-400">{p.offerId}</td>
-                        <td className="p-2.5 text-center font-mono">{p.costUsd || 0}</td>
-                        <td className="p-2.5 text-center font-mono text-emerald-300">{p.retailPriceEgp}</td>
+                        <td className="p-2.5 text-center font-mono font-bold text-amber-300">${p.costUsd || 0}</td>
+                        <td className="p-2.5 text-center font-mono text-emerald-300">{p.retailPriceEgp} ج.م</td>
+                        <td className="p-2.5 text-center font-mono text-purple-300">{p.merchantBasePriceEgp} ج.م</td>
+                        <td className="p-2.5 text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-[11px] border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/60 font-semibold gap-1"
+                            onClick={() => openEditPkg(p)}
+                          >
+                            <Pencil className="w-3 h-3" /> تعديل
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                     {filteredAdminPackages.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-slate-400">
-                          لا توجد باقات بعد — اضغط "مزامنة الباقات والرصيد الآن".
+                        <td colSpan={7} className="p-6 text-center text-slate-400">
+                          لا توجد باقات مطابقة للبحث أو الفلتر.
                         </td>
                       </tr>
                     )}
@@ -1211,6 +1291,97 @@ function AdminPage() {
               حفظ
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Package Price Modal */}
+      <Dialog open={!!editingPkg} onOpenChange={(o) => !o && setEditingPkg(null)}>
+        <DialogContent className="max-w-md bg-[#0a0f20] border border-cyan-500/40 text-slate-100 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-cyan-400" /> تعديل سعر وتفاصيل الباقة
+            </DialogTitle>
+          </DialogHeader>
+          {editingPkg && (
+            <div className="space-y-3.5 text-xs">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white text-sm">{editingPkg.name}</span>
+                  <span className="uppercase font-mono font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded text-[10px] border border-cyan-500/30">
+                    {editingPkg.gameId}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Offer ID: <span className="text-slate-300">{editingPkg.offerId}</span>
+                </div>
+                {editingPkg.diamonds > 0 && (
+                  <div className="text-[11px] text-slate-400">
+                    القيمة: <b className="text-amber-300">{editingPkg.diamonds}</b> ماسة / شدة
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">
+                  سعر التكلفة الأساسي بالدولار ($ USD) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="مثال: 1.33"
+                  value={editCostUsd}
+                  onChange={(e) => setEditCostUsd(e.target.value)}
+                  className={`font-mono text-sm ${DARK_INPUT}`}
+                />
+              </div>
+
+              {/* Live preview of retail and merchant prices */}
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 text-center">
+                <div className="space-y-0.5">
+                  <div className="text-[10px] text-slate-400">سعر البيع للجمهور (+15%):</div>
+                  <div className="text-sm font-black font-mono text-emerald-300">
+                    {calcRetailPriceEgp(Number(editCostUsd) || 0, egpRate)} ج.م
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-[10px] text-slate-400">أساس سعر التجار (+7.5%):</div>
+                  <div className="text-sm font-black font-mono text-purple-300">
+                    {calcMerchantBasePriceEgp(Number(editCostUsd) || 0, egpRate)} ج.م
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">
+                  اسم الباقة (اختياري)
+                </label>
+                <Input
+                  type="text"
+                  value={editPkgName}
+                  onChange={(e) => setEditPkgName(e.target.value)}
+                  placeholder="اسم الباقة"
+                  className={DARK_INPUT}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  onClick={() => setEditingPkg(null)}
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+                  onClick={submitPackagePrice}
+                  disabled={savingPkg || !editCostUsd}
+                >
+                  {savingPkg ? "جارٍ الحفظ..." : "حفظ السعر الجديد"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -336,13 +336,12 @@ export async function curateMlbbPackages(sb: any) {
   const activeBaseOfferIds = new Set(Object.values(MLBB_BASE_PACKAGES).map((b) => b.baseOfferId));
   const activeCompositeOfferIds = new Set(MLBB_COMPOSITE_DEFINITIONS.map((c) => c.offerId));
 
-  // Find weekly pass
-  const weeklyPassRow = pkgs.find(
-    (p: any) =>
-      p.category === "weekly_pass" &&
-      (p.offer_id === "mobile_legends_brazil:weekly_pass" || p.offer_id === "mobile_legends_global:weekly_pass"),
-  );
-  const activeWeeklyPassId = weeklyPassRow?.offer_id || "mobile_legends_brazil:weekly_pass";
+  // Find weekly pass: prioritize global weekly pass (1.33 USD) over brazil (1.22 USD)
+  const weeklyPassRow =
+    pkgs.find((p: any) => p.offer_id === "mobile_legends_global:weekly_pass") ||
+    pkgs.find((p: any) => p.category === "weekly_pass" && p.offer_id.includes("global")) ||
+    pkgs.find((p: any) => p.category === "weekly_pass");
+  const activeWeeklyPassId = weeklyPassRow?.offer_id || "mobile_legends_global:weekly_pass";
 
   const allActiveOfferIds = new Set([
     ...Array.from(activeBaseOfferIds),
@@ -363,16 +362,34 @@ export async function curateMlbbPackages(sb: any) {
       .eq("offer_id", b.baseOfferId);
   }
 
-  // 4. Update weekly pass
+  // 4. Update weekly pass: ensure cost is 1.33 USD and active for global
+  const rawWeeklyCost = Number(weeklyPassRow?.cost_usd || 1.33);
+  const effectiveWeeklyCost =
+    weeklyPassRow?.raw?.cost_edited_by_admin && typeof weeklyPassRow.raw.custom_cost_usd === "number"
+      ? weeklyPassRow.raw.custom_cost_usd
+      : rawWeeklyCost === 1.22 || rawWeeklyCost === 1.335
+        ? 1.33
+        : rawWeeklyCost || 1.33;
+
   await sb
     .from("fazer_packages")
     .update({
       name: "Weekly Diamond Pass",
-      regions: ["global", "br"],
+      category: "weekly_pass",
+      cost_usd: effectiveWeeklyCost,
+      regions: ["global", "all"],
       active: true,
       updated_at: nowIso,
     })
     .eq("offer_id", activeWeeklyPassId);
+
+  // If mobile_legends_brazil:weekly_pass was previously active, deactivate it
+  if (activeWeeklyPassId !== "mobile_legends_brazil:weekly_pass") {
+    await sb
+      .from("fazer_packages")
+      .update({ active: false, updated_at: nowIso })
+      .eq("offer_id", "mobile_legends_brazil:weekly_pass");
+  }
 
   // 5. Deactivate all other MLBB packages
   const toDeactivate = pkgs

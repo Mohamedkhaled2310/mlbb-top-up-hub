@@ -675,13 +675,20 @@ function MerchantPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م • سيرفر: <span className="text-slate-300 font-bold uppercase">{pkgRegion}</span>
+                            <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
+                              <span>سيرفر: <strong className="text-slate-300 uppercase">{pkgRegion}</strong></span>
+                              {p.diamonds > 0 && (
+                                <>
+                                  <span className="text-slate-600">•</span>
+                                  <span className="text-slate-300 font-bold">{p.diamonds} ماسة</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <div className="text-left">
+                            <div className="text-[10px] text-slate-400">سعر الخصم:</div>
                             {currencyInfo.currency === "EGP" ? (
                               <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
                                 {prices.priceEgp} ج.م

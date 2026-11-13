@@ -10,6 +10,7 @@ import {
   adminToggleMerchantStatus,
   adminUpdateEgpRate,
   adminSyncBinanceRate,
+  adminUpdatePackagePrice,
   getMerchantDashboard,
   getMyProfile,
   getPublicAuthConfig,
@@ -340,6 +341,18 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       const token = getAuthToken(request);
       if (!token) return json({ error: "unauthorized" }, 401);
       const data = await adminSyncBinanceRate(token);
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/packages/price" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = await request.json();
+      const data = await adminUpdatePackagePrice(token, body);
       return json(data);
     } catch (e: any) {
       return json({ error: e?.message || "failed" }, 400);

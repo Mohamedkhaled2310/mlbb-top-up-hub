@@ -202,6 +202,18 @@ export async function adminSyncBinanceRateApi(token: string): Promise<any> {
   return await res.json();
 }
 
+export async function adminUpdatePackagePriceApi(
+  token: string,
+  body: { offerId: string; costUsd: number; name?: string | undefined; active?: boolean | undefined },
+): Promise<any> {
+  const res = await fetch("/api/admin/packages/price", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
 export async function adminSyncFazerApi(token?: string, secret?: string): Promise<any> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;

@@ -119,4 +119,46 @@ describe("MLBB Base & Composite Packages", () => {
     expect(found.offer_id).toBe("mobile_legends_brazil:78_8_diamonds");
     expect(found.cost_usd).toBe(0.98);
   });
+
+  it("curateMlbbPackages sets global weekly pass to 1.33 USD and deactivates brazil 1.22 pass", async () => {
+    const { curateMlbbPackages } = await import("../server/mlbb-packages");
+    const mockPackages = [
+      { offer_id: "mobile_legends_brazil:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 0.98 },
+      { offer_id: "mobile_legends_brazil:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.22 },
+      { offer_id: "mobile_legends_global:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.335 },
+    ];
+
+    const updates: any[] = [];
+    const deactivations: any[] = [];
+
+    const mockSb = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => Promise.resolve({ data: mockPackages }),
+        }),
+        upsert: () => Promise.resolve({ error: null }),
+        update: (fields: any) => ({
+          eq: (col: string, val: any) => {
+            updates.push({ col, val, fields });
+            return Promise.resolve({ error: null });
+          },
+          in: (col: string, vals: any[]) => {
+            deactivations.push({ col, vals, fields });
+            return Promise.resolve({ error: null });
+          },
+        }),
+      }),
+    };
+
+    const res = await curateMlbbPackages(mockSb);
+    expect(res.activeWeeklyPassId).toBe("mobile_legends_global:weekly_pass");
+
+    const weeklyUpdate = updates.find((u) => u.val === "mobile_legends_global:weekly_pass");
+    expect(weeklyUpdate).toBeDefined();
+    expect(weeklyUpdate.fields.cost_usd).toBe(1.33);
+    expect(weeklyUpdate.fields.active).toBe(true);
+
+    const brazilPassDeactivated = updates.find((u) => u.val === "mobile_legends_brazil:weekly_pass" && u.fields.active === false);
+    expect(brazilPassDeactivated).toBeDefined();
+  });
 });

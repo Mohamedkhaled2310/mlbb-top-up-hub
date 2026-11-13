@@ -250,20 +250,32 @@ async function syncFazerInternal() {
     let upserted = 0;
     let upsertError: string | null = null;
     if (catalog.ok && catalog.products.length) {
-      const rows = catalog.products.map((p) => ({
-        offer_id: p.offer_id,
-        game_id: p.game_id || "mlbb",
-        category: p.category || "diamonds",
-        name: p.name,
-        diamonds: p.diamonds || 0,
-        bonus_diamonds: p.bonus_diamonds || 0,
-        currency_name: p.currency_name || null,
-        cost_usd: p.cost_usd ?? null,
-        regions: p.regions ?? null,
-        active: p.active !== false,
-        raw: p.raw ?? null,
-        updated_at: nowIso,
-      }));
+      // Preserve any custom costs previously set by admin
+      const { data: existingRows } = await sb.from("fazer_packages").select("offer_id, cost_usd, raw");
+      const customOverrides = new Map<string, { cost_usd: number; raw: any }>();
+      for (const ex of existingRows || []) {
+        if (ex?.raw?.cost_edited_by_admin && typeof ex.cost_usd === "number") {
+          customOverrides.set(ex.offer_id, { cost_usd: ex.cost_usd, raw: ex.raw });
+        }
+      }
+
+      const rows = catalog.products.map((p) => {
+        const override = customOverrides.get(p.offer_id);
+        return {
+          offer_id: p.offer_id,
+          game_id: p.game_id || "mlbb",
+          category: p.category || "diamonds",
+          name: p.name,
+          diamonds: p.diamonds || 0,
+          bonus_diamonds: p.bonus_diamonds || 0,
+          currency_name: p.currency_name || null,
+          cost_usd: override ? override.cost_usd : p.cost_usd ?? null,
+          regions: p.regions ?? null,
+          active: p.active !== false,
+          raw: override ? { ...(p.raw ?? {}), ...override.raw } : p.raw ?? null,
+          updated_at: nowIso,
+        };
+      });
       const { error } = await sb.from("fazer_packages").upsert(rows, { onConflict: "offer_id" });
       if (!error) {
         upserted = rows.length;
@@ -1374,4 +1386,79 @@ export async function updateMyNationality(token: string, region: string) {
     .single();
   if (error) throw new Error(error.message);
   return { success: true, profile: data };
+}
+
+export async function adminUpdatePackagePrice(
+  token: string,
+  body: {
+    offerId?: string | undefined;
+    offer_id?: string | undefined;
+    costUsd?: number | undefined;
+    cost_usd?: number | undefined;
+    name?: string | undefined;
+    active?: boolean | undefined;
+  },
+) {
+  await requireAdmin(token);
+  const offerId = (body.offerId || body.offer_id || "").trim();
+  const costUsd = Number(body.costUsd ?? body.cost_usd);
+
+  if (!offerId) throw new Error("معرف الباقة (offerId) مطلوب");
+  if (!Number.isFinite(costUsd) || costUsd <= 0) {
+    throw new Error("سعر التكلفة بالدولار يجب أن يكون رقماً أكبر من صفر");
+  }
+
+  const sb = getAdminClient() as any;
+  const nowIso = new Date().toISOString();
+
+  const { data: existing, error: fetchErr } = await sb
+    .from("fazer_packages")
+    .select("*")
+    .eq("offer_id", offerId)
+    .maybeSingle();
+
+  if (fetchErr || !existing) {
+    throw new Error("الباقة غير موجودة في قاعدة البيانات");
+  }
+
+  const prevRaw = (existing.raw as any) || {};
+  const updatedRaw = {
+    ...prevRaw,
+    custom_cost_usd: costUsd,
+    cost_edited_by_admin: true,
+    admin_edited_at: nowIso,
+  };
+
+  const updateFields: Record<string, any> = {
+    cost_usd: Math.round(costUsd * 10000) / 10000,
+    raw: updatedRaw,
+    updated_at: nowIso,
+  };
+
+  if (typeof body.name === "string" && body.name.trim()) {
+    updateFields["name"] = body.name.trim();
+  }
+  if (typeof body.active === "boolean") {
+    updateFields["active"] = body.active;
+  }
+
+  const { data: updated, error: updateErr } = await sb
+    .from("fazer_packages")
+    .update(updateFields)
+    .eq("offer_id", offerId)
+    .select()
+    .single();
+
+  if (updateErr) throw new Error(updateErr.message);
+
+  // If MLBB package, re-curate to update composite package formulas immediately
+  if (existing.game_id === "mlbb") {
+    try {
+      await curateMlbbPackages(sb);
+    } catch (e) {
+      console.error("Failed to curate MLBB packages after price update:", e);
+    }
+  }
+
+  return { success: true, package: updated };
 }
