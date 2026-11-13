@@ -571,7 +571,14 @@ function MerchantPage() {
                           size="sm"
                         />
                         <div className="min-w-0">
-                          <div className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</div>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</span>
+                            {Boolean(p.raw?.["is_composite"]) && (
+                              <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
+                                مجمعة
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-slate-400 font-mono">
                             تكلفة: ${p.costUsd || 0} • بيع: {p.retailPriceEgp} ج.م
                           </div>

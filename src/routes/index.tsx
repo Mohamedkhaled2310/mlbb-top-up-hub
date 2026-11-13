@@ -579,6 +579,11 @@ function CustomerStorePage() {
                             2x
                           </span>
                         )}
+                        {Boolean(p.raw?.["is_composite"]) && (
+                          <span className="rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 text-[10px] font-bold shrink-0">
+                            مجمعة
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400">
                         {p.bonusDiamonds
@@ -626,6 +631,11 @@ function CustomerStorePage() {
                       {p.category === "double_diamonds" && (
                         <span className="rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 text-[10px] font-bold">
                           2x
+                        </span>
+                      )}
+                      {Boolean(p.raw?.["is_composite"]) && (
+                        <span className="rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1.5 py-0.5 text-[10px] font-bold">
+                          مجمعة
                         </span>
                       )}
                     </div>

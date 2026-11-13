@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { FazerCardsService } from "./fazercards.service";
 import { getLiveUsdRates } from "./fx.service";
+import { curateMlbbPackages } from "./mlbb-packages";
 import {
   DEFAULT_EGP_RATE,
   DEFAULT_MERCHANT_MARKUP,
@@ -283,6 +284,12 @@ async function syncFazerInternal() {
       }
     }
 
+    try {
+      await curateMlbbPackages(sb);
+    } catch (curateErr) {
+      console.error("Failed to curate MLBB packages during sync:", curateErr);
+    }
+
     await sb.from("store_settings").update(updates).eq("id", 1);
 
     const gamesBreakdown = catalog.products.reduce((acc: Record<string, number>, p) => {
@@ -375,6 +382,28 @@ export async function getStoreData(gameId?: string) {
   const distinctGames = new Set((pkgs || []).map((p: any) => p.game_id));
   const lastSyncMs = settingsRow?.packages_synced_at ? Date.parse(settingsRow.packages_synced_at) : 0;
   const syncStale = !lastSyncMs || Date.now() - lastSyncMs > 5 * 60 * 1000;
+  const hasUncuratedMlbb = (pkgs || []).some(
+    (p: any) => p.game_id === "mlbb" && (p.offer_id?.startsWith("mobile_legends_malaysia") || p.offer_id?.startsWith("mobile_legends_turkey")) && p.active,
+  );
+  const missingCompositeMlbb = (pkgs || []).some((p: any) => p.game_id === "mlbb") && !(pkgs || []).some((p: any) => p.raw?.is_composite);
+
+  if (!process.env["VITEST"] && (hasUncuratedMlbb || missingCompositeMlbb)) {
+    try {
+      await curateMlbbPackages(sb);
+      let qRefresh = sb
+        .from("fazer_packages")
+        .select("*")
+        .eq("active", true)
+        .order("diamonds", { ascending: true })
+        .order("updated_at", { ascending: false })
+        .limit(1000);
+      if (gameId) qRefresh = qRefresh.eq("game_id", gameId);
+      pkgs = (await qRefresh).data || pkgs;
+    } catch {
+      // Ignore curate error
+    }
+  }
+
   if ((!pkgs || pkgs.length === 0 || (!gameId && distinctGames.size < 4 && syncStale)) && readEnv("FAZER_API_KEY")) {
     try {
       await syncFazerInternal();
@@ -433,6 +462,13 @@ export async function getStoreData(gameId?: string) {
       active: !!p.active,
       raw: p.raw || null,
     };
+  });
+
+  packages.sort((a: any, b: any) => {
+    const totalA = (a.diamonds || 0) + (a.bonusDiamonds || 0);
+    const totalB = (b.diamonds || 0) + (b.bonusDiamonds || 0);
+    if (totalA !== totalB) return totalA - totalB;
+    return (a.costUsd || 0) - (b.costUsd || 0);
   });
 
   return {
@@ -648,6 +684,9 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       p.raw && typeof p.raw === "object" && typeof p.raw.fazer_offer_id === "string"
         ? p.raw.fazer_offer_id
         : FazerCardsService.splitCompositeOfferId(String(p.offer_id)).rawOfferId;
+    const isComposite = Boolean(
+      p?.raw && typeof p.raw === "object" && p.raw.is_composite && Array.isArray(p.raw.components) && p.raw.components.length > 0,
+    );
     return {
       package_id: p.offer_id,
       fazer_offer_id: rawFazerOfferId,
@@ -660,6 +699,8 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       bonus_diamonds: Number(p.bonus_diamonds || 0),
       game_id: p.game_id || effectiveGameId,
       region,
+      is_composite: isComposite,
+      components: isComposite ? p.raw.components : null,
     };
   });
 
@@ -718,25 +759,101 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   const responses: any[] = [];
 
   for (const it of orderItems) {
-    for (let q = 0; q < it.qty; q++) {
-      const res = await FazerCardsService.executeTopUp({
-        offerId: it.fazer_offer_id,
-        playerId,
-        zoneId,
-        gameId: it.game_id,
-        fazerCategoryId: it.fazer_category_id,
-        region,
-        idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
-      });
-      responses.push({ item: it.fazer_offer_id, q, res });
-      if (res.success) {
-        succeededCount++;
-        if (res.transactionId) txIds.push(res.transactionId);
-        if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
-      } else {
-        failedCount++;
-        failedAmount += it.unit_price_egp;
-        lastErr = res.error || "فشل تنفيذ الشحن لدى المزود";
+    if (it.is_composite && Array.isArray(it.components) && it.components.length > 0) {
+      const components = it.components;
+      const totalCompCost =
+        components.reduce(
+          (sum: number, c: any) => sum + Number(c.cost_usd || 0) * Number(c.qty || 1),
+          0,
+        ) || it.unit_cost_usd || 1;
+
+      const flattenedComps: Array<{
+        offerId: string;
+        fazerOfferId: string;
+        fazerCategoryId?: string;
+        diamonds: number;
+        costUsd: number;
+      }> = [];
+      for (const comp of components) {
+        const cQty = Math.max(1, Math.floor(Number(comp.qty || 1)));
+        for (let cq = 0; cq < cQty; cq++) {
+          flattenedComps.push({
+            offerId: comp.offer_id,
+            fazerOfferId: comp.fazer_offer_id,
+            fazerCategoryId: comp.fazer_category_id || it.fazer_category_id,
+            diamonds: Number(comp.diamonds || 0),
+            costUsd: Number(comp.cost_usd || 0),
+          });
+        }
+      }
+
+      for (let q = 0; q < it.qty; q++) {
+        let remainingUnitEgp = it.unit_price_egp;
+
+        for (let cIdx = 0; cIdx < flattenedComps.length; cIdx++) {
+          const comp = flattenedComps[cIdx]!;
+          const isLastComp = cIdx === flattenedComps.length - 1;
+          const compShareEgp = isLastComp
+            ? Math.round(remainingUnitEgp * 100) / 100
+            : Math.min(
+                remainingUnitEgp,
+                Math.round(((comp.costUsd || 1) / totalCompCost) * it.unit_price_egp * 100) / 100,
+              );
+          remainingUnitEgp = Math.max(0, remainingUnitEgp - compShareEgp);
+
+          const idempotencyKey = `${orderRef}-${it.package_id}-${q}-${comp.fazerOfferId}-${cIdx}`;
+          const res = await FazerCardsService.executeTopUp({
+            offerId: comp.fazerOfferId,
+            playerId,
+            zoneId,
+            gameId: it.game_id,
+            fazerCategoryId: comp.fazerCategoryId,
+            region,
+            idempotencyKey,
+          });
+
+          responses.push({
+            parent_package: it.package_id,
+            item: comp.fazerOfferId,
+            diamonds: comp.diamonds,
+            q,
+            sub_index: cIdx,
+            share_egp: compShareEgp,
+            res,
+          });
+
+          if (res.success) {
+            succeededCount++;
+            if (res.transactionId) txIds.push(res.transactionId);
+            if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
+          } else {
+            failedCount++;
+            failedAmount += compShareEgp;
+            lastErr = res.error || `فشل شحن باقة ${comp.diamonds} ماسة ضمن الباقة المتجمعة`;
+          }
+        }
+      }
+    } else {
+      for (let q = 0; q < it.qty; q++) {
+        const res = await FazerCardsService.executeTopUp({
+          offerId: it.fazer_offer_id,
+          playerId,
+          zoneId,
+          gameId: it.game_id,
+          fazerCategoryId: it.fazer_category_id,
+          region,
+          idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
+        });
+        responses.push({ item: it.fazer_offer_id, q, res });
+        if (res.success) {
+          succeededCount++;
+          if (res.transactionId) txIds.push(res.transactionId);
+          if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
+        } else {
+          failedCount++;
+          failedAmount += it.unit_price_egp;
+          lastErr = res.error || "فشل تنفيذ الشحن لدى المزود";
+        }
       }
     }
   }
