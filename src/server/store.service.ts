@@ -671,14 +671,9 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const p = byId.get(it.offerId);
     const pregions = Array.isArray(p?.regions) ? p.regions.map(normalizeRegion) : [];
     const normReqRegion = normalizeRegion(region);
-    if (
-      pregions.length &&
-      !pregions.includes("global") &&
-      normReqRegion &&
-      normReqRegion !== "global" &&
-      normReqRegion !== "all" &&
-      !pregions.includes(normReqRegion)
-    ) {
+    const hasGlobal = pregions.length === 0 || pregions.includes("global");
+    const isRegionMatch = Boolean(normReqRegion && (normReqRegion === "all" || pregions.includes(normReqRegion)));
+    if (pregions.length > 0 && !hasGlobal && !isRegionMatch) {
       return { success: false, error: `الباقة "${p.name}" غير متاحة لمنطقة ${region}.` };
     }
   }
@@ -1456,6 +1451,7 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       gameId: p.game_id,
       name: p.name,
       diamonds: Number(p.diamonds || 0),
+      regions: p.regions || null,
       costUsd,
       costEgp,
       merchantPriceEgp: merchantPrice,

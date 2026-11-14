@@ -110,33 +110,46 @@ describe("MLBB Base & Composite Packages", () => {
     expect(pkg1412.cost_usd).toBe(15.64);
   });
 
-  it("findBasePackageForTarget correctly locates preferred base offers", () => {
+  it("findBasePackageForTarget correctly locates base offers by preferred region", () => {
     const pkgs = [
-      { offer_id: "mobile_legends_global:86_diamonds", diamonds: 86, bonus_diamonds: 0, cost_usd: 1.2 },
-      { offer_id: "mobile_legends_brazil:78_8_diamonds", diamonds: 78, bonus_diamonds: 8, cost_usd: 0.98 },
+      { offer_id: "mobile_legends_global:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 1.06, regions: ["global"] },
+      { offer_id: "mobile_legends_brazil:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 0.97, regions: ["br"] },
     ];
-    const found = findBasePackageForTarget(pkgs, 86);
-    expect(found.offer_id).toBe("mobile_legends_brazil:78_8_diamonds");
-    expect(found.cost_usd).toBe(0.98);
+    const foundGlobal = findBasePackageForTarget(pkgs, 86, "global");
+    expect(foundGlobal.offer_id).toBe("mobile_legends_global:78_8_diamonds");
+    expect(foundGlobal.cost_usd).toBe(1.06);
+
+    const foundBr = findBasePackageForTarget(pkgs, 86, "br");
+    expect(foundBr.offer_id).toBe("mobile_legends_brazil:78_8_diamonds");
+    expect(foundBr.cost_usd).toBe(0.97);
   });
 
-  it("curateMlbbPackages sets global weekly pass to 1.33 USD and deactivates brazil 1.22 pass", async () => {
+  it("curateMlbbPackages activates both Global and Brazil weekly passes and base packages with respective costs", async () => {
     const { curateMlbbPackages } = await import("../server/mlbb-packages");
     const mockPackages = [
-      { offer_id: "mobile_legends_brazil:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 0.98 },
-      { offer_id: "mobile_legends_brazil:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.22 },
-      { offer_id: "mobile_legends_global:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.335 },
+      { offer_id: "mobile_legends_global:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 1.06 },
+      { offer_id: "mobile_legends_brazil:78_8_diamonds", game_id: "mlbb", diamonds: 78, bonus_diamonds: 8, cost_usd: 0.97 },
+      { offer_id: "mobile_legends_global:156_16_diamonds", game_id: "mlbb", diamonds: 156, bonus_diamonds: 16, cost_usd: 2.1 },
+      { offer_id: "mobile_legends_brazil:156_16_diamonds", game_id: "mlbb", diamonds: 156, bonus_diamonds: 16, cost_usd: 1.93 },
+      { offer_id: "mobile_legends_global:234_23_diamonds", game_id: "mlbb", diamonds: 234, bonus_diamonds: 23, cost_usd: 3.04 },
+      { offer_id: "mobile_legends_brazil:234_23_diamonds", game_id: "mlbb", diamonds: 234, bonus_diamonds: 23, cost_usd: 2.88 },
+      { offer_id: "mobile_legends_brazil:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.21 },
+      { offer_id: "mobile_legends_global:weekly_pass", game_id: "mlbb", category: "weekly_pass", cost_usd: 1.319 },
     ];
 
     const updates: any[] = [];
     const deactivations: any[] = [];
+    const upserts: any[] = [];
 
     const mockSb = {
       from: (table: string) => ({
         select: () => ({
           eq: () => Promise.resolve({ data: mockPackages }),
         }),
-        upsert: () => Promise.resolve({ error: null }),
+        upsert: (rows: any) => {
+          upserts.push(rows);
+          return Promise.resolve({ error: null });
+        },
         update: (fields: any) => ({
           eq: (col: string, val: any) => {
             updates.push({ col, val, fields });
@@ -151,14 +164,36 @@ describe("MLBB Base & Composite Packages", () => {
     };
 
     const res = await curateMlbbPackages(mockSb);
-    expect(res.activeWeeklyPassId).toBe("mobile_legends_global:weekly_pass");
+    expect(res.globalBaseCount).toBe(8);
+    expect(res.brazilBaseCount).toBe(8);
+    expect(res.compositeCount).toBe(30); // 15 Global + 15 Brazil
 
-    const weeklyUpdate = updates.find((u) => u.val === "mobile_legends_global:weekly_pass");
-    expect(weeklyUpdate).toBeDefined();
-    expect(weeklyUpdate.fields.cost_usd).toBe(1.33);
-    expect(weeklyUpdate.fields.active).toBe(true);
+    // Verify Global 172 Diamonds (156+16) has exact $2.10 cost and regions: ["global"]
+    const global172 = updates.find((u) => u.val === "mobile_legends_global:156_16_diamonds");
+    expect(global172).toBeDefined();
+    expect(global172.fields.cost_usd).toBe(2.1);
+    expect(global172.fields.regions).toEqual(["global"]);
+    expect(global172.fields.active).toBe(true);
 
-    const brazilPassDeactivated = updates.find((u) => u.val === "mobile_legends_brazil:weekly_pass" && u.fields.active === false);
-    expect(brazilPassDeactivated).toBeDefined();
+    // Verify Brazil 172 Diamonds (156+16) has exact $1.93 cost and regions: ["br"]
+    const brazil172 = updates.find((u) => u.val === "mobile_legends_brazil:156_16_diamonds");
+    expect(brazil172).toBeDefined();
+    expect(brazil172.fields.cost_usd).toBe(1.93);
+    expect(brazil172.fields.regions).toEqual(["br"]);
+    expect(brazil172.fields.active).toBe(true);
+
+    // Verify Global Weekly Pass has cost 1.319 and regions: ["global"]
+    const globalWeekly = updates.find((u) => u.val === "mobile_legends_global:weekly_pass");
+    expect(globalWeekly).toBeDefined();
+    expect(globalWeekly.fields.cost_usd).toBe(1.319);
+    expect(globalWeekly.fields.regions).toEqual(["global"]);
+    expect(globalWeekly.fields.active).toBe(true);
+
+    // Verify Brazil Weekly Pass has cost 1.21 and regions: ["br"]
+    const brazilWeekly = updates.find((u) => u.val === "mobile_legends_brazil:weekly_pass");
+    expect(brazilWeekly).toBeDefined();
+    expect(brazilWeekly.fields.cost_usd).toBe(1.21);
+    expect(brazilWeekly.fields.regions).toEqual(["br"]);
+    expect(brazilWeekly.fields.active).toBe(true);
   });
 });

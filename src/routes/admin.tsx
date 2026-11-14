@@ -135,6 +135,7 @@ function AdminPage() {
   const [profileData, setProfileData] = useState<any | null>(null);
   const [profilePkgSearch, setProfilePkgSearch] = useState("");
   const [profilePkgGame, setProfilePkgGame] = useState("all");
+  const [profilePkgServer, setProfilePkgServer] = useState("all");
   const [profileTab, setProfileTab] = useState<"packages" | "ledger" | "orders">("packages");
 
   const loadStore = useCallback(async () => {
@@ -2243,37 +2244,63 @@ function AdminPage() {
               {/* Tab 1: Custom Merchant Packages & Exact Prices */}
               {profileTab === "packages" && (
                 <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
+                        {[
+                          { id: "all", label: "كافة الألعاب" },
+                          { id: "mlbb", label: "Mobile Legends" },
+                          { id: "pubg", label: "PUBG Mobile" },
+                          { id: "freefire", label: "Free Fire" },
+                          { id: "hok", label: "Honor of Kings" },
+                        ].map((tg) => (
+                          <button
+                            key={tg.id}
+                            type="button"
+                            onClick={() => setProfilePkgGame(tg.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+                              profilePkgGame === tg.id
+                                ? "bg-slate-800 text-purple-300 border border-purple-500/40"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            {tg.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="relative w-full sm:w-56">
+                        <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                        <Input
+                          value={profilePkgSearch}
+                          onChange={(e) => setProfilePkgSearch(e.target.value)}
+                          placeholder="بحث بالاسم أو الكود..."
+                          className={`h-8 text-xs pr-8 ${DARK_INPUT}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Server/Region Filter */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                      <span className="text-slate-400 text-[11px] font-semibold shrink-0 ml-1">السيرفر:</span>
                       {[
-                        { id: "all", label: "كافة الألعاب" },
-                        { id: "mlbb", label: "Mobile Legends" },
-                        { id: "pubg", label: "PUBG Mobile" },
-                        { id: "freefire", label: "Free Fire" },
-                        { id: "hok", label: "Honor of Kings" },
-                      ].map((tg) => (
+                        { id: "all", label: "كل السيرفرات" },
+                        { id: "global", label: "عالمي (Global)" },
+                        { id: "br", label: "البرازيل (Brazil)" },
+                        { id: "mena", label: "الشرق الأوسط (MENA)" },
+                      ].map((srv) => (
                         <button
-                          key={tg.id}
+                          key={srv.id}
                           type="button"
-                          onClick={() => setProfilePkgGame(tg.id)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
-                            profilePkgGame === tg.id
-                              ? "bg-slate-800 text-purple-300 border border-purple-500/40"
-                              : "text-slate-400 hover:text-slate-200"
+                          onClick={() => setProfilePkgServer(srv.id)}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 transition-all ${
+                            profilePkgServer === srv.id
+                              ? "bg-purple-600 text-white shadow-sm"
+                              : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
                           }`}
                         >
-                          {tg.label}
+                          {srv.label}
                         </button>
                       ))}
-                    </div>
-                    <div className="relative w-full sm:w-56">
-                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
-                      <Input
-                        value={profilePkgSearch}
-                        onChange={(e) => setProfilePkgSearch(e.target.value)}
-                        placeholder="بحث بالاسم أو الكود..."
-                        className={`h-8 text-xs pr-8 ${DARK_INPUT}`}
-                      />
                     </div>
                   </div>
 
@@ -2283,7 +2310,7 @@ function AdminPage() {
                       <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
                         <tr>
                           <th className="p-2.5 text-right">الباقة</th>
-                          <th className="p-2.5">اللعبة</th>
+                          <th className="p-2.5">اللعبة والسيرفر</th>
                           <th className="p-2.5">تكلفة الجملة ($/ج.م)</th>
                           <th className="p-2.5 text-center bg-purple-950/40 text-purple-200">
                             سعر بيع الباقة للتاجر
@@ -2298,45 +2325,61 @@ function AdminPage() {
                         {profileData.packagesPreview
                           ?.filter((p: any) => {
                             const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                            const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
+                            const serverMatch = profilePkgServer === "all" || pReg === profilePkgServer.toLowerCase();
                             const q = profilePkgSearch.trim().toLowerCase();
                             const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
-                            return gameMatch && textMatch;
+                            return gameMatch && serverMatch && textMatch;
                           })
-                          .map((p: any) => (
-                            <tr key={p.id} className="hover:bg-slate-900/40">
-                              <td className="p-2.5 text-right">
-                                <div className="font-semibold text-white">{p.name}</div>
-                                {p.diamonds > 0 && (
-                                  <div className="text-[11px] text-slate-400 font-mono">
-                                    {p.diamonds} ماسة / شدة
+                          .map((p: any) => {
+                            const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
+                            const srvLabel = pReg === "br" ? "البرازيل (Brazil)" : pReg === "mena" ? "MENA" : "عالمي (Global)";
+                            const isBr = pReg === "br";
+                            return (
+                              <tr key={p.id} className="hover:bg-slate-900/40">
+                                <td className="p-2.5 text-right">
+                                  <div className="font-semibold text-white">{p.name}</div>
+                                  {p.diamonds > 0 && (
+                                    <div className="text-[11px] text-slate-400 font-mono">
+                                      {p.diamonds} ماسة / شدة
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="uppercase font-mono font-bold text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                                      {p.gameId}
+                                    </span>
+                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                      isBr
+                                        ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-300"
+                                        : "bg-purple-950/60 border-purple-500/30 text-purple-300"
+                                    }`}>
+                                      {srvLabel}
+                                    </span>
                                   </div>
-                                )}
-                              </td>
-                              <td className="p-2.5 text-center">
-                                <span className="uppercase font-mono font-bold text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-1.5 py-0.5 rounded">
-                                  {p.gameId}
-                                </span>
-                              </td>
-                              <td className="p-2.5 text-center font-mono">
-                                <div className="text-slate-300">${formatDecimals3(p.costUsd)}</div>
-                                <div className="text-[10px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
-                              </td>
-                              <td className="p-2.5 text-center font-mono bg-purple-950/20">
-                                <div className="font-extrabold text-purple-300 text-sm">
-                                  {formatDecimals3(p.merchantPriceEgp)} ج.م
-                                </div>
-                                <div className="text-[10px] text-slate-400">
-                                  ≈ ${formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50))} USD
-                                </div>
-                              </td>
-                              <td className="p-2.5 text-center font-mono text-emerald-400 font-bold">
-                                +{formatDecimals3(p.profitPerUnitEgp)} ج.م
-                              </td>
-                              <td className="p-2.5 text-center font-mono text-slate-400">
-                                {formatDecimals3(p.retailPriceEgp)} ج.م
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="p-2.5 text-center font-mono">
+                                  <div className="text-slate-300 font-bold">${formatDecimals3(p.costUsd)}</div>
+                                  <div className="text-[10px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
+                                </td>
+                                <td className="p-2.5 text-center font-mono bg-purple-950/20">
+                                  <div className="font-extrabold text-purple-300 text-sm">
+                                    {formatDecimals3(p.merchantPriceEgp)} ج.م
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">
+                                    ≈ ${formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50))} USD
+                                  </div>
+                                </td>
+                                <td className="p-2.5 text-center font-mono text-emerald-400 font-bold">
+                                  +{formatDecimals3(p.profitPerUnitEgp)} ج.م
+                                </td>
+                                <td className="p-2.5 text-center font-mono text-slate-400">
+                                  {formatDecimals3(p.retailPriceEgp)} ج.م
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
@@ -2346,12 +2389,17 @@ function AdminPage() {
                     {profileData.packagesPreview
                       ?.filter((p: any) => {
                         const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                        const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
+                        const serverMatch = profilePkgServer === "all" || pReg === profilePkgServer.toLowerCase();
                         const q = profilePkgSearch.trim().toLowerCase();
                         const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
-                        return gameMatch && textMatch;
+                        return gameMatch && serverMatch && textMatch;
                       })
                       .map((p: any) => {
                         const merchantUsd = formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50));
+                        const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
+                        const srvLabel = pReg === "br" ? "البرازيل (Brazil)" : pReg === "mena" ? "MENA" : "عالمي (Global)";
+                        const isBr = pReg === "br";
                         return (
                           <div
                             key={p.id}
@@ -2362,6 +2410,13 @@ function AdminPage() {
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="uppercase font-mono font-bold text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-1.5 py-0.5 rounded">
                                     {p.gameId}
+                                  </span>
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                                    isBr
+                                      ? "bg-emerald-950/60 border-emerald-500/30 text-emerald-300"
+                                      : "bg-purple-950/60 border-purple-500/30 text-purple-300"
+                                  }`}>
+                                    {srvLabel}
                                   </span>
                                   <span className="font-bold text-white text-xs">{p.name}</span>
                                 </div>
@@ -2379,7 +2434,7 @@ function AdminPage() {
                             <div className="grid grid-cols-3 gap-1.5 bg-[#080c1b] border border-slate-800/80 rounded-lg p-2 text-center text-xs">
                               <div>
                                 <div className="text-[10px] text-slate-400">تكلفة الجملة</div>
-                                <div className="font-mono text-slate-300 text-xs">${formatDecimals3(p.costUsd)}</div>
+                                <div className="font-mono text-slate-300 text-xs font-bold">${formatDecimals3(p.costUsd)}</div>
                                 <div className="font-mono text-[9px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
                               </div>
                               <div className="bg-purple-950/30 border border-purple-500/20 rounded-md py-0.5 px-1">

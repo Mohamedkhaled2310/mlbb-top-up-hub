@@ -1,6 +1,9 @@
 /**
  * Curated MLBB (Mobile Legends: Bang Bang) Base and Composite Packages.
  *
+ * Provides dedicated, clean base packages and dynamically calculated composite packages
+ * for both Global (mobile_legends_global) and Brazil (mobile_legends_brazil) servers.
+ *
  * Base Packages (الباقات الأساسية المعتمدة):
  *  - 86 Diamonds (78 + 8)
  *  - 172 Diamonds (156 + 16)
@@ -49,64 +52,126 @@ export interface MlbbBasePkgInfo {
   fallbackCostUsd: number;
 }
 
-export const MLBB_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
+export const MLBB_GLOBAL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
+  86: {
+    totalDiamonds: 86,
+    baseOfferId: "mobile_legends_global:78_8_diamonds",
+    rawOfferId: "78_8_diamonds",
+    name: "86 Diamonds",
+    fallbackCostUsd: 1.06,
+  },
+  172: {
+    totalDiamonds: 172,
+    baseOfferId: "mobile_legends_global:156_16_diamonds",
+    rawOfferId: "156_16_diamonds",
+    name: "172 Diamonds",
+    fallbackCostUsd: 2.1,
+  },
+  257: {
+    totalDiamonds: 257,
+    baseOfferId: "mobile_legends_global:234_23_diamonds",
+    rawOfferId: "234_23_diamonds",
+    name: "257 Diamonds",
+    fallbackCostUsd: 3.04,
+  },
+  706: {
+    totalDiamonds: 706,
+    baseOfferId: "mobile_legends_global:625_81_diamonds",
+    rawOfferId: "625_81_diamonds",
+    name: "706 Diamonds",
+    fallbackCostUsd: 8.27,
+  },
+  2195: {
+    totalDiamonds: 2195,
+    baseOfferId: "mobile_legends_global:1860_335_diamonds",
+    rawOfferId: "1860_335_diamonds",
+    name: "2195 Diamonds",
+    fallbackCostUsd: 25.02,
+  },
+  3688: {
+    totalDiamonds: 3688,
+    baseOfferId: "mobile_legends_global:3099_589_diamonds",
+    rawOfferId: "3099_589_diamonds",
+    name: "3688 Diamonds",
+    fallbackCostUsd: 41.75,
+  },
+  5532: {
+    totalDiamonds: 5532,
+    baseOfferId: "mobile_legends_global:4649_883_diamonds",
+    rawOfferId: "4649_883_diamonds",
+    name: "5532 Diamonds",
+    fallbackCostUsd: 63.03,
+  },
+  9288: {
+    totalDiamonds: 9288,
+    baseOfferId: "mobile_legends_global:7740_1548_diamonds",
+    rawOfferId: "7740_1548_diamonds",
+    name: "9288 Diamonds",
+    fallbackCostUsd: 104.69,
+  },
+};
+
+export const MLBB_BRAZIL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
   86: {
     totalDiamonds: 86,
     baseOfferId: "mobile_legends_brazil:78_8_diamonds",
     rawOfferId: "78_8_diamonds",
     name: "86 Diamonds",
-    fallbackCostUsd: 0.98,
+    fallbackCostUsd: 0.97,
   },
   172: {
     totalDiamonds: 172,
     baseOfferId: "mobile_legends_brazil:156_16_diamonds",
     rawOfferId: "156_16_diamonds",
     name: "172 Diamonds",
-    fallbackCostUsd: 1.96,
+    fallbackCostUsd: 1.93,
   },
   257: {
     totalDiamonds: 257,
     baseOfferId: "mobile_legends_brazil:234_23_diamonds",
     rawOfferId: "234_23_diamonds",
     name: "257 Diamonds",
-    fallbackCostUsd: 2.92,
+    fallbackCostUsd: 2.88,
   },
   706: {
     totalDiamonds: 706,
     baseOfferId: "mobile_legends_brazil:625_81_diamonds",
     rawOfferId: "625_81_diamonds",
     name: "706 Diamonds",
-    fallbackCostUsd: 7.82,
+    fallbackCostUsd: 7.71,
   },
   2195: {
     totalDiamonds: 2195,
     baseOfferId: "mobile_legends_brazil:1860_335_diamonds",
     rawOfferId: "1860_335_diamonds",
     name: "2195 Diamonds",
-    fallbackCostUsd: 23.47,
+    fallbackCostUsd: 23.13,
   },
   3688: {
     totalDiamonds: 3688,
     baseOfferId: "mobile_legends_brazil:3099_589_diamonds",
     rawOfferId: "3099_589_diamonds",
     name: "3688 Diamonds",
-    fallbackCostUsd: 39.12,
+    fallbackCostUsd: 38.55,
   },
   5532: {
     totalDiamonds: 5532,
     baseOfferId: "mobile_legends_brazil:4649_883_diamonds",
     rawOfferId: "4649_883_diamonds",
     name: "5532 Diamonds",
-    fallbackCostUsd: 58.68,
+    fallbackCostUsd: 57.82,
   },
   9288: {
     totalDiamonds: 9288,
     baseOfferId: "mobile_legends_brazil:7740_1548_diamonds",
     rawOfferId: "7740_1548_diamonds",
     name: "9288 Diamonds",
-    fallbackCostUsd: 97.8,
+    fallbackCostUsd: 96.37,
   },
 };
+
+/** Default backward-compatible base packages point to Global */
+export const MLBB_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = MLBB_GLOBAL_BASE_PACKAGES;
 
 export const MLBB_BASE_TARGETS = [86, 172, 257, 706, 2195, 3688, 5532, 9288] as const;
 
@@ -240,15 +305,30 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
 ];
 
 /**
- * Finds the base package for a given target diamond count.
- * Prefers brazil offer if available (best wholesale rate), otherwise global.
+ * Finds the base package for a given target diamond count and region.
+ * Defaults to Global base packages. If region is "br", selects Brazil base package.
  */
-export function findBasePackageForTarget(allPkgs: any[], targetTotal: number) {
-  const baseInfo = MLBB_BASE_PACKAGES[targetTotal];
+export function findBasePackageForTarget(allPkgs: any[], targetTotal: number, preferredRegion = "global") {
+  const norm = (preferredRegion || "global").toLowerCase();
+  const baseMap = norm === "br" || norm === "brazil" ? MLBB_BRAZIL_BASE_PACKAGES : MLBB_GLOBAL_BASE_PACKAGES;
+  const baseInfo = baseMap[targetTotal] || MLBB_GLOBAL_BASE_PACKAGES[targetTotal];
+
   if (baseInfo) {
     const found = allPkgs.find((p) => p.offer_id === baseInfo.baseOfferId);
     if (found) return found;
   }
+
+  // Fallback: match by diamonds count and preferred region
+  const regionalMatch = allPkgs.find(
+    (p) =>
+      p.game_id === "mlbb" &&
+      Number(p.diamonds || 0) + Number(p.bonus_diamonds || 0) === targetTotal &&
+      !p.raw?.is_composite &&
+      ((Array.isArray(p.regions) && p.regions.includes(norm)) || (p.offer_id && p.offer_id.includes(norm))),
+  );
+  if (regionalMatch) return regionalMatch;
+
+  // Generic fallback: match by diamonds count
   return allPkgs.find(
     (p) =>
       p.game_id === "mlbb" &&
@@ -258,24 +338,28 @@ export function findBasePackageForTarget(allPkgs: any[], targetTotal: number) {
 }
 
 /**
- * Generates the 15 composite package rows dynamically calculated from base package costs.
+ * Generates the 15 composite package rows dynamically calculated from base package costs for a given region.
+ * - region="global": generates "mlbb_composite_X" with components mapped to mobile_legends_global
+ * - region="br": generates "mlbb_composite_br_X" with components mapped to mobile_legends_brazil
  */
-export function generateCompositePackageRows(allPkgs: any[]) {
+export function generateCompositePackageRows(allPkgs: any[], region: "global" | "br" = "global") {
   const nowIso = new Date().toISOString();
   const rows: any[] = [];
+  const isBr = region === "br";
+  const catId = isBr ? "mobile_legends_brazil" : "mobile_legends_global";
+  const baseMap = isBr ? MLBB_BRAZIL_BASE_PACKAGES : MLBB_GLOBAL_BASE_PACKAGES;
 
   for (const def of MLBB_COMPOSITE_DEFINITIONS) {
     let totalCostUsd = 0;
     const resolvedComponents: any[] = [];
 
     for (const comp of def.components) {
-      const baseInfo = MLBB_BASE_PACKAGES[comp.baseTotal];
-      const basePkg = findBasePackageForTarget(allPkgs, comp.baseTotal);
-      const unitCost = Number(basePkg?.cost_usd || baseInfo?.fallbackCostUsd || 1);
-      const offerId = basePkg?.offer_id || baseInfo?.baseOfferId || `mlbb_base_${comp.baseTotal}`;
+      const baseInfo = baseMap[comp.baseTotal];
+      const basePkg = findBasePackageForTarget(allPkgs, comp.baseTotal, region);
+      const unitCost = Number(basePkg?.cost_usd ?? baseInfo?.fallbackCostUsd ?? 1);
+      const offerId = basePkg?.offer_id || baseInfo?.baseOfferId || `${catId}:${comp.baseTotal}_diamonds`;
       const rawOfferId =
         basePkg?.raw?.fazer_offer_id || baseInfo?.rawOfferId || (offerId.includes(":") ? offerId.split(":").pop()! : offerId);
-      const catId = basePkg?.raw?.fazer_category_id || "mobile_legends_brazil";
 
       totalCostUsd += unitCost * comp.qty;
       resolvedComponents.push({
@@ -289,9 +373,10 @@ export function generateCompositePackageRows(allPkgs: any[]) {
     }
 
     totalCostUsd = Math.round(totalCostUsd * 10000) / 10000;
+    const compositeOfferId = isBr ? `mlbb_composite_br_${def.totalDiamonds}` : def.offerId;
 
     rows.push({
-      offer_id: def.offerId,
+      offer_id: compositeOfferId,
       game_id: "mlbb",
       category: "diamonds",
       name: def.name,
@@ -299,12 +384,12 @@ export function generateCompositePackageRows(allPkgs: any[]) {
       bonus_diamonds: 0,
       currency_name: "Diamonds",
       cost_usd: totalCostUsd,
-      regions: ["global", "br"],
+      regions: isBr ? ["br"] : ["global"],
       active: true,
       raw: {
         is_composite: true,
         total_diamonds: def.totalDiamonds,
-        fazer_category_id: "mobile_legends_brazil",
+        fazer_category_id: catId,
         components: resolvedComponents,
       },
       updated_at: nowIso,
@@ -316,85 +401,162 @@ export function generateCompositePackageRows(allPkgs: any[]) {
 
 /**
  * Curates MLBB packages in Supabase:
- *  - Activates the 8 base packages (+ weekly pass) with clean names & regions: ["global", "br"]
- *  - Upserts & activates the 15 composite packages with regions: ["global", "br"]
- *  - Deactivates all other noisy MLBB packages
+ *  - Activates the 8 Global base packages with clean names, regions: ["global"], and exact Global wholesale costs
+ *  - Activates the 8 Brazil base packages with clean names, regions: ["br"], and exact Brazil wholesale costs
+ *  - Upserts & activates the 15 Global composite packages (regions: ["global"])
+ *  - Upserts & activates the 15 Brazil composite packages (regions: ["br"])
+ *  - Activates Weekly Diamond Pass for Global (mobile_legends_global:weekly_pass) with exact Global wholesale cost
+ *  - Activates Weekly Diamond Pass for Brazil (mobile_legends_brazil:weekly_pass) with exact Brazil wholesale cost
+ *  - Activates Twilight Pass for Global & Brazil with their respective server costs
+ *  - Preserves any custom wholesale prices configured by admin
+ *  - Deactivates legacy or noisy uncurated MLBB packages
  */
 export async function curateMlbbPackages(sb: any) {
   const { data: allPkgs } = await sb.from("fazer_packages").select("*").eq("game_id", "mlbb");
   const pkgs = allPkgs || [];
   const nowIso = new Date().toISOString();
 
-  // 1. Generate and upsert the 15 composite packages
-  const compositeRows = generateCompositePackageRows(pkgs);
-  const { error: upsertErr } = await sb.from("fazer_packages").upsert(compositeRows, { onConflict: "offer_id" });
+  // 1. Generate and upsert the composite packages for Global and Brazil
+  const globalCompositeRows = generateCompositePackageRows(pkgs, "global");
+  const brazilCompositeRows = generateCompositePackageRows(pkgs, "br");
+  const allCompositeRows = [...globalCompositeRows, ...brazilCompositeRows];
+
+  const { error: upsertErr } = await sb.from("fazer_packages").upsert(allCompositeRows, { onConflict: "offer_id" });
   if (upsertErr) {
     console.error("Failed to upsert composite MLBB packages:", upsertErr);
   }
 
-  // 2. Identify active MLBB offer IDs
-  const activeBaseOfferIds = new Set(Object.values(MLBB_BASE_PACKAGES).map((b) => b.baseOfferId));
-  const activeCompositeOfferIds = new Set(MLBB_COMPOSITE_DEFINITIONS.map((c) => c.offerId));
+  // 2. Curate Global base packages
+  for (const b of Object.values(MLBB_GLOBAL_BASE_PACKAGES)) {
+    const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
+    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
+    const effectiveCost = hasAdminCustom
+      ? existing.raw.custom_cost_usd
+      : Number.isFinite(Number(existing?.cost_usd)) && Number(existing.cost_usd) > 0
+        ? Number(existing.cost_usd)
+        : b.fallbackCostUsd;
 
-  // Find weekly pass: prioritize global weekly pass (1.33 USD) over brazil (1.22 USD)
-  const weeklyPassRow =
-    pkgs.find((p: any) => p.offer_id === "mobile_legends_global:weekly_pass") ||
-    pkgs.find((p: any) => p.category === "weekly_pass" && p.offer_id.includes("global")) ||
-    pkgs.find((p: any) => p.category === "weekly_pass");
-  const activeWeeklyPassId = weeklyPassRow?.offer_id || "mobile_legends_global:weekly_pass";
-
-  const allActiveOfferIds = new Set([
-    ...Array.from(activeBaseOfferIds),
-    ...Array.from(activeCompositeOfferIds),
-    activeWeeklyPassId,
-  ]);
-
-  // 3. Update base packages with clean names & regions: ["global", "br"]
-  for (const b of Object.values(MLBB_BASE_PACKAGES)) {
     await sb
       .from("fazer_packages")
       .update({
         name: b.name,
-        regions: ["global", "br"],
+        category: "diamonds",
+        regions: ["global"],
+        cost_usd: effectiveCost,
         active: true,
         updated_at: nowIso,
       })
       .eq("offer_id", b.baseOfferId);
   }
 
-  // 4. Update weekly pass: ensure cost is 1.33 USD and active for global
-  const rawWeeklyCost = Number(weeklyPassRow?.cost_usd || 1.33);
-  const effectiveWeeklyCost =
-    weeklyPassRow?.raw?.cost_edited_by_admin && typeof weeklyPassRow.raw.custom_cost_usd === "number"
-      ? weeklyPassRow.raw.custom_cost_usd
-      : rawWeeklyCost === 1.22 || rawWeeklyCost === 1.335
-        ? 1.33
-        : rawWeeklyCost || 1.33;
+  // 3. Curate Brazil base packages
+  for (const b of Object.values(MLBB_BRAZIL_BASE_PACKAGES)) {
+    const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
+    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
+    const effectiveCost = hasAdminCustom
+      ? existing.raw.custom_cost_usd
+      : Number.isFinite(Number(existing?.cost_usd)) && Number(existing.cost_usd) > 0
+        ? Number(existing.cost_usd)
+        : b.fallbackCostUsd;
+
+    await sb
+      .from("fazer_packages")
+      .update({
+        name: b.name,
+        category: "diamonds",
+        regions: ["br"],
+        cost_usd: effectiveCost,
+        active: true,
+        updated_at: nowIso,
+      })
+      .eq("offer_id", b.baseOfferId);
+  }
+
+  // 4. Curate Weekly Passes for Global and Brazil
+  const globalWp = pkgs.find((p: any) => p.offer_id === "mobile_legends_global:weekly_pass");
+  const hasGlobalWpCustom = globalWp?.raw?.cost_edited_by_admin && typeof globalWp.raw.custom_cost_usd === "number";
+  const globalWpCost = hasGlobalWpCustom
+    ? globalWp.raw.custom_cost_usd
+    : Number.isFinite(Number(globalWp?.cost_usd)) && Number(globalWp.cost_usd) > 0
+      ? Number(globalWp.cost_usd)
+      : 1.319;
 
   await sb
     .from("fazer_packages")
     .update({
       name: "Weekly Diamond Pass",
       category: "weekly_pass",
-      cost_usd: effectiveWeeklyCost,
-      regions: ["global", "all"],
+      cost_usd: globalWpCost,
+      regions: ["global"],
       active: true,
       updated_at: nowIso,
     })
-    .eq("offer_id", activeWeeklyPassId);
+    .eq("offer_id", "mobile_legends_global:weekly_pass");
 
-  // If mobile_legends_brazil:weekly_pass was previously active, deactivate it
-  if (activeWeeklyPassId !== "mobile_legends_brazil:weekly_pass") {
+  const brazilWp = pkgs.find((p: any) => p.offer_id === "mobile_legends_brazil:weekly_pass");
+  const hasBrazilWpCustom = brazilWp?.raw?.cost_edited_by_admin && typeof brazilWp.raw.custom_cost_usd === "number";
+  const brazilWpCost = hasBrazilWpCustom
+    ? brazilWp.raw.custom_cost_usd
+    : Number.isFinite(Number(brazilWp?.cost_usd)) && Number(brazilWp.cost_usd) > 0
+      ? Number(brazilWp.cost_usd)
+      : 1.21;
+
+  await sb
+    .from("fazer_packages")
+    .update({
+      name: "Weekly Diamond Pass",
+      category: "weekly_pass",
+      cost_usd: brazilWpCost,
+      regions: ["br"],
+      active: true,
+      updated_at: nowIso,
+    })
+    .eq("offer_id", "mobile_legends_brazil:weekly_pass");
+
+  // 5. Curate Twilight Passes
+  const globalTp = pkgs.find((p: any) => p.offer_id === "mobile_legends_global:twilight_pass");
+  if (globalTp) {
     await sb
       .from("fazer_packages")
-      .update({ active: false, updated_at: nowIso })
-      .eq("offer_id", "mobile_legends_brazil:weekly_pass");
+      .update({
+        name: "Twilight Pass",
+        category: "bundles",
+        regions: ["global"],
+        active: true,
+        updated_at: nowIso,
+      })
+      .eq("offer_id", "mobile_legends_global:twilight_pass");
   }
 
-  // 5. Deactivate all other MLBB packages
+  const brazilTp = pkgs.find((p: any) => p.offer_id === "mobile_legends_brazil:twilight_pass");
+  if (brTpExists(brazilTp)) {
+    await sb
+      .from("fazer_packages")
+      .update({
+        name: "Twilight Pass",
+        category: "bundles",
+        regions: ["br"],
+        active: true,
+        updated_at: nowIso,
+      })
+      .eq("offer_id", "mobile_legends_brazil:twilight_pass");
+  }
+
+  // 6. Identify all active curated MLBB offer IDs and deactivate noisy uncurated duplicates
+  const allActiveIds = new Set<string>([
+    ...Object.values(MLBB_GLOBAL_BASE_PACKAGES).map((b) => b.baseOfferId),
+    ...Object.values(MLBB_BRAZIL_BASE_PACKAGES).map((b) => b.baseOfferId),
+    ...globalCompositeRows.map((c) => c.offer_id),
+    ...brazilCompositeRows.map((c) => c.offer_id),
+    "mobile_legends_global:weekly_pass",
+    "mobile_legends_brazil:weekly_pass",
+    "mobile_legends_global:twilight_pass",
+    "mobile_legends_brazil:twilight_pass",
+  ]);
+
   const toDeactivate = pkgs
     .map((p: any) => p.offer_id)
-    .filter((id: string) => id && !allActiveOfferIds.has(id));
+    .filter((id: string) => id && !allActiveIds.has(id));
 
   if (toDeactivate.length) {
     await sb
@@ -404,9 +566,13 @@ export async function curateMlbbPackages(sb: any) {
   }
 
   return {
-    baseCount: activeBaseOfferIds.size,
-    compositeCount: activeCompositeOfferIds.size,
+    globalBaseCount: Object.keys(MLBB_GLOBAL_BASE_PACKAGES).length,
+    brazilBaseCount: Object.keys(MLBB_BRAZIL_BASE_PACKAGES).length,
+    compositeCount: allCompositeRows.length,
     deactivatedCount: toDeactivate.length,
-    activeWeeklyPassId,
   };
+}
+
+function brTpExists(tp: any): boolean {
+  return Boolean(tp && tp.offer_id);
 }
