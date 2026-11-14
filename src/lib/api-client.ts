@@ -167,6 +167,41 @@ export async function adminCreditMerchantApi(
   return await res.json();
 }
 
+export async function adminSetMerchantBalanceApi(
+  token: string,
+  body: { merchant_id: string; balance_usd?: number; balance_egp?: number; note?: string | undefined },
+): Promise<any> {
+  const res = await fetch("/api/admin/merchants/balance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
+export async function adminDeleteMerchantApi(
+  token: string,
+  merchantIdOrBody: string | { merchant_id?: string; merchantId?: string },
+): Promise<any> {
+  const merchantId = typeof merchantIdOrBody === "string" ? merchantIdOrBody : merchantIdOrBody.merchant_id || merchantIdOrBody.merchantId;
+  const res = await fetch("/api/admin/merchants/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ merchant_id: merchantId }),
+  });
+  return await res.json();
+}
+
+export async function adminGetMerchantDetailsApi(
+  token: string,
+  merchantId: string,
+): Promise<any> {
+  const res = await fetch(`/api/admin/merchants/details?merchant_id=${encodeURIComponent(merchantId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return await res.json();
+}
+
 export async function adminSetMarginApi(
   token: string,
   body: { merchant_id: string; margin_percent: number },

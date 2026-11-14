@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  AlertTriangle,
+  ArrowUpDown,
   Check,
+  CheckCircle2,
   Copy,
   DollarSign,
+  Eye,
+  History,
   Lock,
   LogOut,
   Package,
@@ -13,10 +18,13 @@ import {
   Search,
   Server,
   Shield,
+  Sliders,
   Sparkles,
+  Trash2,
   UserPlus,
   Users,
   Wallet,
+  X,
   Zap,
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
@@ -27,9 +35,12 @@ import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import {
   adminCreateMerchantApi,
   adminCreditMerchantApi,
+  adminDeleteMerchantApi,
+  adminGetMerchantDetailsApi,
   adminListMerchantsApi,
   adminListOrdersApi,
   adminSetMarginApi,
+  adminSetMerchantBalanceApi,
   adminSetMerchantRegionApi,
   adminSyncBinanceRateApi,
   adminSyncFazerApi,
@@ -103,6 +114,28 @@ function AdminPage() {
   });
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Set Balance Modal
+  const [adjustBalance, setAdjustBalance] = useState<{
+    merchant: any;
+    amountUsd: string;
+    amountEgp: string;
+    mode: "usd" | "egp";
+    note: string;
+  } | null>(null);
+  const [adjustingBalance, setAdjustingBalance] = useState(false);
+
+  // Delete Merchant Modal
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deletingMerchant, setDeletingMerchant] = useState(false);
+
+  // Merchant Profile Modal
+  const [profileMerchantId, setProfileMerchantId] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileData, setProfileData] = useState<any | null>(null);
+  const [profilePkgSearch, setProfilePkgSearch] = useState("");
+  const [profilePkgGame, setProfilePkgGame] = useState("all");
+  const [profileTab, setProfileTab] = useState<"packages" | "ledger" | "orders">("packages");
 
   const loadStore = useCallback(async () => {
     try {
@@ -490,6 +523,91 @@ function AdminPage() {
       await loadMerchants(token, mPage, mQuery);
     } catch (e: any) {
       toast({ title: "فشل تحديث الجنسية", description: e?.message || "حدث خطأ" });
+    }
+  };
+
+  const openAdjustBalance = (m: any) => {
+    const curEgp = Number(m.balance_egp || 0);
+    const curUsd = (curEgp / (egpRate || 50)).toFixed(2);
+    setAdjustBalance({
+      merchant: m,
+      amountUsd: curUsd,
+      amountEgp: String(curEgp),
+      mode: "usd",
+      note: "",
+    });
+  };
+
+  const submitAdjustBalance = async () => {
+    if (!token || !adjustBalance) return;
+    setAdjustingBalance(true);
+    try {
+      const payload: any = {
+        merchant_id: adjustBalance.merchant.id,
+        note: adjustBalance.note.trim() || undefined,
+      };
+      if (adjustBalance.mode === "usd") {
+        payload.balance_usd = Number(adjustBalance.amountUsd);
+      } else {
+        payload.balance_egp = Number(adjustBalance.amountEgp);
+      }
+      const res = await adminSetMerchantBalanceApi(token, payload);
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: "تم تعديل رصيد التاجر بنجاح",
+        description: `الرصيد الجديد: $${res.balance_usd} (${Number(res.balance_egp).toLocaleString("en-US")} ج.م)`,
+      });
+      setAdjustBalance(null);
+      await loadMerchants(token, mPage, mQuery);
+    } catch (e: any) {
+      toast({ title: "فشل تعديل الرصيد", description: e?.message });
+    } finally {
+      setAdjustingBalance(false);
+    }
+  };
+
+  const openDeleteMerchant = (m: any) => {
+    setDeleteTarget(m);
+  };
+
+  const submitDeleteMerchant = async () => {
+    if (!token || !deleteTarget) return;
+    setDeletingMerchant(true);
+    try {
+      const res = await adminDeleteMerchantApi(token, { merchant_id: deleteTarget.id });
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: "تم حذف حساب التاجر بنجاح",
+        description: `تم إزالة التاجر ${deleteTarget.profile?.full_name || deleteTarget.email} بنجاح`,
+      });
+      setDeleteTarget(null);
+      if (profileMerchantId === deleteTarget.id) {
+        setProfileMerchantId(null);
+        setProfileData(null);
+      }
+      await loadMerchants(token, mPage, mQuery);
+    } catch (e: any) {
+      toast({ title: "فشل حذف التاجر", description: e?.message });
+    } finally {
+      setDeletingMerchant(false);
+    }
+  };
+
+  const openMerchantProfile = async (merchantId: string) => {
+    if (!token) return;
+    setProfileMerchantId(merchantId);
+    setProfileLoading(true);
+    setProfileData(null);
+    setProfileTab("packages");
+    try {
+      const res = await adminGetMerchantDetailsApi(token, merchantId);
+      if (res?.error) throw new Error(res.error);
+      setProfileData(res);
+    } catch (e: any) {
+      toast({ title: "تعذر تحميل بروفايل التاجر", description: e?.message });
+      setProfileMerchantId(null);
+    } finally {
+      setProfileLoading(false);
     }
   };
 
@@ -905,10 +1023,20 @@ function AdminPage() {
                     {merchants.map((m: any) => (
                       <tr key={m.id} className="hover:bg-slate-900/40">
                         <td className="p-3 text-right">
-                          <div className="font-semibold text-white">{m.profile?.full_name || "—"}</div>
-                          <div className="text-slate-400 font-mono text-[11px]">
-                            {m.email || m.profile?.phone || m.user_id}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openMerchantProfile(m.id)}
+                            className="text-right hover:text-purple-300 transition-colors group block"
+                            title="انقر لفتح بروفايل التاجر الشامل"
+                          >
+                            <div className="font-semibold text-white group-hover:text-purple-300 flex items-center gap-1.5">
+                              <span>{m.profile?.full_name || "—"}</span>
+                              <Eye className="w-3 h-3 text-slate-500 group-hover:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                            <div className="text-slate-400 font-mono text-[11px]">
+                              {m.email || m.profile?.phone || m.user_id}
+                            </div>
+                          </button>
                         </td>
                         <td className="p-3 text-center">
                           <select
@@ -943,35 +1071,64 @@ function AdminPage() {
                           </span>
                         </td>
                         <td className="p-3">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
+                              onClick={() => openMerchantProfile(m.id)}
+                              title="عرض بروفايل التاجر والأسعار المخصصة"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> البروفايل
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50"
+                              onClick={() => openAdjustBalance(m)}
+                              title="تعديل الرصيد المباشر"
+                            >
+                              <Sliders className="w-3.5 h-3.5" /> تعديل الرصيد
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 font-semibold"
                               onClick={() => setCredit({ id: m.id, amount: "", note: "" })}
+                              title="إيداع رصيد إضافي بالدولار"
                             >
-                              <DollarSign className="w-3.5 h-3.5" /> شحن بالدولار
+                              <DollarSign className="w-3.5 h-3.5" /> شحن +
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
                               onClick={() => setMarginEdit({ id: m.id, value: String(m.margin_percent || 0) })}
+                              title="تعديل نسبة هامش ربح الأدمن"
                             >
-                              تعديل الهامش
+                              الهامش
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               className={`border-slate-700 ${
                                 m.is_active
-                                  ? "bg-rose-950/30 text-rose-300 hover:bg-rose-900/50"
+                                  ? "bg-slate-800 text-amber-300 hover:bg-amber-950/40"
                                   : "bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/50"
                               }`}
                               onClick={() => toggleMerchantActive(m)}
-                              title={m.is_active ? "إيقاف التاجر" : "تفعيل التاجر"}
+                              title={m.is_active ? "إيقاف التاجر مؤقتاً" : "تفعيل التاجر"}
                             >
                               <Power className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 hover:text-white"
+                              onClick={() => openDeleteMerchant(m)}
+                              title="حذف حساب التاجر مع رسالة تأكيد"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         </td>
@@ -988,28 +1145,53 @@ function AdminPage() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
-                  disabled={mPage <= 1}
-                  onClick={() => token && loadMerchants(token, mPage - 1, mQuery)}
-                >
-                  السابق
-                </Button>
-                <span className="text-xs text-slate-400 font-mono">
-                  {mPage} / {mTotalPages}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
-                  disabled={mPage >= mTotalPages}
-                  onClick={() => token && loadMerchants(token, mPage + 1, mQuery)}
-                >
-                  التالي
-                </Button>
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
+                <div className="text-slate-400">
+                  عرض صفحة <span className="font-mono font-bold text-white">{mPage}</span> من إجمالي{" "}
+                  <span className="font-mono font-bold text-white">{mTotalPages}</span> صفحة
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3"
+                    disabled={mPage <= 1}
+                    onClick={() => token && loadMerchants(token, mPage - 1, mQuery)}
+                  >
+                    السابق
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, mTotalPages) }, (_, i) => {
+                      let p = i + 1;
+                      if (mTotalPages > 5) {
+                        if (mPage > 3) p = mPage - 2 + i;
+                        if (p > mTotalPages) p = mTotalPages - (4 - i);
+                      }
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => token && loadMerchants(token, p, mQuery)}
+                          className={`h-8 w-8 rounded-lg text-xs font-mono font-bold transition-colors ${
+                            p === mPage
+                              ? "bg-purple-600 text-white"
+                              : "bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3"
+                    disabled={mPage >= mTotalPages}
+                    onClick={() => token && loadMerchants(token, mPage + 1, mQuery)}
+                  >
+                    التالي
+                  </Button>
+                </div>
               </div>
               </div>
             </ScrollReveal>
@@ -1439,6 +1621,613 @@ function AdminPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Merchant Balance Modal */}
+      <Dialog open={!!adjustBalance} onOpenChange={(o) => !o && setAdjustBalance(null)}>
+        <DialogContent className="max-w-md bg-[#0a0f20] border border-cyan-500/40 text-slate-100 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-cyan-400" /> تعديل رصيد التاجر المباشر
+            </DialogTitle>
+          </DialogHeader>
+          {adjustBalance && (
+            <div className="space-y-3.5 text-xs">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-1">
+                <div className="font-bold text-white text-sm">
+                  {adjustBalance.merchant.profile?.full_name || adjustBalance.merchant.email || "تاجر"}
+                </div>
+                <div className="flex items-center justify-between text-slate-400 pt-1">
+                  <span>الرصيد الحالي:</span>
+                  <span className="font-mono font-bold text-emerald-300">
+                    ${(Number(adjustBalance.merchant.balance_egp || 0) / (egpRate || 50)).toFixed(2)} USD
+                    {" "}({Number(adjustBalance.merchant.balance_egp || 0).toLocaleString("en-US")} ج.م)
+                  </span>
+                </div>
+              </div>
+
+              {/* Mode switch: USD vs EGP */}
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-900 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAdjustBalance({ ...adjustBalance, mode: "usd" })}
+                  className={`py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                    adjustBalance.mode === "usd"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  تحديد بالدولار ($ USD)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdjustBalance({ ...adjustBalance, mode: "egp" })}
+                  className={`py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                    adjustBalance.mode === "egp"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  تحديد بالجنيه (EGP)
+                </button>
+              </div>
+
+              {adjustBalance.mode === "usd" ? (
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">
+                    الرصيد الجديد المطلوب بالدولار ($ USD) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={adjustBalance.amountUsd}
+                    onChange={(e) => {
+                      const usd = e.target.value;
+                      const egp = String(Math.round((Number(usd) || 0) * (egpRate || 50) * 100) / 100);
+                      setAdjustBalance({ ...adjustBalance, amountUsd: usd, amountEgp: egp });
+                    }}
+                    placeholder="مثال: 50"
+                    className={`font-mono text-base ${DARK_INPUT}`}
+                    autoFocus
+                  />
+                  <div className="text-[11px] text-cyan-300 mt-1 font-mono">
+                    المعادل بالجنيه: ≈ {Number(adjustBalance.amountEgp || 0).toLocaleString("en-US")} ج.م (بسعر {egpRate} ج.م/$)
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-slate-300 font-semibold block mb-1">
+                    الرصيد الجديد المطلوب بالجنيه (EGP) *
+                  </label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={adjustBalance.amountEgp}
+                    onChange={(e) => {
+                      const egp = e.target.value;
+                      const usd = ((Number(egp) || 0) / (egpRate || 50)).toFixed(2);
+                      setAdjustBalance({ ...adjustBalance, amountEgp: egp, amountUsd: usd });
+                    }}
+                    placeholder="مثال: 2500"
+                    className={`font-mono text-base ${DARK_INPUT}`}
+                    autoFocus
+                  />
+                  <div className="text-[11px] text-cyan-300 mt-1 font-mono">
+                    المعادل بالدولار: ≈ ${adjustBalance.amountUsd} USD
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">
+                  سبب أو ملاحظة التعديل (اختياري)
+                </label>
+                <Input
+                  placeholder="مثال: تصحيح رصيد / تسوية بنكية"
+                  value={adjustBalance.note}
+                  onChange={(e) => setAdjustBalance({ ...adjustBalance, note: e.target.value })}
+                  className={DARK_INPUT}
+                />
+              </div>
+
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2.5 text-[11px] text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                <span>
+                  تنبيه: سيتم تعيين رصيد التاجر مباشرة إلى القيمة المحددة، وتسجيل حركة تسوية (adjustment) في كشف حساب المحفظة.
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  onClick={() => setAdjustBalance(null)}
+                  disabled={adjustingBalance}
+                >
+                  إلغاء
+                </Button>
+                <Button
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+                  onClick={submitAdjustBalance}
+                  disabled={adjustingBalance || (!adjustBalance.amountUsd && !adjustBalance.amountEgp)}
+                >
+                  {adjustingBalance ? "جارٍ التعديل..." : "تأكيد تعديل الرصيد"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Merchant Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md bg-[#0a0f20] border border-rose-600/50 text-slate-100 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-rose-400 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-rose-500" /> تأكيد حذف حساب التاجر
+            </DialogTitle>
+          </DialogHeader>
+          {deleteTarget && (
+            <div className="space-y-3.5 text-xs">
+              <p className="text-slate-300 text-sm">
+                هل أنت متأكد تماماً من رغبتك في حذف حساب التاجر التالي؟
+              </p>
+
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 space-y-1.5 font-mono">
+                <div className="font-bold text-white text-sm font-sans">
+                  {deleteTarget.profile?.full_name || "بدون اسم"}
+                </div>
+                <div className="text-slate-300 text-xs">
+                  البريد / المعرف: <span className="text-white">{deleteTarget.email || deleteTarget.user_id}</span>
+                </div>
+                <div className="text-slate-300 text-xs">
+                  الرصيد الحالي:{" "}
+                  <span className="text-emerald-300 font-bold">
+                    ${(Number(deleteTarget.balance_egp || 0) / (egpRate || 50)).toFixed(2)} USD
+                    {" "}({Number(deleteTarget.balance_egp || 0).toLocaleString("en-US")} ج.م)
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 text-[11px] text-slate-400 space-y-1">
+                <div>• سيتم إزالة حساب التاجر ومحفظته وسجلات الحركات المالية المرتبطة به.</div>
+                <div>• سيتم إعادة دور المستخدم إلى حساب عميل عادي (Customer).</div>
+                <div>• سجل الطلبات السابقة سيبقى محفوظاً في النظام لأغراض التدقيق.</div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deletingMerchant}
+                >
+                  إلغاء التراجع
+                </Button>
+                <Button
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                  onClick={submitDeleteMerchant}
+                  disabled={deletingMerchant}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {deletingMerchant ? "جارٍ الحذف..." : "نعم، حذف التاجر نهائياً"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Merchant Complete Profile Dialog */}
+      <Dialog open={!!profileMerchantId} onOpenChange={(o) => !o && setProfileMerchantId(null)}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto bg-[#0a0f20] border border-purple-500/40 text-slate-100 rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center justify-between gap-2 flex-wrap">
+              <span className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-purple-400" /> بروفايل التاجر الشامل والأسعار
+              </span>
+              {profileData?.merchant && (
+                <div className="flex items-center gap-1.5 text-xs font-normal">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 h-7 text-xs"
+                    onClick={() => openAdjustBalance(profileData.merchant)}
+                  >
+                    <Sliders className="w-3 h-3" /> تعديل الرصيد
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 h-7 text-xs font-semibold"
+                    onClick={() => setCredit({ id: profileData.merchant.id, amount: "", note: "" })}
+                  >
+                    <DollarSign className="w-3 h-3" /> شحن +
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700 h-7 text-xs"
+                    onClick={() => setMarginEdit({ id: profileData.merchant.id, value: String(profileData.merchant.margin_percent || 0) })}
+                  >
+                    تعديل الهامش
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 h-7 text-xs"
+                    onClick={() => openDeleteMerchant(profileData.merchant)}
+                  >
+                    <Trash2 className="w-3 h-3" /> حذف التاجر
+                  </Button>
+                </div>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {profileLoading ? (
+            <div className="py-16 text-center space-y-3">
+              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-purple-400" />
+              <div className="text-sm text-slate-300">جارٍ جلب وتجهيز بيانات وبروفايل التاجر...</div>
+            </div>
+          ) : profileData?.merchant ? (
+            <div className="space-y-4 pt-2">
+              {/* Profile Header Info */}
+              <div className="rounded-2xl border border-slate-800 bg-[#0e1428] p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <span>{profileData.merchant.profile?.full_name || "تاجر بدون اسم"}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        profileData.merchant.is_active
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                      }`}
+                    >
+                      {profileData.merchant.is_active ? "حساب مفعل" : "حساب موقوف"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3 font-mono">
+                    {profileData.merchant.email && (
+                      <span className="text-slate-300">البريد: {profileData.merchant.email}</span>
+                    )}
+                    {profileData.merchant.profile?.phone && (
+                      <span className="text-slate-300">الهاتف: {profileData.merchant.profile.phone}</span>
+                    )}
+                    <span className="text-slate-500">ID: {profileData.merchant.id}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400">الجنسية:</span>
+                  <span className="font-bold text-purple-300 uppercase px-2 py-1 rounded bg-purple-950/60 border border-purple-500/30">
+                    {profileData.merchant.profile?.region || "EG"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Metrics Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>الرصيد المتاح</span>
+                    <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                  </div>
+                  <div className="text-lg sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
+                    ${profileData.merchant.balance_usd} USD
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {Number(profileData.merchant.balance_egp || 0).toLocaleString("en-US")} ج.م
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>هامش ربح الأدمن</span>
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  </div>
+                  <div className="text-lg sm:text-xl font-extrabold text-purple-300 font-mono mt-1">
+                    +{profileData.merchant.margin_percent}%
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    فوق سعر التكلفة بالجملة
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>إجمالي الطلبات</span>
+                    <Package className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div className="text-lg sm:text-xl font-extrabold text-white font-mono mt-1">
+                    {profileData.orders?.length ?? 0}
+                  </div>
+                  <div className="text-[11px] text-emerald-400 font-mono mt-0.5">
+                    {profileData.orders?.filter((o: any) => o.status === "success").length ?? 0} ناجح
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3">
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>سعر الدولار المعتمد</span>
+                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                  </div>
+                  <div className="text-lg sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
+                    {profileData.egpRate} ج.م / $
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    سعر المتجر الحالي
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs Navigation */}
+              <div className="flex items-center gap-1 border-b border-slate-800 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("packages")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    profileTab === "packages"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
+                >
+                  باقات وأسعار التاجر ({profileData.packagesPreview?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("ledger")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    profileTab === "ledger"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
+                >
+                  سجل حركات المحفظة ({profileData.transactions?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfileTab("orders")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    profileTab === "orders"
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
+                >
+                  الطلبات الأخيرة ({profileData.orders?.length || 0})
+                </button>
+              </div>
+
+              {/* Tab 1: Custom Merchant Packages & Exact Prices */}
+              {profileTab === "packages" && (
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {[
+                        { id: "all", label: "كافة الألعاب" },
+                        { id: "mlbb", label: "Mobile Legends" },
+                        { id: "pubg", label: "PUBG Mobile" },
+                        { id: "freefire", label: "Free Fire" },
+                        { id: "hok", label: "Honor of Kings" },
+                      ].map((tg) => (
+                        <button
+                          key={tg.id}
+                          type="button"
+                          onClick={() => setProfilePkgGame(tg.id)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
+                            profilePkgGame === tg.id
+                              ? "bg-slate-800 text-purple-300 border border-purple-500/40"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {tg.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative w-full sm:w-56">
+                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                      <Input
+                        value={profilePkgSearch}
+                        onChange={(e) => setProfilePkgSearch(e.target.value)}
+                        placeholder="بحث بالاسم أو الكود..."
+                        className={`h-8 text-xs pr-8 ${DARK_INPUT}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                    <table className="w-full text-xs min-w-[700px]">
+                      <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
+                        <tr>
+                          <th className="p-2.5 text-right">الباقة</th>
+                          <th className="p-2.5">اللعبة</th>
+                          <th className="p-2.5">تكلفة الجملة ($/ج.م)</th>
+                          <th className="p-2.5 text-center bg-purple-950/40 text-purple-200">
+                            سعر بيع الباقة للتاجر
+                          </th>
+                          <th className="p-2.5 text-center text-emerald-400">
+                            صافي ربح الأدمن
+                          </th>
+                          <th className="p-2.5">سعر الجمهور</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {profileData.packagesPreview
+                          ?.filter((p: any) => {
+                            const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                            const q = profilePkgSearch.trim().toLowerCase();
+                            const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
+                            return gameMatch && textMatch;
+                          })
+                          .map((p: any) => (
+                            <tr key={p.id} className="hover:bg-slate-900/40">
+                              <td className="p-2.5 text-right">
+                                <div className="font-semibold text-white">{p.name}</div>
+                                {p.diamonds > 0 && (
+                                  <div className="text-[11px] text-slate-400 font-mono">
+                                    {p.diamonds} ماسة / شدة
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <span className="uppercase font-mono font-bold text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                                  {p.gameId}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-center font-mono">
+                                <div className="text-slate-300">${p.costUsd}</div>
+                                <div className="text-[10px] text-slate-500">{p.costEgp} ج.م</div>
+                              </td>
+                              <td className="p-2.5 text-center font-mono bg-purple-950/20">
+                                <div className="font-extrabold text-purple-300 text-sm">
+                                  {p.merchantPriceEgp} ج.م
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  ≈ ${(p.merchantPriceEgp / (profileData.egpRate || 50)).toFixed(2)} USD
+                                </div>
+                              </td>
+                              <td className="p-2.5 text-center font-mono text-emerald-400 font-bold">
+                                +{p.profitPerUnitEgp} ج.م
+                              </td>
+                              <td className="p-2.5 text-center font-mono text-slate-400">
+                                {p.retailPriceEgp} ج.م
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: Wallet Transactions Ledger */}
+              {profileTab === "ledger" && (
+                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                  <table className="w-full text-xs min-w-[650px]">
+                    <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
+                      <tr>
+                        <th className="p-2.5 text-right">نوع الحركة</th>
+                        <th className="p-2.5">المبلغ</th>
+                        <th className="p-2.5">الرصيد بعد الحركة</th>
+                        <th className="p-2.5 text-right">الملاحظة / المرجع</th>
+                        <th className="p-2.5 text-left">التاريخ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {profileData.transactions?.map((t: any) => {
+                        const amt = Number(t.amount_egp || 0);
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-900/40">
+                            <td className="p-2.5 text-right">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  t.entry_type === "admin_credit"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : t.entry_type === "order_debit"
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : t.entry_type === "refund"
+                                    ? "bg-cyan-500/20 text-cyan-300"
+                                    : "bg-purple-500/20 text-purple-300"
+                                }`}
+                              >
+                                {t.entry_type === "admin_credit"
+                                  ? "إيداع رصيد"
+                                  : t.entry_type === "order_debit"
+                                  ? "خصم طلب"
+                                  : t.entry_type === "refund"
+                                  ? "استرداد"
+                                  : "تسوية رصيد"}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-bold">
+                              <span className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
+                                {amt >= 0 ? `+${amt}` : amt} ج.م
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-center font-mono text-slate-300">
+                              {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
+                            </td>
+                            <td className="p-2.5 text-right text-slate-300 font-mono text-[11px]">
+                              {t.note || t.order_id || "—"}
+                            </td>
+                            <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
+                              {new Date(t.created_at).toLocaleString("ar-EG")}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {(!profileData.transactions || profileData.transactions.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="p-6 text-center text-slate-400">
+                            لا توجد حركات محفظة مسجلة لهذا التاجر بعد.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Tab 3: Recent Orders */}
+              {profileTab === "orders" && (
+                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                  <table className="w-full text-xs min-w-[650px]">
+                    <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
+                      <tr>
+                        <th className="p-2.5 text-right">المرجع</th>
+                        <th className="p-2.5 text-right">اللعبة / اللاعب</th>
+                        <th className="p-2.5">الإجمالي</th>
+                        <th className="p-2.5">الحالة</th>
+                        <th className="p-2.5 text-left">التاريخ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {profileData.orders?.map((o: any) => (
+                        <tr key={o.id} className="hover:bg-slate-900/40">
+                          <td className="p-2.5 text-right font-mono text-cyan-300 font-bold">
+                            {o.order_ref}
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-bold text-white">
+                            {o.total_egp} ج.م
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                o.status === "success"
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : o.status === "failed"
+                                  ? "bg-rose-500/20 text-rose-300"
+                                  : "bg-amber-500/20 text-amber-300"
+                              }`}
+                            >
+                              {o.status === "success"
+                                ? "مكتمل"
+                                : o.status === "failed"
+                                ? "فشل"
+                                : "قيد التنفيذ"}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
+                            {new Date(o.created_at).toLocaleString("ar-EG")}
+                          </td>
+                        </tr>
+                      ))}
+                      {(!profileData.orders || profileData.orders.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="p-6 text-center text-slate-400">
+                            لا توجد طلبات سابقة لهذا التاجر.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

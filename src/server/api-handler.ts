@@ -3,8 +3,11 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from "./rate-limit";
 import {
   adminCreateMerchant,
   adminCreditMerchant,
+  adminDeleteMerchant,
+  adminGetMerchantDetails,
   adminListMerchants,
   adminListRecentOrders,
+  adminSetMerchantBalance,
   adminSetMerchantMargin,
   adminSetMerchantRegion,
   adminToggleMerchantStatus,
@@ -303,6 +306,43 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       if (!token) return json({ error: "unauthorized" }, 401);
       const body = await request.json();
       const data = await adminSetMerchantMargin(token, body);
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/balance" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = await request.json();
+      const data = await adminSetMerchantBalance(token, body);
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/delete" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = await request.json();
+      const data = await adminDeleteMerchant(token, body);
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/details" && request.method === "GET") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const merchantId = url.searchParams.get("merchant_id") || url.searchParams.get("merchantId");
+      if (!merchantId) return json({ error: "معرف التاجر مطلوب" }, 400);
+      const data = await adminGetMerchantDetails(token, merchantId);
       return json(data);
     } catch (e: any) {
       return json({ error: e?.message || "failed" }, 400);

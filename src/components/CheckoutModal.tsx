@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CreditCard, Loader2, MapPin, MessageCircle, Package, Share2, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MapPin, MessageCircle, Package, Share2, User, X, XCircle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcMerchantUnitPriceEgp } from "@/lib/pricing";
+import { getGameServers } from "@/lib/regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
@@ -227,29 +228,61 @@ export default function CheckoutModal({
               </div>
             )}
 
-            {regionLocked && region ? (
-              <div>
-                <label className="text-xs sm:text-sm text-slate-300">منطقة الحساب (Region)</label>
-                <div className="mt-1 w-full rounded-xl border border-emerald-600/40 bg-emerald-950/20 px-4 py-2.5 text-sm text-emerald-300 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 shrink-0" />
-                  <span className="font-semibold">{region}</span>
-                  <span className="text-[11px] text-emerald-400/80">(تم التحديد تلقائياً)</span>
-                </div>
+            {/* Server / Region Selector */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs sm:text-sm">
+                <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>منطقة السيرفر (Server Region) *</span>
+                </label>
+                <span className="font-mono text-cyan-300 text-xs uppercase font-bold">
+                  {(region || "global").toUpperCase()}
+                </span>
               </div>
-            ) : needsManualRegion ? (
-              <div>
-                <label className="text-xs sm:text-sm text-amber-200">منطقة الحساب (Region)</label>
-                <Input
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  placeholder="أدخل المنطقة (مثال: Global أو MENA أو ID)"
-                  className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                />
-                <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 shrink-0" /> لم ترجع المنطقة من السيرفر، يرجى كتابتها للمتابعة.
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-1.5 rounded-xl bg-slate-900/80 border border-slate-700/80">
+                {getGameServers(activeGameId).map((srv) => {
+                  const isSel = (region || "global").toLowerCase() === srv.code.toLowerCase();
+                  return (
+                    <button
+                      key={srv.code}
+                      type="button"
+                      onClick={() => {
+                        setRegion(srv.code);
+                        setPlayer({ ...player, region: srv.code });
+                      }}
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                        isSel
+                          ? "bg-purple-600 text-white shadow-sm border border-purple-400 font-bold"
+                          : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60"
+                      }`}
+                    >
+                      <span className="truncate">{srv.labelAr}</span>
+                      <span className="text-[10px] font-mono opacity-80 uppercase ml-1 shrink-0">{srv.code}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {regionLocked ? (
+                <p className="text-[11px] text-emerald-400/90 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 shrink-0" /> تم تحديد المنطقة من الحساب، ويمكنك التغيير بالنقر على أي سيرفر أعلاه.
                 </p>
-              </div>
-            ) : null}
+              ) : needsManualRegion ? (
+                <div className="pt-1">
+                  <Input
+                    value={region}
+                    onChange={(e) => {
+                      setRegion(e.target.value);
+                      setPlayer({ ...player, region: e.target.value });
+                    }}
+                    placeholder="أدخل رمز السيرفر يدوياً إن لم يكن بالقائمة (مثال: EU)"
+                    className="h-8 text-xs bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
+                  />
+                  <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1">
+                    <MapPin className="w-3 h-3 shrink-0" /> اختر السيرفر من القائمة أعلاه أو اكتب الرمز يدوياً.
+                  </p>
+                </div>
+              ) : null}
+            </div>
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/50">
               <div className="font-semibold flex items-center justify-between text-sm">

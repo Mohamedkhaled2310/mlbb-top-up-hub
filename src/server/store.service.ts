@@ -671,6 +671,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const normReqRegion = normalizeRegion(region);
     if (
       pregions.length &&
+      !pregions.includes("global") &&
       normReqRegion &&
       normReqRegion !== "global" &&
       normReqRegion !== "all" &&
@@ -1273,6 +1274,209 @@ export async function adminToggleMerchantStatus(token: string, merchantId: strin
     .single();
   if (error) throw new Error(error.message);
   return { success: true, merchant: data };
+}
+
+export async function adminSetMerchantBalance(token: string, body: any) {
+  await requireAdmin(token);
+  const sbAdmin = getAdminClient() as any;
+  const merchantId = body.merchant_id || body.merchantId;
+  if (!merchantId) throw new Error("معرف التاجر مطلوب");
+
+  const { data: merchant, error: mErr } = await sbAdmin
+    .from("merchant_accounts")
+    .select("*")
+    .eq("id", merchantId)
+    .maybeSingle();
+  if (mErr || !merchant) throw new Error("حساب التاجر غير موجود");
+
+  const { data: settingsRow } = await sbAdmin.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+
+  const currentBalanceEgp = Number(merchant.balance_egp || 0);
+  let newBalanceEgp = 0;
+  let note = body.note;
+
+  if (body.balance_usd != null || body.balanceUsd != null) {
+    const usd = Number(body.balance_usd ?? body.balanceUsd);
+    if (!Number.isFinite(usd) || usd < 0) throw new Error("الرصيد بالدولار يجب أن يكون صفراً أو موجباً");
+    newBalanceEgp = Math.round(usd * egpRate * 100) / 100;
+    if (!note) {
+      note = `تعديل الرصيد إلى $${usd} (${newBalanceEgp} ج.م بسعر ${egpRate} ج.م/$)`;
+    }
+  } else if (body.balance_egp != null || body.balanceEgp != null || body.amount != null) {
+    newBalanceEgp = Number(body.balance_egp ?? body.balanceEgp ?? body.amount);
+    if (!Number.isFinite(newBalanceEgp) || newBalanceEgp < 0) throw new Error("الرصيد بالجنيه يجب أن يكون صفراً أو موجباً");
+    if (!note) {
+      note = `تعديل الرصيد يدوياً من الأدمن إلى ${newBalanceEgp} ج.م`;
+    }
+  } else {
+    throw new Error("يرجى تحديد الرصيد الجديد بالدولار أو بالجنيه");
+  }
+
+  const diff = Math.round((newBalanceEgp - currentBalanceEgp) * 100) / 100;
+  const nowIso = new Date().toISOString();
+
+  const { error: upErr } = await sbAdmin
+    .from("merchant_accounts")
+    .update({ balance_egp: newBalanceEgp, updated_at: nowIso })
+    .eq("id", merchantId);
+  if (upErr) throw new Error(upErr.message);
+
+  if (diff !== 0) {
+    await sbAdmin.from("wallet_ledger").insert({
+      merchant_id: merchantId,
+      amount_egp: diff,
+      balance_after_egp: newBalanceEgp,
+      entry_type: "adjustment",
+      note: note || `تعديل رصيد التاجر من ${currentBalanceEgp} إلى ${newBalanceEgp} ج.م`,
+      created_at: nowIso,
+    });
+  }
+
+  return {
+    success: true,
+    merchant_id: merchantId,
+    previous_balance_egp: currentBalanceEgp,
+    balance_egp: newBalanceEgp,
+    balance_usd: Math.round((newBalanceEgp / egpRate) * 100) / 100,
+  };
+}
+
+export async function adminDeleteMerchant(token: string, body: any) {
+  await requireAdmin(token);
+  const sbAdmin = getAdminClient() as any;
+  const merchantId = body.merchant_id || body.merchantId;
+  if (!merchantId) throw new Error("معرف التاجر مطلوب");
+
+  const { data: merchant } = await sbAdmin
+    .from("merchant_accounts")
+    .select("*")
+    .eq("id", merchantId)
+    .maybeSingle();
+  if (!merchant) throw new Error("حساب التاجر غير موجود أو تم حذفه مسبقاً");
+
+  // 1. Delete transactions ledger
+  await sbAdmin.from("wallet_ledger").delete().eq("merchant_id", merchantId);
+
+  // 2. Clear merchant_id on orders (preserve orders for auditing)
+  await sbAdmin.from("orders").update({ merchant_id: null }).eq("merchant_id", merchantId);
+
+  // 3. Delete merchant_accounts row
+  const { error: delErr } = await sbAdmin.from("merchant_accounts").delete().eq("id", merchantId);
+  if (delErr) throw new Error(delErr.message);
+
+  // 4. Update profile role to 'customer'
+  await sbAdmin.from("profiles").update({ role: "customer" }).eq("id", merchant.user_id);
+
+  // 5. Delete auth user if allowed
+  try {
+    const authAdmin = (sbAdmin as any).auth?.admin;
+    if (authAdmin && typeof authAdmin.deleteUser === "function") {
+      await authAdmin.deleteUser(merchant.user_id);
+    }
+  } catch {
+    // Non-fatal if auth delete is restricted
+  }
+
+  return { success: true, deleted_id: merchantId };
+}
+
+export async function adminGetMerchantDetails(token: string, merchantId: string) {
+  await requireAdmin(token);
+  if (!merchantId) throw new Error("معرف التاجر مطلوب");
+  const sbAdmin = getAdminClient() as any;
+
+  const { data: merchant, error: mErr } = await sbAdmin
+    .from("merchant_accounts")
+    .select("*")
+    .eq("id", merchantId)
+    .maybeSingle();
+  if (mErr || !merchant) throw new Error("حساب التاجر غير موجود");
+
+  const { data: profile } = await sbAdmin
+    .from("profiles")
+    .select("*")
+    .eq("id", merchant.user_id)
+    .maybeSingle();
+
+  let email: string | null = null;
+  try {
+    const authAdmin = (sbAdmin as any).auth?.admin;
+    if (authAdmin && typeof authAdmin.getUserById === "function") {
+      const { data: uData } = await authAdmin.getUserById(merchant.user_id);
+      if (uData?.user?.email) email = uData.user.email;
+    }
+  } catch {
+    // ignore
+  }
+
+  const [ordersRes, ledgerRes, settingsRes, packagesRes] = await Promise.all([
+    sbAdmin
+      .from("orders")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .order("created_at", { ascending: false })
+      .limit(25),
+    sbAdmin
+      .from("wallet_ledger")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    sbAdmin.from("store_settings").select("*").eq("id", 1).maybeSingle(),
+    sbAdmin
+      .from("fazer_packages")
+      .select("*")
+      .eq("active", true)
+      .order("diamonds", { ascending: true })
+      .limit(100),
+  ]);
+
+  const egpRate = Number(settingsRes.data?.egp_rate || DEFAULT_EGP_RATE);
+  const marginPercent = Number(merchant.margin_percent || 0);
+
+  // Compute exact package pricing preview for this merchant
+  const packagesPreview = (packagesRes.data || []).map((p: any) => {
+    const costUsd = Number(p.cost_usd || 0);
+    const costEgp = Math.round(costUsd * egpRate * 100) / 100;
+    const merchantPrice = calcMerchantUnitPriceEgp(
+      p.merchant_base_price_egp || costEgp,
+      marginPercent,
+      costUsd,
+      egpRate,
+    );
+    const retailPrice = calcRetailPriceEgp(costUsd, egpRate);
+    const profitPerUnitEgp = Math.max(0, merchantPrice - costEgp);
+
+    return {
+      id: p.id,
+      offerId: p.offer_id,
+      gameId: p.game_id,
+      name: p.name,
+      diamonds: Number(p.diamonds || 0),
+      costUsd,
+      costEgp,
+      merchantPriceEgp: merchantPrice,
+      retailPriceEgp: retailPrice,
+      profitPerUnitEgp,
+      marginPercent,
+    };
+  });
+
+  return {
+    merchant: {
+      ...merchant,
+      balance_egp: Number(merchant.balance_egp || 0),
+      balance_usd: Math.round((Number(merchant.balance_egp || 0) / egpRate) * 100) / 100,
+      margin_percent: marginPercent,
+      profile,
+      email,
+    },
+    orders: ordersRes.data || [],
+    transactions: ledgerRes.data || [],
+    packagesPreview,
+    egpRate,
+  };
 }
 
 export async function adminListRecentOrders(token: string, limit = 30) {

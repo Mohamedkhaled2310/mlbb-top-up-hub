@@ -20,6 +20,7 @@ import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency } from "../lib/pricing";
+import { getGameServers, getServerLabel } from "../lib/regions";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo, getCurrencyRate } from "../lib/currency";
 import {
   getMerchantDashboardApi,
@@ -335,35 +336,28 @@ function MerchantPage() {
     [store.packages, selectedGameId],
   );
 
-  const availableRegions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of gamePackages) {
-      const r = (Array.isArray(p.regions) && p.regions[0]) || (selectedGameId === "freefire" ? "mena" : "global");
-      counts.set(r, (counts.get(r) || 0) + 1);
-    }
-    const order = ["global", "mena", "eu", "my", "id", "br", "tr", "ph", "sg", "ru", "us", "bd", "cis", "latam", "th", "tw", "vn"];
-    return Array.from(counts.entries()).sort((a, b) => {
-      const ia = order.indexOf(a[0]);
-      const ib = order.indexOf(b[0]);
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    });
-  }, [gamePackages, selectedGameId]);
+  const gameServersList = useMemo(() => getGameServers(selectedGameId), [selectedGameId]);
 
   const effectivePkgRegion = useMemo(() => {
-    if (!availableRegions.length) return "all";
-    if (availableRegions.some(([r]) => r === selectedPkgRegion)) return selectedPkgRegion;
-    return availableRegions[0]![0];
-  }, [availableRegions, selectedPkgRegion]);
+    if (gameServersList.some((s) => s.code.toLowerCase() === selectedPkgRegion.toLowerCase())) {
+      return selectedPkgRegion.toLowerCase();
+    }
+    return gameServersList[0]?.code || "global";
+  }, [gameServersList, selectedPkgRegion]);
 
   const pkgs = useMemo(() => {
     const q = pkgSearch.trim().toLowerCase();
+    const selReg = effectivePkgRegion.toLowerCase();
     return gamePackages.filter((p) => {
-      const r = (Array.isArray(p.regions) && p.regions[0]) || (selectedGameId === "freefire" ? "mena" : "global");
-      const regionMatch = effectivePkgRegion === "all" || availableRegions.length <= 1 || r === effectivePkgRegion;
+      const regs = Array.isArray(p.regions) && p.regions.length
+        ? p.regions.map((r) => String(r).toLowerCase())
+        : ["global"];
+      // Matches if selected server is included, or if package is global (applies to all servers)
+      const regionMatch = selReg === "all" || regs.includes(selReg) || regs.includes("global");
       const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
       return regionMatch && textMatch;
     });
-  }, [gamePackages, selectedGameId, effectivePkgRegion, availableRegions.length, pkgSearch]);
+  }, [gamePackages, effectivePkgRegion, pkgSearch]);
 
   const cartCount = store.cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal = store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0);
@@ -585,15 +579,16 @@ function MerchantPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {MERCHANT_GAMES.map((g) => {
                     const active = selectedGameId === g.id;
-                    const regions = gameRegions[g.id] || [g.id === "freefire" ? "mena" : "global"];
-                    const regionDisplay = regions.map((r) => r.toUpperCase()).join(" / ");
+                    const servers = getGameServers(g.id);
+                    const serverSummary = servers.slice(0, 3).map((s) => s.code.toUpperCase()).join(" / ") + (servers.length > 3 ? "..." : "");
                     return (
                       <button
                         key={g.id}
                         onClick={() => {
                           setSelectedGameId(g.id);
-                          const defReg = regions[0] || (g.id === "freefire" ? "mena" : "global");
+                          const defReg = servers[0]?.code || "global";
                           setSelectedPkgRegion(defReg);
+                          store.setPlayer({ ...store.player, region: defReg });
                         }}
                         className={`flex flex-col justify-between gap-2 rounded-xl border p-2.5 sm:p-3 text-xs font-bold transition-all ${active
                           ? "border-purple-500 bg-purple-500/20 text-purple-200 shadow-sm"
@@ -610,47 +605,61 @@ function MerchantPage() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between w-full pt-1 border-t border-slate-800/60 text-[10px]">
-                          <span className="text-slate-400 font-normal">المنطقة (Region):</span>
-                          <span className="font-mono font-bold text-amber-300 uppercase">{regionDisplay}</span>
+                          <span className="text-slate-400 font-normal">السيرفرات:</span>
+                          <span className="font-mono font-bold text-amber-300 uppercase">{serverSummary}</span>
                         </div>
                       </button>
                     );
                   })}
                 </div>
 
-                {availableRegions.length > 0 && (
-                  <div className="flex items-center justify-between flex-wrap gap-2 rounded-xl border border-purple-500/20 bg-purple-950/20 p-2.5">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                <div className="flex flex-col gap-2 rounded-xl border border-purple-500/25 bg-purple-950/20 p-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-purple-200 font-semibold">
                       <Globe className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                      <span className="font-medium text-slate-300">منطقة السيرفر المتاحة (Server Region):</span>
+                      <span>اختر سيرفر / منطقة الشحن (Server Region):</span>
                     </div>
-                    <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-                      {availableRegions.map(([reg, cnt]) => {
-                        const active = effectivePkgRegion === reg;
-                        return (
-                          <button
-                            key={reg}
-                            onClick={() => setSelectedPkgRegion(reg)}
-                            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold uppercase transition-all ${active
-                              ? "bg-purple-600 text-white shadow-sm shadow-purple-500/30 border border-purple-400/50"
-                              : "border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200"
-                              }`}
-                          >
-                            <span>{getRegionBadgeLabel(reg)}</span>
-                            <span className={`text-[10px] font-mono px-1 rounded ${active ? "bg-purple-800 text-purple-100" : "bg-slate-950 text-slate-400"}`}>
-                              ({cnt})
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <span className="text-[11px] font-mono text-cyan-300 uppercase font-bold">
+                      السيرفر النشط: {getServerLabel(effectivePkgRegion, selectedGameId)}
+                    </span>
                   </div>
-                )}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                    {gameServersList.map((srv) => {
+                      const active = effectivePkgRegion === srv.code.toLowerCase();
+                      const pkgCount = gamePackages.filter((p) => {
+                        const regs = Array.isArray(p.regions) && p.regions.length
+                          ? p.regions.map((r) => String(r).toLowerCase())
+                          : ["global"];
+                        return regs.includes(srv.code.toLowerCase()) || regs.includes("global");
+                      }).length;
+                      return (
+                        <button
+                          key={srv.code}
+                          onClick={() => {
+                            setSelectedPkgRegion(srv.code);
+                            store.setPlayer({ ...store.player, region: srv.code });
+                          }}
+                          className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                            active
+                              ? "bg-purple-600 text-white shadow-md shadow-purple-500/30 border border-purple-400"
+                              : "border border-slate-800 bg-slate-900/80 text-slate-300 hover:bg-slate-800 hover:text-white"
+                          }`}
+                        >
+                          <span>{srv.labelAr}</span>
+                          <span className={`text-[10px] font-mono px-1 rounded ${active ? "bg-purple-800 text-purple-100" : "bg-slate-950 text-slate-400"}`}>
+                            ({pkgCount})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {pkgs.slice(0, 60).map((p, idx) => {
                     const prices = getMerchantPrices(p);
-                    const pkgRegion = (Array.isArray(p.regions) && p.regions[0]) || (p.gameId === "freefire" ? "mena" : "global");
+                    const pkgRawReg = (Array.isArray(p.regions) && p.regions[0]) || "";
+                    const pkgRegion = pkgRawReg && pkgRawReg !== "global" ? pkgRawReg : effectivePkgRegion;
                     return (
                       <div
                         key={p.id}
@@ -710,7 +719,10 @@ function MerchantPage() {
                           <Button
                             size="sm"
                             className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-500 text-white"
-                            onClick={() => store.addToCart(p)}
+                            onClick={() => {
+                              store.setPlayer({ ...store.player, region: effectivePkgRegion });
+                              store.addToCart(p);
+                            }}
                           >
                             <Plus className="w-4 h-4" />
                           </Button>
