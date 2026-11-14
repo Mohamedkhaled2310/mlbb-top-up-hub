@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   CreditCard,
   Globe,
   Loader2,
@@ -724,12 +725,30 @@ export default function CheckoutModal({
 
         {step === "success" && (
           <div className="py-6 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400">
-              <CheckCircle2 className="w-10 h-10" />
+            <div
+              className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto border ${
+                result?.status === "processing"
+                  ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
+                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+              }`}
+            >
+              {result?.status === "processing" ? (
+                <Clock className="w-10 h-10 animate-pulse" />
+              ) : (
+                <CheckCircle2 className="w-10 h-10" />
+              )}
             </div>
             <div>
-              <div className="font-extrabold text-xl text-white">تم شحن الحساب بنجاح! 🎉</div>
-              <div className="text-xs sm:text-sm text-emerald-300 mt-1">{result?.message || "تم تنفيذ الطلب وتسليم الباقات فورياً."}</div>
+              <div className={`font-extrabold text-xl ${result?.status === "processing" ? "text-amber-300" : "text-white"}`}>
+                {result?.status === "processing"
+                  ? "الطلب قيد المعالجة لدى مزود الخدمة (Fazer) ⏳"
+                  : "تم شحن الحساب بنجاح! 🎉"}
+              </div>
+              <div className={`text-xs sm:text-sm mt-1 ${result?.status === "processing" ? "text-slate-300" : "text-emerald-300"}`}>
+                {result?.message || (result?.status === "processing"
+                  ? "تم إرسال الطلب بنجاح وهو قيد التنفيذ الآن على سيرفر اللعبة."
+                  : "تم تنفيذ الطلب وتسليم الباقات فورياً.")}
+              </div>
             </div>
 
             {/* Receipt Summary Card */}
@@ -743,6 +762,18 @@ export default function CheckoutModal({
                   </div>
                 </div>
               )}
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <span className="text-slate-400">حالة التنفيذ:</span>
+                <span
+                  className={`font-semibold text-xs px-2 py-0.5 rounded-full border ${
+                    result?.status === "processing"
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                  }`}
+                >
+                  {result?.status === "processing" ? "قيد المعالجة (Processing) ⏳" : "مكتمل بنجاح (Completed) ✅"}
+                </span>
+              </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">حساب اللاعب:</span>
                 <div className="flex items-center gap-1.5 font-mono text-white">
@@ -771,7 +802,8 @@ export default function CheckoutModal({
                 onClick={() => {
                   const finalPaid = formatDecimals3(typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total);
                   const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
-                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: تم الشحن بنجاح ✅\nhttps://meto-three.vercel.app`;
+                  const statusText = result?.status === "processing" ? "قيد التنفيذ لدى Fazer ⏳" : "تم الشحن بنجاح ✅";
+                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                 }}
               >

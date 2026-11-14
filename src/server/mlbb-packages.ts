@@ -58,14 +58,14 @@ export const MLBB_GLOBAL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
     baseOfferId: "mobile_legends_global:78_8_diamonds",
     rawOfferId: "78_8_diamonds",
     name: "86 Diamonds",
-    fallbackCostUsd: 1.06,
+    fallbackCostUsd: 1.059,
   },
   172: {
     totalDiamonds: 172,
     baseOfferId: "mobile_legends_global:156_16_diamonds",
     rawOfferId: "156_16_diamonds",
     name: "172 Diamonds",
-    fallbackCostUsd: 2.1,
+    fallbackCostUsd: 2.099,
   },
   257: {
     totalDiamonds: 257,
@@ -79,35 +79,35 @@ export const MLBB_GLOBAL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
     baseOfferId: "mobile_legends_global:625_81_diamonds",
     rawOfferId: "625_81_diamonds",
     name: "706 Diamonds",
-    fallbackCostUsd: 8.27,
+    fallbackCostUsd: 8.265,
   },
   2195: {
     totalDiamonds: 2195,
     baseOfferId: "mobile_legends_global:1860_335_diamonds",
     rawOfferId: "1860_335_diamonds",
     name: "2195 Diamonds",
-    fallbackCostUsd: 25.02,
+    fallbackCostUsd: 25.019,
   },
   3688: {
     totalDiamonds: 3688,
     baseOfferId: "mobile_legends_global:3099_589_diamonds",
     rawOfferId: "3099_589_diamonds",
     name: "3688 Diamonds",
-    fallbackCostUsd: 41.75,
+    fallbackCostUsd: 41.738,
   },
   5532: {
     totalDiamonds: 5532,
     baseOfferId: "mobile_legends_global:4649_883_diamonds",
     rawOfferId: "4649_883_diamonds",
     name: "5532 Diamonds",
-    fallbackCostUsd: 63.03,
+    fallbackCostUsd: 63.021,
   },
   9288: {
     totalDiamonds: 9288,
     baseOfferId: "mobile_legends_global:7740_1548_diamonds",
     rawOfferId: "7740_1548_diamonds",
     name: "9288 Diamonds",
-    fallbackCostUsd: 104.69,
+    fallbackCostUsd: 104.672,
   },
 };
 
@@ -194,7 +194,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 50,
     bonusDiamonds: 5,
-    fallbackCostUsd: 0.75,
+    fallbackCostUsd: 0.6777,
   },
   {
     offerId: "mobile_legends_global:150_15_diamonds_first_top_up_bonus",
@@ -286,10 +286,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     offerId: "mlbb_composite_344",
     name: "344 Diamonds",
     totalDiamonds: 344,
-    components: [
-      { baseTotal: 86, qty: 1 },
-      { baseTotal: 257, qty: 1 },
-    ],
+    components: [{ baseTotal: 172, qty: 2 }],
   },
   {
     offerId: "mlbb_composite_429",
@@ -339,8 +336,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 1050,
     components: [
       { baseTotal: 706, qty: 1 },
-      { baseTotal: 86, qty: 1 },
-      { baseTotal: 257, qty: 1 },
+      { baseTotal: 172, qty: 2 },
     ],
   },
   {
@@ -373,8 +369,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 2539,
     components: [
       { baseTotal: 2195, qty: 1 },
-      { baseTotal: 86, qty: 1 },
-      { baseTotal: 257, qty: 1 },
+      { baseTotal: 172, qty: 2 },
     ],
   },
   {

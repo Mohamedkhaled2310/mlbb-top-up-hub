@@ -55,6 +55,7 @@ import {
   adminSetMerchantRegionApi,
   adminSyncBinanceRateApi,
   adminSyncFazerApi,
+  adminSyncOrderWithFazerApi,
   adminToggleMerchantApi,
   adminUpdateEgpRateApi,
   adminUpdatePackagePriceApi,
@@ -141,6 +142,7 @@ function AdminPage() {
   const [orderGameFilter, setOrderGameFilter] = useState<string>("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState<string>("all");
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
+  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [refreshingOrders, setRefreshingOrders] = useState(false);
   const [pkgGameFilter, setPkgGameFilter] = useState<string>("all");
   const [pkgSearch, setPkgSearch] = useState<string>("");
@@ -244,6 +246,39 @@ function AdminPage() {
       setRefreshingOrders(false);
     }
   }, []);
+
+  const handleSyncFazerOrder = async (orderId: string) => {
+    const activeToken = (await getFreshToken()) || token || store.accessToken;
+    if (!activeToken) {
+      toast({ title: "خطأ", description: "جلسة الأدمن غير صالحة" });
+      return;
+    }
+    setSyncingOrderId(orderId);
+    try {
+      const res = await withAdminAuthRetry((tok) => adminSyncOrderWithFazerApi(tok, { order_id: orderId }));
+      if (res?.error) {
+        toast({ title: "فشل المزامنة مع Fazer", description: res.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title:
+          res.new_status === "success"
+            ? "اكتملت العملية بنجاح! 🚀"
+            : res.new_status === "failed"
+              ? "فشلت العملية في Fazer ❌"
+              : "العملية لا تزال قيد التنفيذ ⏳",
+        description: res.message || `حالة الطلب الآن: ${res.new_status}`,
+      });
+      if (selectedOrderDetails && (selectedOrderDetails.id === orderId || selectedOrderDetails.order_ref === orderId)) {
+        setSelectedOrderDetails(res.order || { ...selectedOrderDetails, status: res.new_status });
+      }
+      await loadOrders(activeToken);
+    } catch (e: any) {
+      toast({ title: "خطأ في الاتصال", description: e?.message, variant: "destructive" });
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o: any) => {
@@ -2126,15 +2161,29 @@ function AdminPage() {
 
                             {/* Action */}
                             <td className="p-3 text-center">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedOrderDetails(o)}
-                                className="border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 h-7 px-2.5 text-xs gap-1"
-                              >
-                                <Eye className="w-3 h-3 text-cyan-400" />
-                                <span>تفاصيل</span>
-                              </Button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                {(o.status === "processing" || o.status === "pending") && (
+                                  <Button
+                                    size="sm"
+                                    disabled={syncingOrderId === o.id}
+                                    onClick={() => handleSyncFazerOrder(o.id)}
+                                    className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-7 px-2 text-[11px] gap-1 shadow-sm"
+                                    title="مزامنة الحالة مع Fazer فورياً"
+                                  >
+                                    <RefreshCw className={`w-3 h-3 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
+                                    <span>مزامنة</span>
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedOrderDetails(o)}
+                                  className="border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 h-7 px-2.5 text-xs gap-1"
+                                >
+                                  <Eye className="w-3 h-3 text-cyan-400" />
+                                  <span>تفاصيل</span>
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2272,16 +2321,29 @@ function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Button: View details */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedOrderDetails(o)}
-                          className="w-full border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 text-xs gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                          <span>عرض تفاصيل العملية وبيانات Fazer</span>
-                        </Button>
+                        {/* Action buttons: Sync & Details */}
+                        <div className="flex items-center gap-2">
+                          {(o.status === "processing" || o.status === "pending") && (
+                            <Button
+                              size="sm"
+                              disabled={syncingOrderId === o.id}
+                              onClick={() => handleSyncFazerOrder(o.id)}
+                              className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-8 text-xs gap-1.5 px-3 shrink-0"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
+                              <span>مزامنة Fazer</span>
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedOrderDetails(o)}
+                            className="flex-1 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 text-xs gap-1.5"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>عرض تفاصيل العملية</span>
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
@@ -3723,28 +3785,41 @@ function AdminPage() {
                     <FileText className="w-5 h-5 text-cyan-400" />
                     <span>تفاصيل العملية ({selectedOrderDetails.order_ref})</span>
                   </span>
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      selectedOrderDetails.status === "success"
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                        : selectedOrderDetails.status === "failed"
-                          ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                    }`}
-                  >
-                    {selectedOrderDetails.status === "success" && <CheckCircle className="w-3.5 h-3.5" />}
-                    {selectedOrderDetails.status === "failed" && <AlertTriangle className="w-3.5 h-3.5" />}
-                    {selectedOrderDetails.status !== "success" && selectedOrderDetails.status !== "failed" && (
-                      <Clock className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedOrderDetails.fazer_transaction_id && (
+                      <Button
+                        size="sm"
+                        disabled={syncingOrderId === selectedOrderDetails.id}
+                        onClick={() => handleSyncFazerOrder(selectedOrderDetails.id)}
+                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold h-7 px-3 text-xs gap-1.5 shadow-sm"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === selectedOrderDetails.id ? "animate-spin" : ""}`} />
+                        <span>{syncingOrderId === selectedOrderDetails.id ? "جاري المزامنة..." : "مزامنة مع Fazer ⚡"}</span>
+                      </Button>
                     )}
-                    <span>
-                      {selectedOrderDetails.status === "success"
-                        ? "تم الشحن بنجاح"
-                        : selectedOrderDetails.status === "failed"
-                          ? "فشل في التنفيذ"
-                          : "قيد المعالجة"}
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        selectedOrderDetails.status === "success"
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : selectedOrderDetails.status === "failed"
+                            ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                            : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {selectedOrderDetails.status === "success" && <CheckCircle className="w-3.5 h-3.5" />}
+                      {selectedOrderDetails.status === "failed" && <AlertTriangle className="w-3.5 h-3.5" />}
+                      {selectedOrderDetails.status !== "success" && selectedOrderDetails.status !== "failed" && (
+                        <Clock className="w-3.5 h-3.5" />
+                      )}
+                      <span>
+                        {selectedOrderDetails.status === "success"
+                          ? "تم الشحن بنجاح"
+                          : selectedOrderDetails.status === "failed"
+                            ? "فشل في التنفيذ"
+                            : "قيد المعالجة (Processing)"}
+                      </span>
                     </span>
-                  </span>
+                  </div>
                 </DialogTitle>
               </DialogHeader>
 

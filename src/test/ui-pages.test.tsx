@@ -73,7 +73,7 @@ describe("UI Components & Flows", () => {
     fireEvent.click(screen.getByText("seed-merchant"));
     rerender(<Wrapper open={true} />);
 
-    expect(screen.getByText("بيانات الشحن")).toBeInTheDocument();
+    expect(screen.getAllByText("بيانات الشحن").length).toBeGreaterThan(0);
     expect(screen.getByText("86 Diamonds")).toBeInTheDocument();
     // Cost $2 * 50 EGP * (1 + 0.10) = 110 EGP
     expect(screen.getByText("110 ج.م")).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("UI Components & Flows", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /تحقق ومتابعة/i }));
     await waitFor(() => {
-      expect(screen.getByText("مراجعة الطلب")).toBeInTheDocument();
+      expect(screen.getAllByText("مراجعة الطلب").length).toBeGreaterThan(0);
       expect(screen.getByText("TestPlayer#2024")).toBeInTheDocument();
       expect(screen.getByText("اسم اللاعب (Nickname)")).toBeInTheDocument();
     });

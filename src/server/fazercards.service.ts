@@ -525,6 +525,94 @@ export class FazerCardsService {
   }
 
   /**
+   * Fetch live order status directly from FazerCards API: `GET /orders/:order_id`.
+   */
+  static async getOrder(orderId: string): Promise<{
+    success: boolean;
+    orderId: string;
+    status: "created" | "processing" | "completed" | "failed" | "cancelled" | string;
+    totalUsd?: number | undefined;
+    failReason?: string | null | undefined;
+    raw?: any;
+  }> {
+    const apiKey = this.getApiKey();
+    const cleanId = (orderId || "").trim();
+    if (!cleanId) {
+      return { success: false, orderId: cleanId, status: "unknown", failReason: "معرف الطلب غير محدد" };
+    }
+    if (!apiKey) {
+      return { success: false, orderId: cleanId, status: "unknown", failReason: "FAZER_API_KEY غير مُضاف" };
+    }
+
+    try {
+      const response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/orders/${cleanId}`, {
+        method: "GET",
+        headers: this.headers(),
+        timeoutMs: 10000,
+      });
+      const data = (await response.json().catch(() => null)) as any;
+      if (response.ok && data && (data["ok"] !== false && data["success"] !== false) && data["order"]) {
+        const o = data["order"];
+        const orderStatus = String(o["status"] || "processing").toLowerCase();
+        return {
+          success: true,
+          orderId: String(o["id"] || cleanId),
+          status: orderStatus,
+          totalUsd: o["total_usd"] != null ? Number(o["total_usd"]) : undefined,
+          failReason: o["fail_reason"] || null,
+          raw: o,
+        };
+      }
+
+      return {
+        success: false,
+        orderId: cleanId,
+        status: "unknown",
+        failReason: String(data?.["message"] || data?.["error"] || `Fazer API error (${response.status})`),
+      };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        orderId: cleanId,
+        status: "unknown",
+        failReason: err instanceof Error ? err.message : "Network error fetching Fazer order",
+      };
+    }
+  }
+
+  /**
+   * Polls FazerCards order status until it resolves to `completed` or `failed`,
+   * or until maxAttempts is reached (in which case it returns the last known status, e.g. `processing`).
+   */
+  static async pollOrderStatus(
+    orderId: string,
+    maxAttempts = 3,
+    intervalMs = 1200,
+  ): Promise<{
+    status: string;
+    completed: boolean;
+    failed: boolean;
+    failReason?: string | null | undefined;
+    raw?: any;
+  }> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+      const res = await this.getOrder(orderId);
+      if (res.success) {
+        if (res.status === "completed") {
+          return { status: "completed", completed: true, failed: false, raw: res.raw };
+        }
+        if (res.status === "failed" || res.status === "cancelled") {
+          return { status: res.status, completed: false, failed: true, failReason: res.failReason, raw: res.raw };
+        }
+      }
+    }
+    return { status: "processing", completed: false, failed: false };
+  }
+
+  /**
    * 1) Discover active topup categories dynamically from `GET /topups?limit=500` via `meta.next_cursor`
    * 2) Keep clean canonical categories for MLBB, PUBG Mobile, Free Fire, and Honor of Kings
    * 3) Fetch offers per category concurrently with regional tagging and collision-free composite `offer_id`

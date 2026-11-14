@@ -24,6 +24,7 @@ import {
   refreshSessionServer,
   submitCustomerOrder,
   syncFazerPackagesAndBalance,
+  syncOrderWithFazer,
   updateMyNationality,
 } from "./store.service";
 
@@ -356,6 +357,19 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       if (!token) return json({ error: "unauthorized" }, 401);
       const limit = parseInt(url.searchParams.get("limit") || "30", 10);
       const data = await adminListRecentOrders(token, limit);
+      return json(data);
+    } catch (e: any) {
+      const msg = e?.message || "failed";
+      return json({ error: msg }, msg.includes("forbidden") ? 403 : 400);
+    }
+  }
+
+  if (path === "/api/admin/orders/sync-fazer" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json().catch(() => ({}))) as { order_id?: string; order_ref?: string };
+      const data = await syncOrderWithFazer(token, body);
       return json(data);
     } catch (e: any) {
       const msg = e?.message || "failed";

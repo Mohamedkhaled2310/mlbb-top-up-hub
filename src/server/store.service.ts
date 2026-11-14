@@ -1049,6 +1049,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   }
 
   let succeededCount = 0;
+  let processingCount = 0;
   let failedCount = 0;
   let failedAmount = 0;
   const txIds: string[] = [];
@@ -1133,6 +1134,20 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
             idempotencyKey,
           });
 
+          // Live Fazer synchronization: if accepted, poll Fazer status up to 3.6s
+          if (res.success && res.orderId && res.status !== "completed") {
+            const poll = await FazerCardsService.pollOrderStatus(res.orderId, 3, 1200);
+            if (poll.completed) {
+              res.status = "completed";
+            } else if (poll.failed) {
+              res.success = false;
+              res.status = "failed";
+              res.error = poll.failReason || "فشلت العملية لدى مزود الخدمة (Fazer)";
+            } else {
+              res.status = "processing";
+            }
+          }
+
           responses.push({
             parent_package: it.package_id,
             item: comp.fazerOfferId,
@@ -1144,7 +1159,11 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           });
 
           if (res.success) {
-            succeededCount++;
+            if (res.status === "completed") {
+              succeededCount++;
+            } else {
+              processingCount++;
+            }
             if (res.transactionId) txIds.push(res.transactionId);
             if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
           } else {
@@ -1165,9 +1184,28 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           region,
           idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
         });
+
+        // Live Fazer synchronization: if accepted, poll Fazer status up to 3.6s
+        if (res.success && res.orderId && res.status !== "completed") {
+          const poll = await FazerCardsService.pollOrderStatus(res.orderId, 3, 1200);
+          if (poll.completed) {
+            res.status = "completed";
+          } else if (poll.failed) {
+            res.success = false;
+            res.status = "failed";
+            res.error = poll.failReason || "فشلت العملية لدى مزود الخدمة (Fazer)";
+          } else {
+            res.status = "processing";
+          }
+        }
+
         responses.push({ item: it.fazer_offer_id, q, res });
         if (res.success) {
-          succeededCount++;
+          if (res.status === "completed") {
+            succeededCount++;
+          } else {
+            processingCount++;
+          }
           if (res.transactionId) txIds.push(res.transactionId);
           if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
         } else {
@@ -1183,19 +1221,20 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     await persistFazerAccountBalance({ connected: true, balance: lastRemainingFazer, currency: "USD" });
   }
 
-  const allOk = failedCount === 0 && succeededCount > 0;
-  let finalStatus: "success" | "failed" | "incomplete";
-  if (allOk) {
-    finalStatus = "success";
-  } else if (asMerchant) {
-    finalStatus = succeededCount > 0 ? "incomplete" : "failed";
-    if (failedAmount > 0) {
+  let finalStatus: "success" | "processing" | "failed" | "incomplete";
+  if (failedCount > 0) {
+    if (succeededCount === 0 && processingCount === 0) {
+      finalStatus = "failed";
+    } else {
+      finalStatus = "incomplete";
+    }
+    if (asMerchant && failedAmount > 0) {
       await issueMerchantRefund(
         sb,
         merchant.id,
         failedAmount,
         orderRef,
-        succeededCount > 0
+        succeededCount > 0 || processingCount > 0
           ? `استرداد جزئي للوحدات غير المنفذة من طلب ${orderRef}`
           : `استرداد كامل بسبب فشل التنفيذ للطلب ${orderRef}`,
       );
@@ -1203,10 +1242,15 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
         updatedBalance = Math.round((updatedBalance + failedAmount) * 100) / 100;
       }
     }
+  } else if (processingCount > 0) {
+    finalStatus = "processing";
+  } else if (succeededCount > 0) {
+    finalStatus = "success";
   } else {
-    finalStatus = succeededCount > 0 ? "incomplete" : "failed";
+    finalStatus = "failed";
   }
 
+  const isDelivered = finalStatus === "success";
   await sb
     .from("orders")
     .update({
@@ -1214,13 +1258,13 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       fazer_transaction_id: txIds.join(",") || null,
       fazer_response: responses,
       error_message: lastErr,
-      delivered_at: allOk ? new Date().toISOString() : null,
+      delivered_at: isDelivered ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", order.id);
 
   return {
-    success: allOk || finalStatus === "incomplete",
+    success: finalStatus === "success" || finalStatus === "processing" || finalStatus === "incomplete",
     order_ref: orderRef,
     status: finalStatus,
     total_egp: total,
@@ -1233,14 +1277,126 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     account_region: accRegion,
     error: lastErr,
     message: asMerchant
-      ? allOk
-        ? "تم خصم الرصيد وتنفيذ الشحن بنجاح."
-        : succeededCount > 0
-          ? `تم تنفيذ جزء من الطلب واسترداد ${failedAmount} ج.م للباقي تلقائياً.`
-          : "فشل تنفيذ الشحن وتم استرداد المبلغ بالكامل إلى محفظة التاجر تلقائياً."
-      : allOk
-        ? "تم تنفيذ الشحن بنجاح."
-        : "تعذر إكمال التنفيذ الفوري، تم حفظ الطلب للمراجعة.",
+      ? finalStatus === "success"
+        ? "تم خصم الرصيد وتنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
+        : finalStatus === "processing"
+          ? "تم خصم الرصيد وإرسال الشحن لمزود الخدمة وجاري المعالجة على سيرفر اللعبة (Fazer: Processing) ⏳."
+          : succeededCount > 0
+            ? `تم تنفيذ جزء من الطلب واسترداد ${failedAmount} ج.م للباقي تلقائياً.`
+            : "فشل تنفيذ الشحن وتم استرداد المبلغ بالكامل إلى محفظة التاجر تلقائياً."
+      : finalStatus === "success"
+        ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
+        : finalStatus === "processing"
+          ? "تم إرسال الطلب بنجاح إلى مزود الخدمة وجاري المعالجة على سيرفر اللعبة (قيد المعالجة) ⏳."
+          : "تعذر إكمال التنفيذ الفوري، تم حفظ الطلب للمراجعة.",
+  };
+}
+
+export async function syncOrderWithFazer(token: string, body: { order_id?: string; order_ref?: string }) {
+  await requireAdmin(token);
+  const sb = getAdminClient() as any;
+  const targetId = body.order_id || body.order_ref;
+  if (!targetId) throw new Error("معرف الطلب مطلوب للمزامنة");
+
+  const { data: order, error: oErr } = await sb
+    .from("orders")
+    .select("*")
+    .or(`id.eq.${targetId},order_ref.eq.${targetId}`)
+    .maybeSingle();
+
+  if (oErr || !order) throw new Error("الطلب غير موجود");
+
+  const txIdsRaw = order.fazer_transaction_id;
+  if (!txIdsRaw) {
+    throw new Error("لا يوجد معرف عملية Fazer مسجل لهذا الطلب للمزامنة معه");
+  }
+
+  const txIds = txIdsRaw.split(",").map((s: string) => s.trim()).filter(Boolean);
+  const fazerResults: any[] = [];
+  let allCompleted = true;
+  let anyFailed = false;
+  let anyProcessing = false;
+  let failMsg = "";
+
+  for (const tid of txIds) {
+    const fRes = await FazerCardsService.getOrder(tid);
+    fazerResults.push(fRes);
+    if (fRes.status === "completed") {
+      // completed ok
+    } else if (fRes.status === "failed" || fRes.status === "cancelled") {
+      anyFailed = true;
+      allCompleted = false;
+      failMsg = fRes.failReason || "فشلت العملية لدى Fazer";
+    } else {
+      anyProcessing = true;
+      allCompleted = false;
+    }
+  }
+
+  let newStatus = order.status;
+  const nowIso = new Date().toISOString();
+
+  if (allCompleted) {
+    newStatus = "success";
+    await sb
+      .from("orders")
+      .update({
+        status: "success",
+        delivered_at: order.delivered_at || nowIso,
+        fazer_response: fazerResults,
+        error_message: null,
+        updated_at: nowIso,
+      })
+      .eq("id", order.id);
+  } else if (anyFailed) {
+    newStatus = "failed";
+    // Refund merchant if it wasn't refunded already
+    if (order.merchant_id && order.status !== "failed") {
+      await issueMerchantRefund(
+        sb,
+        order.merchant_id,
+        Number(order.total_egp || 0),
+        order.order_ref,
+        `استرداد تلقائي للطلب ${order.order_ref} بعد تأكيد الفشل من Fazer`,
+      );
+    }
+    await sb
+      .from("orders")
+      .update({
+        status: "failed",
+        error_message: failMsg || "فشلت العملية في Fazer",
+        fazer_response: fazerResults,
+        updated_at: nowIso,
+      })
+      .eq("id", order.id);
+  } else if (anyProcessing) {
+    newStatus = "processing";
+    await sb
+      .from("orders")
+      .update({
+        status: "processing",
+        fazer_response: fazerResults,
+        updated_at: nowIso,
+      })
+      .eq("id", order.id);
+  }
+
+  const { data: updatedOrder } = await sb.from("orders").select("*").eq("id", order.id).maybeSingle();
+
+  return {
+    success: true,
+    order: updatedOrder || order,
+    order_id: order.id,
+    order_ref: order.order_ref,
+    previous_status: order.status,
+    new_status: newStatus,
+    fazer_results: fazerResults,
+    message:
+      newStatus === "success"
+        ? "تم تأكيد اكتمال الشحن من Fazer بنجاح! 🚀"
+        : newStatus === "failed"
+          ? `أكدت Fazer فشل العملية (${failMsg}). تم تحديث الحالة${order.merchant_id ? " واسترداد الرصيد للتاجر" : ""}.`
+          : "العملية لا تزال قيد المعالجة (Processing) في سيرفرات Fazer ⏳",
   };
 }
 
