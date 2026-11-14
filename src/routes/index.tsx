@@ -35,6 +35,7 @@ import { PackageCardSkeleton } from "../components/PackageCardSkeleton";
 import { getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
 import { useStore } from "../lib/store/useStore";
 import { calcMerchantUnitPriceEgp } from "../lib/pricing";
+import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import type { PackageCategory, TopUpPackage } from "../types/store";
 import { getStoreApi, validatePlayerApi } from "../lib/api-client";
 import metoPoster from "../assets/meto-poster.webp";
@@ -326,15 +327,10 @@ function CustomerStorePage() {
   }, [availableRegions, selectedPkgRegion]);
 
   const filteredPackages = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return gamePackages.filter((p) => {
-      const r = (Array.isArray(p.regions) && p.regions[0]) || (selectedGameId === "freefire" ? "mena" : "global");
-      const matchReg = effectivePkgRegion === "all" || availableRegions.length <= 1 || r === effectivePkgRegion;
-      const matchCat = selectedCategory === "all" || p.category === selectedCategory;
-      const matchQ = !q || p.name.toLowerCase().includes(q) || String(p.diamonds || "").includes(q);
-      return matchReg && matchCat && matchQ;
-    });
-  }, [gamePackages, selectedGameId, effectivePkgRegion, availableRegions.length, selectedCategory, searchQuery]);
+    const serverFiltered = filterPackagesForServer(gamePackages, effectivePkgRegion, searchQuery);
+    if (selectedCategory === "all") return serverFiltered;
+    return serverFiltered.filter((p) => p.category === selectedCategory);
+  }, [gamePackages, effectivePkgRegion, searchQuery, selectedCategory]);
 
   const displayedPackages = useMemo(() => {
     if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory) {

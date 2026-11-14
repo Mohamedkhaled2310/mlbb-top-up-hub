@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MapPin, MessageCircle, Package, Share2, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MapPin, MessageCircle, Package, Share2, Sparkles, User, X, XCircle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcMerchantUnitPriceEgp } from "@/lib/pricing";
-import { getGameServers } from "@/lib/regions";
+import { findMatchingPackageForServer, getGameServers, getServerLabel } from "@/lib/regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
@@ -32,12 +32,13 @@ export default function CheckoutModal({
   onClear,
   onOrderSuccess,
 }: Props) {
-  const { player, setPlayer, isMerchant, accessToken, merchant, settings, profile, setAuth } = useStore();
+  const { player, setPlayer, isMerchant, accessToken, merchant, settings, profile, setAuth, packages, setCart } = useStore();
   const [step, setStep] = useState<CheckoutStep>("form");
   const [region, setRegion] = useState(player.region || "");
   const [regionLocked, setRegionLocked] = useState(false);
   const [needsManualRegion, setNeedsManualRegion] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [priceNotice, setPriceNotice] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [paidTotal, setPaidTotal] = useState<number>(0);
   const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
@@ -51,10 +52,13 @@ export default function CheckoutModal({
       setStep("form");
       setResult(null);
       setPaidTotal(0);
-      setRegion(latestRegionRef.current);
+      const pkgServer = Array.isArray(cart[0]?.package.regions) && cart[0]?.package.regions[0] ? cart[0]?.package.regions[0] : "";
+      const initialRegion = latestRegionRef.current || pkgServer || "global";
+      setRegion(initialRegion);
       setRegionLocked(Boolean(latestRegionRef.current));
       setNeedsManualRegion(false);
       submitted.current = false;
+      setPriceNotice(null);
     }
   }, [open]);
 
@@ -70,6 +74,50 @@ export default function CheckoutModal({
       return calcMerchantUnitPriceEgp(base, merchantMargin, item.package.costUsd, settings.egp_rate);
     }
     return item.package.retailPriceEgp;
+  };
+
+  const handleServerSelection = (srvCode: string) => {
+    const targetReg = srvCode.trim().toLowerCase();
+    setRegion(targetReg);
+    setPlayer({ ...player, region: targetReg });
+
+    if (!cart.length) return;
+
+    let priceChanged = false;
+    let oldTotal = 0;
+    let newTotal = 0;
+
+    const nextCart = cart.map((item) => {
+      const curPrice = getItemUnitPrice(item);
+      oldTotal += curPrice * item.qty;
+
+      const matchedPkg = findMatchingPackageForServer(item.package, targetReg, packages);
+      if (matchedPkg && matchedPkg.id !== item.package.id) {
+        priceChanged = true;
+        const newItem: CartItem = {
+          ...item,
+          package: matchedPkg,
+          packageId: matchedPkg.offerId,
+        };
+        const newUnitPrice = getItemUnitPrice(newItem);
+        newTotal += newUnitPrice * item.qty;
+        return newItem;
+      }
+
+      newTotal += curPrice * item.qty;
+      return item;
+    });
+
+    if (priceChanged) {
+      setCart(nextCart);
+      const diff = Math.round((newTotal - oldTotal) * 100) / 100;
+      const srvLabel = getServerLabel(targetReg, activeGameId);
+      setPriceNotice(
+        `تم تحديث باقة وسعر السلة تلقائياً لتطابق سيرفر (${srvLabel}): ${newTotal} ج.م ${diff !== 0 ? `(${diff > 0 ? `+${diff}` : diff} ج.م)` : ""}`,
+      );
+    } else {
+      setPriceNotice(null);
+    }
   };
 
   const total = cart.reduce((sum, item) => sum + item.qty * getItemUnitPrice(item), 0);
@@ -107,6 +155,7 @@ export default function CheckoutModal({
         }
         setPlayer({ ...player, name: res.username || player.name, region: finalRegion });
         setRegion(finalRegion);
+        handleServerSelection(finalRegion);
         saveRecentAccount({
           id: player.id.trim(),
           zoneId: player.zoneId?.trim(),
@@ -247,8 +296,7 @@ export default function CheckoutModal({
                       key={srv.code}
                       type="button"
                       onClick={() => {
-                        setRegion(srv.code);
-                        setPlayer({ ...player, region: srv.code });
+                        handleServerSelection(srv.code);
                       }}
                       className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all ${
                         isSel
@@ -271,8 +319,7 @@ export default function CheckoutModal({
                   <Input
                     value={region}
                     onChange={(e) => {
-                      setRegion(e.target.value);
-                      setPlayer({ ...player, region: e.target.value });
+                      handleServerSelection(e.target.value);
                     }}
                     placeholder="أدخل رمز السيرفر يدوياً إن لم يكن بالقائمة (مثال: EU)"
                     className="h-8 text-xs bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
@@ -283,6 +330,13 @@ export default function CheckoutModal({
                 </div>
               ) : null}
             </div>
+
+            {priceNotice && (
+              <div className="rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-2.5 text-xs text-cyan-200 flex items-center gap-2 animate-meto-fade">
+                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="font-medium">{priceNotice}</span>
+              </div>
+            )}
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/50">
               <div className="font-semibold flex items-center justify-between text-sm">
@@ -298,6 +352,7 @@ export default function CheckoutModal({
               {cart.length === 0 && <p className="text-sm text-slate-400">السلة فارغة. اختر باقات من القائمة.</p>}
               {cart.map((it) => {
                 const unit = getItemUnitPrice(it);
+                const pkgServer = (Array.isArray(it.package.regions) && it.package.regions[0]) || "global";
                 return (
                   <div
                     key={it.package.id}
@@ -305,7 +360,13 @@ export default function CheckoutModal({
                   >
                     <div className="min-w-0">
                       <div className="truncate font-medium text-slate-100">{it.package.name}</div>
-                      <div className="text-slate-400 text-xs">{unit} ج.م × {it.qty}</div>
+                      <div className="text-slate-400 text-xs flex items-center gap-1.5 flex-wrap">
+                        <span>{unit} ج.م × {it.qty}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-cyan-300 font-mono text-[10px] uppercase font-bold">
+                          سيرفر {pkgServer.toUpperCase()}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <Button

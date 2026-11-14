@@ -20,7 +20,7 @@ import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency } from "../lib/pricing";
-import { getGameServers, getServerLabel } from "../lib/regions";
+import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo, getCurrencyRate } from "../lib/currency";
 import {
   getMerchantDashboardApi,
@@ -346,17 +346,7 @@ function MerchantPage() {
   }, [gameServersList, selectedPkgRegion]);
 
   const pkgs = useMemo(() => {
-    const q = pkgSearch.trim().toLowerCase();
-    const selReg = effectivePkgRegion.toLowerCase();
-    return gamePackages.filter((p) => {
-      const regs = Array.isArray(p.regions) && p.regions.length
-        ? p.regions.map((r) => String(r).toLowerCase())
-        : ["global"];
-      // Matches if selected server is included, or if package is global (applies to all servers)
-      const regionMatch = selReg === "all" || regs.includes(selReg) || regs.includes("global");
-      const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
-      return regionMatch && textMatch;
-    });
+    return filterPackagesForServer(gamePackages, effectivePkgRegion, pkgSearch);
   }, [gamePackages, effectivePkgRegion, pkgSearch]);
 
   const cartCount = store.cart.reduce((s, i) => s + i.qty, 0);

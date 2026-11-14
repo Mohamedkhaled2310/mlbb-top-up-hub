@@ -1,3 +1,5 @@
+import type { TopUpPackage } from "@/types/store";
+
 export interface GameServerRegion {
   code: string;
   labelAr: string;
@@ -59,4 +61,122 @@ export function getServerLabel(code: string, gameId = "mlbb"): string {
   const found = servers.find((s) => s.code.toLowerCase() === (code || "").toLowerCase());
   if (found) return found.labelAr;
   return (code || "").toUpperCase();
+}
+
+/**
+ * Finds the exact matching package for targetServerCode (e.g. "br", "mena", "global").
+ * If the current package already supports it, keeps it.
+ * Otherwise, finds the package with same gameId, category, and diamonds for that server.
+ */
+export function findMatchingPackageForServer(
+  currentPkg: TopUpPackage,
+  targetServerCode: string,
+  allPackages: TopUpPackage[],
+): TopUpPackage {
+  if (!currentPkg || !allPackages || !allPackages.length) return currentPkg;
+  const targetReg = normalizeRegion(targetServerCode || "global");
+  const currentRegs = Array.isArray(currentPkg.regions) && currentPkg.regions.length
+    ? currentPkg.regions.map(normalizeRegion)
+    : ["global"];
+
+  // If current package already explicitly supports targetReg, keep it!
+  if (currentRegs.includes(targetReg) && targetReg !== "global") {
+    return currentPkg;
+  }
+
+  const curGame = (currentPkg.gameId || "mlbb").toLowerCase();
+  const curDiamonds = Number(currentPkg.diamonds || 0);
+  const curCategory = currentPkg.category || "diamonds";
+
+  // 1. Try to find exact package supporting targetReg
+  const exact = allPackages.find((p) => {
+    if (!p.active) return false;
+    if ((p.gameId || "mlbb").toLowerCase() !== curGame) return false;
+    if (Number(p.diamonds || 0) !== curDiamonds) return false;
+    if ((p.category || "diamonds") !== curCategory) return false;
+    const pRegs = Array.isArray(p.regions) && p.regions.length
+      ? p.regions.map(normalizeRegion)
+      : ["global"];
+    return pRegs.includes(targetReg);
+  });
+  if (exact) return exact;
+
+  // 2. Fallback to global package
+  const globalPkg = allPackages.find((p) => {
+    if (!p.active) return false;
+    if ((p.gameId || "mlbb").toLowerCase() !== curGame) return false;
+    if (Number(p.diamonds || 0) !== curDiamonds) return false;
+    if ((p.category || "diamonds") !== curCategory) return false;
+    const pRegs = Array.isArray(p.regions) && p.regions.length
+      ? p.regions.map(normalizeRegion)
+      : ["global"];
+    return pRegs.includes("global");
+  });
+
+  return globalPkg || currentPkg;
+}
+
+/**
+ * Filters and prioritizes packages for a given game and selected server so that:
+ * - For any diamond tier, if an exact server package exists, it is shown.
+ * - If not, the global package is shown as fallback.
+ * - Duplicate diamond tiers with conflicting prices are eliminated.
+ */
+export function filterPackagesForServer(
+  gamePackages: TopUpPackage[],
+  serverCode: string,
+  searchQuery = "",
+): TopUpPackage[] {
+  const q = searchQuery.trim().toLowerCase();
+  const selReg = normalizeRegion(serverCode || "global");
+
+  const matched = gamePackages.filter((p) => {
+    if (!p.active) return false;
+    if (!q) return true;
+    return (
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.offerId || "").toLowerCase().includes(q) ||
+      String(p.diamonds || "").includes(q)
+    );
+  });
+
+  const result: TopUpPackage[] = [];
+  const seenTiers = new Map<string, TopUpPackage>();
+
+  for (const p of matched) {
+    const regs = Array.isArray(p.regions) && p.regions.length
+      ? p.regions.map(normalizeRegion)
+      : ["global"];
+
+    const isExact = regs.includes(selReg);
+    const isGlobal = regs.includes("global");
+
+    if (!isExact && !isGlobal && selReg !== "all") {
+      continue;
+    }
+
+    const key = `${p.category || "diamonds"}_${p.diamonds || 0}_${(p.name || "")
+      .replace(/\s*(global|mena|brazil|br|turkey|tr|indonesia|id|malaysia|my)\s*/gi, "")
+      .trim()}`;
+
+    const existing = seenTiers.get(key);
+    if (!existing) {
+      seenTiers.set(key, p);
+      result.push(p);
+    } else {
+      const existingRegs = Array.isArray(existing.regions) && existing.regions.length
+        ? existing.regions.map(normalizeRegion)
+        : ["global"];
+      const existingIsExact = existingRegs.includes(selReg);
+      if (!existingIsExact && isExact) {
+        const idx = result.indexOf(existing);
+        if (idx !== -1) {
+          result[idx] = p;
+          seenTiers.set(key, p);
+        }
+      }
+    }
+  }
+
+  return result;
 }

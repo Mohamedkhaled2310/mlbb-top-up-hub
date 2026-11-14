@@ -71,6 +71,7 @@ interface StoreState {
   updateCartQty: (id: string, qty: number) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
+  setCart: (cart: CartItem[]) => void;
   setAuth: (
     token: string | null,
     profile?: any,
@@ -184,6 +185,7 @@ state = {
     })),
   removeFromCart: (id) => setState((st) => ({ cart: st.cart.filter((c) => c.package.id !== id) })),
   clearCart: () => setState({ cart: [] }),
+  setCart: (cart) => setState({ cart }),
   setAuth: (accessToken, profile, merchant, sessionMeta, rememberMe = true) => {
     const nextRefresh = sessionMeta?.refreshToken ?? (accessToken ? state.refreshToken : null);
     const nextExp = sessionMeta?.expiresAt ?? (accessToken ? state.expiresAt : null);
