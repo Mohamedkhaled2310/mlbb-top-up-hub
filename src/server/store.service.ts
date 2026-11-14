@@ -7,9 +7,11 @@ import {
   DEFAULT_EGP_RATE,
   DEFAULT_MERCHANT_MARKUP,
   DEFAULT_RETAIL_MARKUP,
+  calcCostEgp,
   calcMerchantBasePriceEgp,
   calcMerchantUnitPriceEgp,
   calcRetailPriceEgp,
+  round3,
 } from "../lib/pricing";
 
 function readEnv(name: string): string {
@@ -1338,7 +1340,7 @@ export async function adminSetMerchantBalance(token: string, body: any) {
     merchant_id: merchantId,
     previous_balance_egp: currentBalanceEgp,
     balance_egp: newBalanceEgp,
-    balance_usd: Math.round((newBalanceEgp / egpRate) * 100) / 100,
+    balance_usd: round3(newBalanceEgp / egpRate),
   };
 }
 
@@ -1437,8 +1439,8 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
 
   // Compute exact package pricing preview for this merchant
   const packagesPreview = (packagesRes.data || []).map((p: any) => {
-    const costUsd = Number(p.cost_usd || 0);
-    const costEgp = Math.round(costUsd * egpRate * 100) / 100;
+    const costUsd = round3(Number(p.cost_usd || 0));
+    const costEgp = calcCostEgp(costUsd, egpRate);
     const merchantPrice = calcMerchantUnitPriceEgp(
       p.merchant_base_price_egp || costEgp,
       marginPercent,
@@ -1446,7 +1448,7 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       egpRate,
     );
     const retailPrice = calcRetailPriceEgp(costUsd, egpRate);
-    const profitPerUnitEgp = Math.max(0, merchantPrice - costEgp);
+    const profitPerUnitEgp = Math.max(0, round3(merchantPrice - costEgp));
 
     return {
       id: p.id,
@@ -1467,7 +1469,7 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
     merchant: {
       ...merchant,
       balance_egp: Number(merchant.balance_egp || 0),
-      balance_usd: Math.round((Number(merchant.balance_egp || 0) / egpRate) * 100) / 100,
+      balance_usd: round3(Number(merchant.balance_egp || 0) / egpRate),
       margin_percent: marginPercent,
       profile,
       email,

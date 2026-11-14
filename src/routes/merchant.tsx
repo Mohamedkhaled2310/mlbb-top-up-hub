@@ -19,7 +19,7 @@ import CheckoutModal from "../components/CheckoutModal";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
-import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency } from "../lib/pricing";
+import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency, formatDecimals3 } from "../lib/pricing";
 import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo, getCurrencyRate } from "../lib/currency";
 import {
@@ -505,23 +505,23 @@ function MerchantPage() {
                   <div className="text-lg sm:text-2xl font-extrabold text-emerald-300 font-mono mt-1">
                     {currencyInfo.currency === "EGP" ? (
                       <>
-                        {rawBalanceEgp.toLocaleString("en-US")} <span className="text-xs font-sans">ج.م</span>
+                        {formatDecimals3(rawBalanceEgp)} <span className="text-xs font-sans">ج.م</span>
                       </>
                     ) : (
                       <>
                         {convertedBalance.toLocaleString("en-US", {
-                          minimumFractionDigits: currencyInfo.decimals,
-                          maximumFractionDigits: currencyInfo.decimals,
+                          minimumFractionDigits: Math.min(currencyInfo.decimals, 3),
+                          maximumFractionDigits: Math.min(currencyInfo.decimals, 3),
                         })}{" "}
                         <span className="text-xs font-sans">{currencyInfo.symbolAr}</span>
                       </>
                     )}
                   </div>
                   <div className="text-[11px] text-emerald-400/90 font-mono mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <span>≈ ${(rawBalanceEgp / (store.settings.egp_rate || 50)).toFixed(2)} USD</span>
+                    <span>≈ ${formatDecimals3(rawBalanceEgp / (store.settings.egp_rate || 50))} USD</span>
                     {currencyInfo.currency !== "EGP" && (
                       <span className="text-slate-400 font-sans text-[10px]">
-                        (رصيد التسوية: {rawBalanceEgp.toLocaleString("en-US")} ج.م)
+                        (رصيد التسوية: {formatDecimals3(rawBalanceEgp)} ج.م)
                       </span>
                     )}
                   </div>
@@ -693,15 +693,15 @@ function MerchantPage() {
                             <div className="text-[10px] text-slate-400">السعر:</div>
                             {currencyInfo.currency === "EGP" ? (
                               <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
-                                {prices.priceEgp} ج.م
+                                {formatDecimals3(prices.priceEgp)} ج.م
                               </div>
                             ) : (
                               <div>
                                 <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
-                                  {prices.converted} {currencyInfo.symbolAr}
+                                  {formatDecimals3(prices.converted)} {currencyInfo.symbolAr}
                                 </div>
                                 <div className="text-[10px] text-slate-400 font-mono">
-                                  ({prices.priceEgp} ج.م)
+                                  ({formatDecimals3(prices.priceEgp)} ج.م)
                                 </div>
                               </div>
                             )}

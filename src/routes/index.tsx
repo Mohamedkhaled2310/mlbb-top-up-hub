@@ -34,7 +34,7 @@ import { OfflineIndicator } from "../components/OfflineIndicator";
 import { PackageCardSkeleton } from "../components/PackageCardSkeleton";
 import { getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
 import { useStore } from "../lib/store/useStore";
-import { calcMerchantUnitPriceEgp } from "../lib/pricing";
+import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
 import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import type { PackageCategory, TopUpPackage } from "../types/store";
 import { getStoreApi, validatePlayerApi } from "../lib/api-client";
@@ -351,7 +351,7 @@ function CustomerStorePage() {
   };
 
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
-  const cartTotal = cart.reduce((s, i) => s + i.qty * getDisplayPrice(i.package), 0);
+  const cartTotal = round3(cart.reduce((s, i) => s + i.qty * getDisplayPrice(i.package), 0));
 
   const onAdd = (pkg: TopUpPackage) => {
     addToCart(pkg);
@@ -595,7 +595,7 @@ function CustomerStorePage() {
                   </div>
                   <div className="flex items-center gap-2.5 shrink-0">
                     <div className="text-left sm:text-right">
-                      <div className="text-xs sm:text-sm font-black text-white font-mono">{getDisplayPrice(p)} ج.م</div>
+                      <div className="text-xs sm:text-sm font-black text-white font-mono">{formatDecimals3(getDisplayPrice(p))} ج.م</div>
                     </div>
                     <Button size="sm" onClick={() => onAdd(p)} className="h-8 px-2.5 bg-rose-600 hover:bg-rose-500 text-white active:scale-95">
                       <Plus className="w-4 h-4" />
@@ -652,7 +652,7 @@ function CustomerStorePage() {
                   </div>
                   <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                     <div className="text-xs sm:text-sm font-black text-white font-mono">
-                      {getDisplayPrice(p)} <span className="text-[10px] text-slate-400 font-sans font-normal">ج.م</span>
+                      {formatDecimals3(getDisplayPrice(p))} <span className="text-[10px] text-slate-400 font-sans font-normal">ج.م</span>
                     </div>
                     <Button
                       size="sm"

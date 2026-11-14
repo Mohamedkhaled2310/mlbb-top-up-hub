@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MapPin, MessageCircle, Package, Share2, Sparkles, User, X, XCircle } from "lucide-react";
 import { useStore } from "@/lib/store";
-import { calcMerchantUnitPriceEgp } from "@/lib/pricing";
+import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "@/lib/pricing";
 import { findMatchingPackageForServer, getGameServers, getServerLabel } from "@/lib/regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,17 +110,17 @@ export default function CheckoutModal({
 
     if (priceChanged) {
       setCart(nextCart);
-      const diff = Math.round((newTotal - oldTotal) * 100) / 100;
+      const diff = round3(newTotal - oldTotal);
       const srvLabel = getServerLabel(targetReg, activeGameId);
       setPriceNotice(
-        `تم تحديث باقة وسعر السلة تلقائياً لتطابق سيرفر (${srvLabel}): ${newTotal} ج.م ${diff !== 0 ? `(${diff > 0 ? `+${diff}` : diff} ج.م)` : ""}`,
+        `تم تحديث باقة وسعر السلة تلقائياً لتطابق سيرفر (${srvLabel}): ${formatDecimals3(newTotal)} ج.م ${diff !== 0 ? `(${diff > 0 ? `+${formatDecimals3(diff)}` : formatDecimals3(diff)} ج.م)` : ""}`,
       );
     } else {
       setPriceNotice(null);
     }
   };
 
-  const total = cart.reduce((sum, item) => sum + item.qty * getItemUnitPrice(item), 0);
+  const total = round3(cart.reduce((sum, item) => sum + item.qty * getItemUnitPrice(item), 0));
 
   const validate = async () => {
     if (!player.id.trim()) {
@@ -400,7 +400,7 @@ export default function CheckoutModal({
               })}
               <div className="flex justify-between pt-2 border-t border-slate-700 font-bold">
                 <span>الإجمالي</span>
-                <span className="text-rose-400 font-mono">{total} ج.م</span>
+                <span className="text-rose-400 font-mono">{formatDecimals3(total)} ج.م</span>
               </div>
             </div>
 
@@ -450,13 +450,13 @@ export default function CheckoutModal({
                     <span className="truncate">
                       {it.package.name} × {it.qty}
                     </span>
-                    <span className="shrink-0 font-mono">{unit * it.qty} ج.م</span>
+                    <span className="shrink-0 font-mono">{formatDecimals3(unit * it.qty)} ج.م</span>
                   </div>
                 );
               })}
               <div className="flex justify-between font-bold pt-2 border-t border-slate-700">
                 <span>الإجمالي</span>
-                <span className="text-rose-400 font-mono">{total} ج.م</span>
+                <span className="text-rose-400 font-mono">{formatDecimals3(total)} ج.م</span>
               </div>
             </div>
 
@@ -469,7 +469,7 @@ export default function CheckoutModal({
               <div className="flex gap-2 text-xs text-blue-300 bg-blue-950/30 border border-blue-800/50 p-3 rounded-xl">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
-                  كتاجر: سيتم خصم <b>{total} ج.م</b> من محفظتك ذرياً مع استرداد تلقائي إذا تعذر التنفيذ لدى المزود.
+                  كتاجر: سيتم خصم <b>{formatDecimals3(total)} ج.م</b> من محفظتك ذرياً مع استرداد تلقائي إذا تعذر التنفيذ لدى المزود.
                 </span>
               </div>
             )}
@@ -530,7 +530,7 @@ export default function CheckoutModal({
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">المبلغ الإجمالي:</span>
                 <span className="font-bold text-base text-rose-400 font-mono">
-                  {typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total} ج.م
+                  {formatDecimals3(typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total)} ج.م
                 </span>
               </div>
             </div>
@@ -540,7 +540,7 @@ export default function CheckoutModal({
                 type="button"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2"
                 onClick={() => {
-                  const finalPaid = typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total;
+                  const finalPaid = formatDecimals3(typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total);
                   const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
                   const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: تم الشحن بنجاح ✅\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");

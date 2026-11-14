@@ -53,7 +53,7 @@ import {
   refreshSessionApi,
 } from "../lib/api-client";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo } from "../lib/currency";
-import { calcMerchantBasePriceEgp, calcRetailPriceEgp } from "../lib/pricing";
+import { calcMerchantBasePriceEgp, calcRetailPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -1076,10 +1076,10 @@ function AdminPage() {
                           </td>
                           <td className="p-3 text-center font-mono">
                             <div className="font-bold text-emerald-300 text-sm">
-                              ${(Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2)}
+                              ${formatDecimals3(Number(m.balance_egp || 0) / (egpRate || 50))}
                             </div>
                             <div className="text-[11px] text-slate-400">
-                              {Number(m.balance_egp || 0).toLocaleString("en-US")} ج.م
+                              {formatDecimals3(m.balance_egp)} ج.م
                             </div>
                           </td>
                           <td className="p-3 text-center font-mono font-bold text-purple-300">+{m.margin_percent}%</td>
@@ -1170,8 +1170,8 @@ function AdminPage() {
                 {/* 2) Mobile Responsive Cards View (visible strictly on mobile screens < md) */}
                 <div className="block md:hidden space-y-3">
                   {merchants.map((m: any) => {
-                    const balanceUsd = (Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2);
-                    const balanceEgp = Number(m.balance_egp || 0).toLocaleString("en-US");
+                    const balanceUsd = formatDecimals3(Number(m.balance_egp || 0) / (egpRate || 50));
+                    const balanceEgp = formatDecimals3(m.balance_egp);
                     const merchantInitial = (m.profile?.full_name || m.email || "M").trim().charAt(0).toUpperCase();
 
                     return (
@@ -2156,10 +2156,10 @@ function AdminPage() {
                     <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                   <div className="text-base sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
-                    ${profileData.merchant.balance_usd} USD
+                    ${formatDecimals3(profileData.merchant.balance_usd)} USD
                   </div>
                   <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono mt-0.5">
-                    {Number(profileData.merchant.balance_egp || 0).toLocaleString("en-US")} ج.م
+                    {formatDecimals3(profileData.merchant.balance_egp)} ج.م
                   </div>
                 </div>
 
@@ -2195,7 +2195,7 @@ function AdminPage() {
                     <DollarSign className="w-3.5 h-3.5 text-amber-400" />
                   </div>
                   <div className="text-base sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
-                    {profileData.egpRate} ج.م / $
+                    {formatDecimals3(profileData.egpRate)} ج.م / $
                   </div>
                   <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
                     سعر المتجر الحالي
@@ -2318,22 +2318,22 @@ function AdminPage() {
                                 </span>
                               </td>
                               <td className="p-2.5 text-center font-mono">
-                                <div className="text-slate-300">${p.costUsd}</div>
-                                <div className="text-[10px] text-slate-500">{p.costEgp} ج.م</div>
+                                <div className="text-slate-300">${formatDecimals3(p.costUsd)}</div>
+                                <div className="text-[10px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
                               </td>
                               <td className="p-2.5 text-center font-mono bg-purple-950/20">
                                 <div className="font-extrabold text-purple-300 text-sm">
-                                  {p.merchantPriceEgp} ج.م
+                                  {formatDecimals3(p.merchantPriceEgp)} ج.م
                                 </div>
                                 <div className="text-[10px] text-slate-400">
-                                  ≈ ${(p.merchantPriceEgp / (profileData.egpRate || 50)).toFixed(2)} USD
+                                  ≈ ${formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50))} USD
                                 </div>
                               </td>
                               <td className="p-2.5 text-center font-mono text-emerald-400 font-bold">
-                                +{p.profitPerUnitEgp} ج.م
+                                +{formatDecimals3(p.profitPerUnitEgp)} ج.م
                               </td>
                               <td className="p-2.5 text-center font-mono text-slate-400">
-                                {p.retailPriceEgp} ج.م
+                                {formatDecimals3(p.retailPriceEgp)} ج.م
                               </td>
                             </tr>
                           ))}
@@ -2351,7 +2351,7 @@ function AdminPage() {
                         return gameMatch && textMatch;
                       })
                       .map((p: any) => {
-                        const merchantUsd = (p.merchantPriceEgp / (profileData.egpRate || 50)).toFixed(2);
+                        const merchantUsd = formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50));
                         return (
                           <div
                             key={p.id}
@@ -2372,26 +2372,26 @@ function AdminPage() {
                                 )}
                               </div>
                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
-                                +{p.profitPerUnitEgp} ج.م ربح
+                                +{formatDecimals3(p.profitPerUnitEgp)} ج.م ربح
                               </span>
                             </div>
 
                             <div className="grid grid-cols-3 gap-1.5 bg-[#080c1b] border border-slate-800/80 rounded-lg p-2 text-center text-xs">
                               <div>
                                 <div className="text-[10px] text-slate-400">تكلفة الجملة</div>
-                                <div className="font-mono text-slate-300 text-xs">${p.costUsd}</div>
-                                <div className="font-mono text-[9px] text-slate-500">{p.costEgp} ج.م</div>
+                                <div className="font-mono text-slate-300 text-xs">${formatDecimals3(p.costUsd)}</div>
+                                <div className="font-mono text-[9px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
                               </div>
                               <div className="bg-purple-950/30 border border-purple-500/20 rounded-md py-0.5 px-1">
                                 <div className="text-[10px] text-purple-200 font-semibold">سعر التاجر</div>
                                 <div className="font-mono font-extrabold text-purple-300 text-sm">
-                                  {p.merchantPriceEgp} ج.م
+                                  {formatDecimals3(p.merchantPriceEgp)} ج.م
                                 </div>
                                 <div className="font-mono text-[9px] text-purple-400">≈ ${merchantUsd}</div>
                               </div>
                               <div>
                                 <div className="text-[10px] text-slate-400">سعر الجمهور</div>
-                                <div className="font-mono text-slate-300 text-xs">{p.retailPriceEgp} ج.م</div>
+                                <div className="font-mono text-slate-300 text-xs">{formatDecimals3(p.retailPriceEgp)} ج.م</div>
                                 <div className="text-[9px] text-slate-500">للمستهلك</div>
                               </div>
                             </div>
