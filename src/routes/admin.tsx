@@ -968,231 +968,433 @@ function AdminPage() {
 
             {/* Merchants section */}
             <ScrollReveal delayMs={70}>
-              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 space-y-3">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <h2 className="font-bold flex items-center gap-2 text-sm sm:text-base">
-                  <Users className="w-4 h-4 text-purple-400" /> التجار (صفحة {mPage}/{mTotalPages})
-                </h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    placeholder="بحث اسم/بريد/هاتف..."
-                    value={mQuery}
-                    onChange={(e) => setMQuery(e.target.value)}
-                    className={`w-full sm:w-48 h-9 text-xs ${DARK_INPUT}`}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
-                    onClick={() => token && loadMerchants(token, 1, mQuery)}
-                  >
-                    بحث
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold"
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    <UserPlus className="w-4 h-4" /> إضافة تاجر جديد
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={creatingMerchant}
-                    className="border-emerald-500/50 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60"
-                    onClick={() => handleCreateMerchant(true)}
-                  >
-                    <Sparkles className="w-4 h-4" /> {creatingMerchant ? "جارٍ الإنشاء..." : "توليد تاجر تجريبي ($20)"}
-                  </Button>
-                </div>
-              </div>
+              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-3.5 sm:p-5 space-y-4">
+                {/* Section Header & Controls */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="font-bold flex items-center gap-2 text-sm sm:text-base text-white">
+                      <Users className="w-4 h-4 text-purple-400" />
+                      <span>قائمة التجار</span>
+                      <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-purple-950/80 border border-purple-500/30 text-purple-300 font-mono">
+                        صفحة {mPage} من {mTotalPages}
+                      </span>
+                    </h2>
+                  </div>
 
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-xs min-w-[760px]">
-                  <thead className="bg-[#0e1428] text-slate-300">
-                    <tr>
-                      <th className="p-3 text-right">التاجر</th>
-                      <th className="p-3">الجنسية / العملة</th>
-                      <th className="p-3">الرصيد ($ USD / ج.م)</th>
-                      <th className="p-3">هامش ربح الأدمن %</th>
-                      <th className="p-3">الحالة</th>
-                      <th className="p-3">إجراءات</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/80">
-                    {merchants.map((m: any) => (
-                      <tr key={m.id} className="hover:bg-slate-900/40">
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => openMerchantProfile(m.id)}
-                            className="text-right hover:text-purple-300 transition-colors group block"
-                            title="انقر لفتح بروفايل التاجر الشامل"
-                          >
-                            <div className="font-semibold text-white group-hover:text-purple-300 flex items-center gap-1.5">
-                              <span>{m.profile?.full_name || "—"}</span>
-                              <Eye className="w-3 h-3 text-slate-500 group-hover:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                            <div className="text-slate-400 font-mono text-[11px]">
-                              {m.email || m.profile?.phone || m.user_id}
-                            </div>
-                          </button>
-                        </td>
-                        <td className="p-3 text-center">
-                          <select
-                            value={m.profile?.region || "EG"}
-                            onChange={(e) => handleChangeMerchantRegion(m.id, e.target.value)}
-                            className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white outline-none focus:border-purple-400"
-                            title="تغيير جنسية التاجر والعملة"
-                          >
-                            {MERCHANT_COUNTRIES.map((c) => (
-                              <option key={c.code} value={c.code}>
-                                {c.labelAr} ({c.currency})
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-3 text-center font-mono">
-                          <div className="font-bold text-emerald-300 text-sm">
-                            ${(Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2)}
-                          </div>
-                          <div className="text-[11px] text-slate-400">
-                            {Number(m.balance_egp || 0).toLocaleString("en-US")} ج.م
-                          </div>
-                        </td>
-                        <td className="p-3 text-center font-mono font-bold text-purple-300">+{m.margin_percent}%</td>
-                        <td className="p-3 text-center">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                              m.is_active ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
-                            }`}
-                          >
-                            {m.is_active ? "مفعل" : "موقوف"}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                    {/* Search bar */}
+                    <div className="flex items-center gap-1.5 flex-1 max-w-md">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <Input
+                          placeholder="بحث بالاسم، البريد، أو الهاتف..."
+                          value={mQuery}
+                          onChange={(e) => setMQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && token) loadMerchants(token, 1, mQuery);
+                          }}
+                          className={`w-full pr-8 pl-3 h-9 text-xs ${DARK_INPUT}`}
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700 h-9 shrink-0 px-3 text-xs"
+                        onClick={() => token && loadMerchants(token, 1, mQuery)}
+                      >
+                        بحث
+                      </Button>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-500 text-white font-bold h-9 text-xs shadow-sm shadow-purple-900/30"
+                        onClick={() => setCreateOpen(true)}
+                      >
+                        <UserPlus className="w-3.5 h-3.5 ml-1" /> إضافة تاجر
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={creatingMerchant}
+                        className="border-emerald-500/50 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60 h-9 text-xs truncate"
+                        onClick={() => handleCreateMerchant(true)}
+                      >
+                        <Sparkles className="w-3.5 h-3.5 ml-1" /> {creatingMerchant ? "جارٍ الإنشاء..." : "تجريبي ($20)"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1) Desktop / Tablet Table View (hidden on mobile) */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-xs min-w-[760px]">
+                    <thead className="bg-[#0e1428] text-slate-300">
+                      <tr>
+                        <th className="p-3 text-right">التاجر</th>
+                        <th className="p-3">الجنسية / العملة</th>
+                        <th className="p-3">الرصيد ($ USD / ج.م)</th>
+                        <th className="p-3">هامش ربح الأدمن %</th>
+                        <th className="p-3">الحالة</th>
+                        <th className="p-3">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {merchants.map((m: any) => (
+                        <tr key={m.id} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="p-3 text-right">
+                            <button
+                              type="button"
                               onClick={() => openMerchantProfile(m.id)}
-                              title="عرض بروفايل التاجر والأسعار المخصصة"
+                              className="text-right hover:text-purple-300 transition-colors group block"
+                              title="انقر لفتح بروفايل التاجر الشامل"
                             >
-                              <Eye className="w-3.5 h-3.5" /> البروفايل
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50"
-                              onClick={() => openAdjustBalance(m)}
-                              title="تعديل الرصيد المباشر"
+                              <div className="font-semibold text-white group-hover:text-purple-300 flex items-center gap-1.5">
+                                <span>{m.profile?.full_name || "—"}</span>
+                                <Eye className="w-3 h-3 text-slate-500 group-hover:text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                              <div className="text-slate-400 font-mono text-[11px]">
+                                {m.email || m.profile?.phone || m.user_id}
+                              </div>
+                            </button>
+                          </td>
+                          <td className="p-3 text-center">
+                            <select
+                              value={m.profile?.region || "EG"}
+                              onChange={(e) => handleChangeMerchantRegion(m.id, e.target.value)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white outline-none focus:border-purple-400 cursor-pointer"
+                              title="تغيير جنسية التاجر والعملة"
                             >
-                              <Sliders className="w-3.5 h-3.5" /> تعديل الرصيد
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 font-semibold"
-                              onClick={() => setCredit({ id: m.id, amount: "", note: "" })}
-                              title="إيداع رصيد إضافي بالدولار"
+                              {MERCHANT_COUNTRIES.map((c) => (
+                                <option key={c.code} value={c.code}>
+                                  {c.labelAr} ({c.currency})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-3 text-center font-mono">
+                            <div className="font-bold text-emerald-300 text-sm">
+                              ${(Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2)}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              {Number(m.balance_egp || 0).toLocaleString("en-US")} ج.م
+                            </div>
+                          </td>
+                          <td className="p-3 text-center font-mono font-bold text-purple-300">+{m.margin_percent}%</td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                m.is_active ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                              }`}
                             >
-                              <DollarSign className="w-3.5 h-3.5" /> شحن +
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
-                              onClick={() => setMarginEdit({ id: m.id, value: String(m.margin_percent || 0) })}
-                              title="تعديل نسبة هامش ربح الأدمن"
-                            >
-                              الهامش
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className={`border-slate-700 ${
+                              {m.is_active ? "مفعل" : "موقوف"}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50"
+                                onClick={() => openMerchantProfile(m.id)}
+                                title="عرض بروفايل التاجر والأسعار المخصصة"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> البروفايل
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50"
+                                onClick={() => openAdjustBalance(m)}
+                                title="تعديل الرصيد المباشر"
+                              >
+                                <Sliders className="w-3.5 h-3.5" /> تعديل الرصيد
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 font-semibold"
+                                onClick={() => setCredit({ id: m.id, amount: "", note: "" })}
+                                title="إيداع رصيد إضافي بالدولار"
+                              >
+                                <DollarSign className="w-3.5 h-3.5" /> شحن +
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
+                                onClick={() => setMarginEdit({ id: m.id, value: String(m.margin_percent || 0) })}
+                                title="تعديل نسبة هامش ربح الأدمن"
+                              >
+                                الهامش
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`border-slate-700 ${
+                                  m.is_active
+                                    ? "bg-slate-800 text-amber-300 hover:bg-amber-950/40"
+                                    : "bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/50"
+                                }`}
+                                onClick={() => toggleMerchantActive(m)}
+                                title={m.is_active ? "إيقاف التاجر مؤقتاً" : "تفعيل التاجر"}
+                              >
+                                <Power className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 hover:text-white"
+                                onClick={() => openDeleteMerchant(m)}
+                                title="حذف حساب التاجر مع رسالة تأكيد"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {merchants.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-slate-400">
+                            لا يوجد تجار مسجلون بعد — اضغط "إضافة تاجر جديد" أو "توليد تاجر تجريبي".
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 2) Mobile Responsive Cards View (visible strictly on mobile screens < md) */}
+                <div className="block md:hidden space-y-3">
+                  {merchants.map((m: any) => {
+                    const balanceUsd = (Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2);
+                    const balanceEgp = Number(m.balance_egp || 0).toLocaleString("en-US");
+                    const merchantInitial = (m.profile?.full_name || m.email || "M").trim().charAt(0).toUpperCase();
+
+                    return (
+                      <div
+                        key={m.id}
+                        className="rounded-2xl border border-slate-800 bg-[#0d1326] p-3.5 space-y-3 shadow-md hover:border-purple-500/40 transition-all"
+                      >
+                        {/* Card Header: Avatar + Info + Status */}
+                        <div className="flex items-start justify-between gap-2.5">
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                            <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center font-bold text-sm text-purple-300 shrink-0">
+                              {merchantInitial}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <button
+                                type="button"
+                                onClick={() => openMerchantProfile(m.id)}
+                                className="text-right font-bold text-white hover:text-purple-300 transition-colors flex items-center gap-1.5 max-w-full"
+                              >
+                                <span className="truncate">{m.profile?.full_name || "تاجر بدون اسم"}</span>
+                                <Eye className="w-3.5 h-3.5 text-purple-400 shrink-0 opacity-80" />
+                              </button>
+                              <div className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
+                                {m.email || m.profile?.phone || m.user_id}
+                              </div>
+                              {m.profile?.phone && m.email && (
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  {m.profile.phone}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                                 m.is_active
-                                  ? "bg-slate-800 text-amber-300 hover:bg-amber-950/40"
-                                  : "bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/50"
+                                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                  : "bg-rose-500/15 border-rose-500/30 text-rose-300"
+                              }`}
+                            >
+                              {m.is_active ? "مفعل" : "موقوف"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Card Key Metrics */}
+                        <div className="grid grid-cols-3 gap-2 bg-[#080c1b] border border-slate-800/80 rounded-xl p-2.5 text-center">
+                          {/* Balance */}
+                          <div className="space-y-0.5">
+                            <div className="text-[10px] text-slate-400">الرصيد</div>
+                            <div className="font-extrabold text-emerald-300 font-mono text-sm leading-tight">
+                              ${balanceUsd}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono leading-tight">
+                              {balanceEgp} ج.م
+                            </div>
+                          </div>
+
+                          {/* Admin Margin */}
+                          <div className="space-y-0.5 border-x border-slate-800 px-1">
+                            <div className="text-[10px] text-slate-400">هامش الأدمن</div>
+                            <div className="font-extrabold text-purple-300 font-mono text-sm leading-tight">
+                              +{m.margin_percent || 0}%
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setMarginEdit({ id: m.id, value: String(m.margin_percent || 0) })}
+                              className="text-[9px] text-purple-400 hover:text-purple-300 underline leading-tight block mx-auto"
+                            >
+                              تعديل
+                            </button>
+                          </div>
+
+                          {/* Nationality & Currency */}
+                          <div className="space-y-0.5 flex flex-col justify-center">
+                            <div className="text-[10px] text-slate-400">الدولة / العملة</div>
+                            <select
+                              value={m.profile?.region || "EG"}
+                              onChange={(e) => handleChangeMerchantRegion(m.id, e.target.value)}
+                              className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-white outline-none focus:border-purple-400 w-full text-center cursor-pointer"
+                              title="تغيير جنسية التاجر والعملة"
+                            >
+                              {MERCHANT_COUNTRIES.map((c) => (
+                                <option key={c.code} value={c.code}>
+                                  {c.labelAr} ({c.currency})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Primary Touch Actions */}
+                        <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 font-semibold flex items-center justify-center gap-1"
+                            onClick={() => setCredit({ id: m.id, amount: "", note: "" })}
+                          >
+                            <DollarSign className="w-3.5 h-3.5" /> شحن +
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 flex items-center justify-center gap-1"
+                            onClick={() => openAdjustBalance(m)}
+                          >
+                            <Sliders className="w-3.5 h-3.5" /> الرصيد
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs border-purple-500/40 bg-purple-950/30 text-purple-200 hover:bg-purple-900/50 flex items-center justify-center gap-1"
+                            onClick={() => openMerchantProfile(m.id)}
+                          >
+                            <Eye className="w-3.5 h-3.5" /> البروفايل
+                          </Button>
+                        </div>
+
+                        {/* Secondary Actions Bar */}
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-800/80 text-xs">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-[11px] text-slate-300 hover:text-white hover:bg-slate-800"
+                            onClick={() => setMarginEdit({ id: m.id, value: String(m.margin_percent || 0) })}
+                          >
+                            <Pencil className="w-3 h-3 text-purple-400 ml-1" /> ضبط الهامش
+                          </Button>
+
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`h-7 px-2 text-[11px] ${
+                                m.is_active
+                                  ? "text-amber-300 hover:bg-amber-950/30"
+                                  : "text-emerald-300 hover:bg-emerald-950/30"
                               }`}
                               onClick={() => toggleMerchantActive(m)}
                               title={m.is_active ? "إيقاف التاجر مؤقتاً" : "تفعيل التاجر"}
                             >
-                              <Power className="w-3.5 h-3.5" />
+                              <Power className="w-3 h-3 ml-1" />
+                              {m.is_active ? "إيقاف" : "تفعيل"}
                             </Button>
+
                             <Button
                               size="sm"
-                              variant="outline"
-                              className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 hover:text-white"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px] text-rose-300 hover:bg-rose-950/30 hover:text-rose-200"
                               onClick={() => openDeleteMerchant(m)}
-                              title="حذف حساب التاجر مع رسالة تأكيد"
+                              title="حذف حساب التاجر"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3 h-3 ml-1" /> حذف
                             </Button>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {merchants.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="p-6 text-center text-slate-400">
-                          لا يوجد تجار مسجلون بعد — اضغط "إضافة تاجر جديد" أو "توليد تاجر تجريبي".
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+                      </div>
+                    );
+                  })}
 
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
-                <div className="text-slate-400">
-                  عرض صفحة <span className="font-mono font-bold text-white">{mPage}</span> من إجمالي{" "}
-                  <span className="font-mono font-bold text-white">{mTotalPages}</span> صفحة
+                  {merchants.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center text-xs text-slate-400 space-y-2">
+                      <Users className="w-8 h-8 text-slate-600 mx-auto" />
+                      <div>لا يوجد تجار مسجلون يطابقون البحث</div>
+                      <div className="text-[11px] text-slate-500">اضغط "إضافة تاجر جديد" أو "توليد تاجر تجريبي" للبدء.</div>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3"
-                    disabled={mPage <= 1}
-                    onClick={() => token && loadMerchants(token, mPage - 1, mQuery)}
-                  >
-                    السابق
-                  </Button>
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, mTotalPages) }, (_, i) => {
-                      let p = i + 1;
-                      if (mTotalPages > 5) {
-                        if (mPage > 3) p = mPage - 2 + i;
-                        if (p > mTotalPages) p = mTotalPages - (4 - i);
-                      }
-                      return (
-                        <button
-                          key={p}
-                          onClick={() => token && loadMerchants(token, p, mQuery)}
-                          className={`h-8 w-8 rounded-lg text-xs font-mono font-bold transition-colors ${
-                            p === mPage
-                              ? "bg-purple-600 text-white"
-                              : "bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      );
-                    })}
+
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs border-t border-slate-800/80">
+                  <div className="text-slate-400 text-center sm:text-right">
+                    عرض صفحة <span className="font-mono font-bold text-white">{mPage}</span> من إجمالي{" "}
+                    <span className="font-mono font-bold text-white">{mTotalPages}</span> صفحة
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3"
-                    disabled={mPage >= mTotalPages}
-                    onClick={() => token && loadMerchants(token, mPage + 1, mQuery)}
-                  >
-                    التالي
-                  </Button>
+                  <div className="flex items-center justify-center gap-1.5 w-full sm:w-auto">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3 text-xs flex-1 sm:flex-initial"
+                      disabled={mPage <= 1}
+                      onClick={() => token && loadMerchants(token, mPage - 1, mQuery)}
+                    >
+                      السابق
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, mTotalPages) }, (_, i) => {
+                        let p = i + 1;
+                        if (mTotalPages > 5) {
+                          if (mPage > 3) p = mPage - 2 + i;
+                          if (p > mTotalPages) p = mTotalPages - (4 - i);
+                        }
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => token && loadMerchants(token, p, mQuery)}
+                            className={`h-8 w-8 rounded-lg text-xs font-mono font-bold transition-colors ${
+                              p === mPage
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-slate-900 border border-slate-700 text-slate-300 hover:bg-slate-800"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-3 text-xs flex-1 sm:flex-initial"
+                      disabled={mPage >= mTotalPages}
+                      onClick={() => token && loadMerchants(token, mPage + 1, mQuery)}
+                    >
+                      التالي
+                    </Button>
+                  </div>
                 </div>
-              </div>
               </div>
             </ScrollReveal>
 
