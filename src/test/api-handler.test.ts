@@ -425,9 +425,9 @@ describe("API routes & merchant/admin workflows", () => {
     expect(orderRes?.status).toBe(400);
     const data = await orderRes!.json();
     expect(data.status).toBe("failed");
-    // 2 USD * 50 * 1.075 * 0.90 = 96.75 -> ceil = 97 EGP
-    expect(data.total_egp).toBe(97);
-    expect(data.refunded_egp).toBe(97);
+    // 2 USD * 50 * (1 + 0.10) = 110 EGP
+    expect(data.total_egp).toBe(110);
+    expect(data.refunded_egp).toBe(110);
 
     // Merchant balance MUST be restored to 500 EGP with both debit and refund entries
     expect(dbState.merchant_accounts[0]!["balance_egp"]).toBe(500);

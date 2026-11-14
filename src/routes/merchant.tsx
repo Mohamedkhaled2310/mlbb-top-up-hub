@@ -691,7 +691,7 @@ function MerchantPage() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <div className="text-left">
-                            <div className="text-[10px] text-slate-400">سعر الخصم:</div>
+                            <div className="text-[10px] text-slate-400">السعر:</div>
                             {currencyInfo.currency === "EGP" ? (
                               <div className="text-xs sm:text-sm font-extrabold text-purple-300 font-mono">
                                 {prices.priceEgp} ج.م
@@ -810,7 +810,7 @@ function MerchantPage() {
                   )}
                 </div>
                 <div className="text-[11px] sm:text-xs text-slate-300">
-                  إجمالي الخصم: <span className="text-purple-300 font-bold font-mono">{cartTotal} ج.م</span>
+                  إجمالي السلة: <span className="text-purple-300 font-bold font-mono">{cartTotal} ج.م</span>
                 </div>
               </div>
             </div>

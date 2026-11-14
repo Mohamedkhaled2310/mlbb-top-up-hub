@@ -18,7 +18,7 @@ const samplePackage: TopUpPackage = {
   diamonds: 86,
   costUsd: 2,
   retailPriceEgp: 115,
-  merchantBasePriceEgp: 108,
+  merchantBasePriceEgp: 105,
   active: true,
 };
 
@@ -39,7 +39,7 @@ describe("UI Components & Flows", () => {
       success: true,
       order_ref: "ORD-TEST-1",
       status: "success",
-      balance_egp: 903,
+      balance_egp: 890,
       message: "تم التنفيذ بنجاح",
     });
 
@@ -75,8 +75,8 @@ describe("UI Components & Flows", () => {
 
     expect(screen.getByText("بيانات الشحن")).toBeInTheDocument();
     expect(screen.getByText("86 Diamonds")).toBeInTheDocument();
-    // Cost $2 * 50 EGP * 1.075 * 0.9 = 96.75 -> ceil = 97 EGP
-    expect(screen.getByText("97 ج.م")).toBeInTheDocument();
+    // Cost $2 * 50 EGP * (1 + 0.10) = 110 EGP
+    expect(screen.getByText("110 ج.م")).toBeInTheDocument();
 
     const playerInput = screen.getByPlaceholderText("مثال: 12345678");
     const zoneInput = screen.getByPlaceholderText("مثال: 2024");

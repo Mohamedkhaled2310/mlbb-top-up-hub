@@ -896,7 +896,7 @@ function AdminPage() {
                       <th className="p-3 text-right">التاجر</th>
                       <th className="p-3">الجنسية / العملة</th>
                       <th className="p-3">الرصيد ($ USD / ج.م)</th>
-                      <th className="p-3">نسبة الخصم %</th>
+                      <th className="p-3">هامش ربح الأدمن %</th>
                       <th className="p-3">الحالة</th>
                       <th className="p-3">إجراءات</th>
                     </tr>
@@ -932,7 +932,7 @@ function AdminPage() {
                             {Number(m.balance_egp || 0).toLocaleString("en-US")} ج.م
                           </div>
                         </td>
-                        <td className="p-3 text-center font-mono text-purple-300">{m.margin_percent}%</td>
+                        <td className="p-3 text-center font-mono font-bold text-purple-300">+{m.margin_percent}%</td>
                         <td className="p-3 text-center">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
@@ -1232,7 +1232,7 @@ function AdminPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-slate-300 font-semibold">نسبة الخصم %</label>
+                <label className="text-slate-300 font-semibold">هامش ربح الأدمن % (فوق التكلفة)</label>
                 <Input
                   type="number"
                   step="0.5"
@@ -1330,19 +1330,22 @@ function AdminPage() {
       <Dialog open={!!marginEdit} onOpenChange={(o) => !o && setMarginEdit(null)}>
         <DialogContent className="max-w-sm bg-[#0a0f20] border border-slate-700 text-slate-100 rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white">تعديل هامش التاجر (%)</DialogTitle>
+            <DialogTitle className="text-white">تعديل هامش ربح الأدمن (%)</DialogTitle>
           </DialogHeader>
           <div className="space-y-2.5">
+            <p className="text-[11px] text-slate-400">
+              نسبة الربح التي يربحها المتجر فوق سعر التكلفة من طلبات هذا التاجر (مثال: 5 تعني بيع الباقة بسعر التكلفة + 5%).
+            </p>
             <Input
               type="number"
               step="0.5"
-              placeholder="الهامش %"
+              placeholder="هامش ربح الأدمن %"
               value={marginEdit?.value || ""}
               onChange={(e) => setMarginEdit((m) => (m ? { ...m, value: e.target.value } : m))}
               className={DARK_INPUT}
             />
             <Button className="w-full bg-purple-700 hover:bg-purple-600 text-white font-bold" onClick={submitMargin}>
-              حفظ
+              حفظ الهامش
             </Button>
           </div>
         </DialogContent>
@@ -1398,7 +1401,7 @@ function AdminPage() {
                   </div>
                 </div>
                 <div className="space-y-0.5">
-                  <div className="text-[10px] text-slate-400">أساس سعر التجار (+7.5%):</div>
+                  <div className="text-[10px] text-slate-400">أساس سعر التجار (+5%):</div>
                   <div className="text-sm font-black font-mono text-purple-300">
                     {calcMerchantBasePriceEgp(Number(editCostUsd) || 0, egpRate)} ج.م
                   </div>

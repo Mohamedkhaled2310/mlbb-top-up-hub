@@ -59,15 +59,15 @@ describe("Merchant Nationality and Currency System", () => {
   });
 
   it("calculates converted package price according to target FX rate and margin", () => {
-    // Cost 2 USD, merchant markup 7.5%, merchant margin 10%
-    // In USD: 2 * 1.075 * 0.90 = 1.935 USD
-    // In SAR at 3.75: 1.935 * 3.75 = 7.25625 -> ceiling with 2 decimals = 7.26 SAR
-    const sarPrice = calcConvertedPrice(97, 50, 3.75, 2, 2, 10, 0.075);
-    expect(sarPrice).toBe(7.26);
+    // Cost 2 USD, admin margin 10%
+    // In USD: 2 * (1 + 0.10) = 2.20 USD
+    // In SAR at 3.75: 2.20 * 3.75 = 8.25 SAR
+    const sarPrice = calcConvertedPrice(110, 50, 3.75, 2, 2, 10);
+    expect(sarPrice).toBe(8.25);
 
-    // In EGP at 50: 1.935 * 50 = 96.75 -> 97 EGP
-    const egpPrice = calcConvertedPrice(97, 50, 50, 0, 2, 10, 0.075);
-    expect(egpPrice).toBe(97);
+    // In EGP at 50: 2.20 * 50 = 110 EGP
+    const egpPrice = calcConvertedPrice(110, 50, 50, 0, 2, 10);
+    expect(egpPrice).toBe(110);
   });
 
   it("formats currency amounts nicely for display", () => {
