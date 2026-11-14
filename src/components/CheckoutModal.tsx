@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MapPin, MessageCircle, Package, Share2, Sparkles, User, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MessageCircle, Package, Share2, User, UserCheck, X, XCircle } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "@/lib/pricing";
-import { findMatchingPackageForServer, getGameServers, getServerLabel } from "@/lib/regions";
+import { getServerLabel } from "@/lib/regions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
@@ -35,10 +35,7 @@ export default function CheckoutModal({
   const { player, setPlayer, isMerchant, accessToken, merchant, settings, profile, setAuth, packages, setCart } = useStore();
   const [step, setStep] = useState<CheckoutStep>("form");
   const [region, setRegion] = useState(player.region || "");
-  const [regionLocked, setRegionLocked] = useState(false);
-  const [needsManualRegion, setNeedsManualRegion] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  const [priceNotice, setPriceNotice] = useState<string | null>(null);
   const [result, setResult] = useState<any>(null);
   const [paidTotal, setPaidTotal] = useState<number>(0);
   const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
@@ -52,13 +49,10 @@ export default function CheckoutModal({
       setStep("form");
       setResult(null);
       setPaidTotal(0);
-      const pkgServer = Array.isArray(cart[0]?.package.regions) && cart[0]?.package.regions[0] ? cart[0]?.package.regions[0] : "";
-      const initialRegion = latestRegionRef.current || pkgServer || "global";
+      const pkgServer = (Array.isArray(cart[0]?.package.regions) && cart[0]?.package.regions[0]) || latestRegionRef.current || player.region || "global";
+      const initialRegion = pkgServer.toLowerCase();
       setRegion(initialRegion);
-      setRegionLocked(Boolean(latestRegionRef.current));
-      setNeedsManualRegion(false);
       submitted.current = false;
-      setPriceNotice(null);
     }
   }, [open]);
 
@@ -74,50 +68,6 @@ export default function CheckoutModal({
       return calcMerchantUnitPriceEgp(base, merchantMargin, item.package.costUsd, settings.egp_rate);
     }
     return item.package.retailPriceEgp;
-  };
-
-  const handleServerSelection = (srvCode: string) => {
-    const targetReg = srvCode.trim().toLowerCase();
-    setRegion(targetReg);
-    setPlayer({ ...player, region: targetReg });
-
-    if (!cart.length) return;
-
-    let priceChanged = false;
-    let oldTotal = 0;
-    let newTotal = 0;
-
-    const nextCart = cart.map((item) => {
-      const curPrice = getItemUnitPrice(item);
-      oldTotal += curPrice * item.qty;
-
-      const matchedPkg = findMatchingPackageForServer(item.package, targetReg, packages);
-      if (matchedPkg && matchedPkg.id !== item.package.id) {
-        priceChanged = true;
-        const newItem: CartItem = {
-          ...item,
-          package: matchedPkg,
-          packageId: matchedPkg.offerId,
-        };
-        const newUnitPrice = getItemUnitPrice(newItem);
-        newTotal += newUnitPrice * item.qty;
-        return newItem;
-      }
-
-      newTotal += curPrice * item.qty;
-      return item;
-    });
-
-    if (priceChanged) {
-      setCart(nextCart);
-      const diff = round3(newTotal - oldTotal);
-      const srvLabel = getServerLabel(targetReg, activeGameId);
-      setPriceNotice(
-        `تم تحديث باقة وسعر السلة تلقائياً لتطابق سيرفر (${srvLabel}): ${formatDecimals3(newTotal)} ج.م ${diff !== 0 ? `(${diff > 0 ? `+${formatDecimals3(diff)}` : formatDecimals3(diff)} ج.م)` : ""}`,
-      );
-    } else {
-      setPriceNotice(null);
-    }
   };
 
   const total = round3(cart.reduce((sum, item) => sum + item.qty * getItemUnitPrice(item), 0));
@@ -145,30 +95,20 @@ export default function CheckoutModal({
         cart[0]?.package.fazerCategoryId,
       );
       if (res.valid) {
-        const accRegion = res.accountRegion || "";
-        const finalRegion = accRegion || region.trim() || "global";
-        if (accRegion) {
-          setRegionLocked(true);
-          setNeedsManualRegion(false);
-        } else if (!region.trim()) {
-          setNeedsManualRegion(true);
-        }
-        setPlayer({ ...player, name: res.username || player.name, region: finalRegion });
+        const playerName = res.username || player.name || player.id.trim();
+        const finalRegion = region.trim() || res.accountRegion || "global";
+        setPlayer({ ...player, name: playerName, region: finalRegion });
         setRegion(finalRegion);
-        handleServerSelection(finalRegion);
         saveRecentAccount({
           id: player.id.trim(),
           zoneId: player.zoneId?.trim(),
-          name: res.username || undefined,
+          name: playerName,
           region: finalRegion,
           gameId: activeGameId,
         });
         setStep("review");
       } else {
-        if (res.error && (res.error.includes("منطقة") || res.error.includes("region"))) {
-          setNeedsManualRegion(true);
-        }
-        toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من اللاعب/المنطقة" });
+        toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من معرف اللاعب" });
       }
     } catch {
       toast({ title: "خطأ", description: "تعذر الاتصال بالخادم" });
@@ -277,66 +217,16 @@ export default function CheckoutModal({
               </div>
             )}
 
-            {/* Server / Region Selector */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs sm:text-sm">
-                <label className="text-slate-300 font-medium flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>منطقة السيرفر (Server Region) *</span>
-                </label>
-                <span className="font-mono text-cyan-300 text-xs uppercase font-bold">
-                  {(region || "global").toUpperCase()}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto p-1.5 rounded-xl bg-slate-900/80 border border-slate-700/80">
-                {getGameServers(activeGameId).map((srv) => {
-                  const isSel = (region || "global").toLowerCase() === srv.code.toLowerCase();
-                  return (
-                    <button
-                      key={srv.code}
-                      type="button"
-                      onClick={() => {
-                        handleServerSelection(srv.code);
-                      }}
-                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all ${
-                        isSel
-                          ? "bg-purple-600 text-white shadow-sm border border-purple-400 font-bold"
-                          : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60"
-                      }`}
-                    >
-                      <span className="truncate">{srv.labelAr}</span>
-                      <span className="text-[10px] font-mono opacity-80 uppercase ml-1 shrink-0">{srv.code}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {regionLocked ? (
-                <p className="text-[11px] text-emerald-400/90 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 shrink-0" /> تم تحديد المنطقة من الحساب، ويمكنك التغيير بالنقر على أي سيرفر أعلاه.
-                </p>
-              ) : needsManualRegion ? (
-                <div className="pt-1">
-                  <Input
-                    value={region}
-                    onChange={(e) => {
-                      handleServerSelection(e.target.value);
-                    }}
-                    placeholder="أدخل رمز السيرفر يدوياً إن لم يكن بالقائمة (مثال: EU)"
-                    className="h-8 text-xs bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
-                  />
-                  <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 shrink-0" /> اختر السيرفر من القائمة أعلاه أو اكتب الرمز يدوياً.
-                  </p>
-                </div>
-              ) : null}
+            {/* Selected Server Badge (Determined outside by package selection) */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/70 border border-slate-700/80 text-xs text-slate-300">
+              <span className="flex items-center gap-1.5 text-slate-400 font-medium">
+                <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                <span>سيرفر الشحن المحدد للباقة:</span>
+              </span>
+              <span className="font-bold text-purple-300 bg-purple-950/70 border border-purple-500/30 px-2.5 py-0.5 rounded-md text-[11px]">
+                {getServerLabel(region || "global", activeGameId)}
+              </span>
             </div>
-
-            {priceNotice && (
-              <div className="rounded-xl border border-cyan-500/50 bg-cyan-950/40 p-2.5 text-xs text-cyan-200 flex items-center gap-2 animate-meto-fade">
-                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span className="font-medium">{priceNotice}</span>
-              </div>
-            )}
 
             <div className="border border-slate-700 rounded-xl p-3 space-y-2 bg-slate-900/50">
               <div className="font-semibold flex items-center justify-between text-sm">
@@ -425,20 +315,43 @@ export default function CheckoutModal({
             <h3 className="text-lg sm:text-xl font-bold flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-rose-400" /> مراجعة الطلب
             </h3>
-            <div className="text-sm space-y-1.5 bg-slate-900/70 border border-slate-700 rounded-xl p-3.5">
-              <div>
-                <span className="text-slate-400">اللاعب:</span> <b>{player.name || player.id}</b> (
-                <span className="font-mono" dir="ltr">
-                  {player.id}
-                  {needsZone && player.zoneId ? ` / ${player.zoneId}` : ""}
-                </span>
-                )
+            {/* Player Verified Nickname Banner */}
+            <div className="rounded-xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/50 via-emerald-900/25 to-slate-900/80 p-3.5 flex items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-11 w-11 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-400 shadow-inner">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] text-slate-400 font-medium">اسم اللاعب (Nickname)</div>
+                  <div className="font-extrabold text-emerald-300 text-base sm:text-lg truncate">
+                    {player.name || player.id}
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-400">اللعبة:</span> <b className="uppercase">{activeGameId}</b>
+              <span className="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1 shadow-sm">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> تم التحقق
+              </span>
+            </div>
+
+            {/* Account Information Card */}
+            <div className="grid grid-cols-2 gap-2 text-xs bg-slate-900/70 border border-slate-700/80 rounded-xl p-3">
+              <div className="bg-[#080d1e] border border-slate-800 rounded-lg p-2.5">
+                <span className="text-[10px] text-slate-400 block mb-0.5">معرف اللاعب (Player ID)</span>
+                <span className="font-mono font-bold text-white text-xs sm:text-sm">{player.id}</span>
               </div>
-              <div>
-                <span className="text-slate-400">المنطقة:</span> <b>{region}</b>
+              {needsZone && (
+                <div className="bg-[#080d1e] border border-slate-800 rounded-lg p-2.5">
+                  <span className="text-[10px] text-slate-400 block mb-0.5">معرف السيرفر (Zone ID)</span>
+                  <span className="font-mono font-bold text-cyan-300 text-xs sm:text-sm">{player.zoneId}</span>
+                </div>
+              )}
+              <div className="bg-[#080d1e] border border-slate-800 rounded-lg p-2.5">
+                <span className="text-[10px] text-slate-400 block mb-0.5">اللعبة</span>
+                <span className="font-bold text-slate-200 uppercase">{activeGameId}</span>
+              </div>
+              <div className="bg-[#080d1e] border border-slate-800 rounded-lg p-2.5">
+                <span className="text-[10px] text-slate-400 block mb-0.5">سيرفر الشحن المعتمد</span>
+                <span className="font-bold text-purple-300">{getServerLabel(region || "global", activeGameId)}</span>
               </div>
             </div>
 

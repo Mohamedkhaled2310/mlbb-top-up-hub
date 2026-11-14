@@ -86,6 +86,8 @@ describe("UI Components & Flows", () => {
     fireEvent.click(screen.getByRole("button", { name: /تحقق ومتابعة/i }));
     await waitFor(() => {
       expect(screen.getByText("مراجعة الطلب")).toBeInTheDocument();
+      expect(screen.getByText("TestPlayer#2024")).toBeInTheDocument();
+      expect(screen.getByText("اسم اللاعب (Nickname)")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /تأكيد وإرسال الطلب/i }));
