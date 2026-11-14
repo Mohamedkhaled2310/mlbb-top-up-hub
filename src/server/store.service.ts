@@ -1089,7 +1089,7 @@ export async function adminCreditMerchant(token: string, body: any) {
 
   if (!merchantId || !(amountEgp > 0)) throw new Error("بيانات الشحن غير صحيحة");
 
-  let res = await sbUser.rpc("admin_credit_merchant", {
+  let res = await sbAdmin.rpc("admin_credit_merchant", {
     p_merchant_id: merchantId,
     p_amount: amountEgp,
     p_note: finalNote,
@@ -1097,15 +1097,30 @@ export async function adminCreditMerchant(token: string, body: any) {
     p_reference_id: null,
   });
   if (res.error) {
-    res = await sbAdmin.rpc("admin_credit_merchant", {
-      p_merchant_id: merchantId,
-      p_amount: amountEgp,
-      p_note: finalNote,
-      p_reference_type: "admin",
-      p_reference_id: null,
+    // direct atomic fallback if rpc is unavailable
+    const { data: currentMerch } = await sbAdmin
+      .from("merchant_accounts")
+      .select("balance_egp")
+      .eq("id", merchantId)
+      .maybeSingle();
+    const newBal = (Number(currentMerch?.balance_egp) || 0) + amountEgp;
+    const { error: updErr } = await sbAdmin
+      .from("merchant_accounts")
+      .update({ balance_egp: newBal, updated_at: new Date().toISOString() })
+      .eq("id", merchantId);
+    if (updErr) throw new Error(res.error.message || updErr.message);
+
+    await sbAdmin.from("wallet_ledger").insert({
+      merchant_id: merchantId,
+      amount: amountEgp,
+      entry_type: "credit",
+      reference_type: "admin",
+      reference_id: null,
+      balance_after: newBal,
+      note: finalNote,
     });
+    return { success: true, amount_egp: amountEgp, result: [{ merchant_id: merchantId, new_balance: newBal }] };
   }
-  if (res.error) throw new Error(res.error.message);
   return { success: true, amount_egp: amountEgp, result: res.data };
 }
 

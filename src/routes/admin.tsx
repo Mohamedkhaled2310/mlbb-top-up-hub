@@ -346,11 +346,61 @@ function AdminPage() {
 
   const token = store.accessToken;
 
+  const getFreshToken = async (): Promise<string | null> => {
+    if (supabase) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.access_token) {
+          const exp = data.session.expires_at || 0;
+          const isExpired = exp && exp - Math.floor(Date.now() / 1000) < 60;
+          if (isExpired) {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            if (refreshed?.session?.access_token) {
+              store.setAuth(refreshed.session.access_token, null, null, {
+                refreshToken: refreshed.session.refresh_token,
+                expiresAt: refreshed.session.expires_at,
+                email: refreshed.session.user?.email,
+              });
+              return refreshed.session.access_token;
+            }
+          }
+          if (store.accessToken !== data.session.access_token) {
+            store.setAuth(data.session.access_token, null, null, {
+              refreshToken: data.session.refresh_token,
+              expiresAt: data.session.expires_at,
+              email: data.session.user?.email,
+            });
+          }
+          return data.session.access_token;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    if (store.refreshToken) {
+      try {
+        const res = await refreshSessionApi(store.refreshToken);
+        if (res?.accessToken) {
+          store.setAuth(res.accessToken, res.profile, res.merchant, {
+            refreshToken: res.refreshToken,
+            expiresAt: res.expiresAt,
+            email: res.user?.email,
+          });
+          return res.accessToken;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return store.accessToken;
+  };
+
   const doSync = async () => {
-    if (!token) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     setSyncing(true);
     try {
-      const r = await adminSyncFazerApi(token);
+      const r = await adminSyncFazerApi(activeToken);
       if (!r?.ok) throw new Error(r?.error || "فشلت المزامنة");
       const bd = r?.catalog?.gamesBreakdown
         ? Object.entries(r.catalog.gamesBreakdown)
@@ -370,10 +420,11 @@ function AdminPage() {
   };
 
   const saveRate = async (modeToSave?: "manual" | "binance_auto") => {
-    if (!token) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     const mode = modeToSave || rateMode;
     try {
-      const r = await adminUpdateEgpRateApi(token, { egp_rate: Number(egpRate), mode });
+      const r = await adminUpdateEgpRateApi(activeToken, { egp_rate: Number(egpRate), mode });
       if (r?.error) throw new Error(r.error);
       setRateMode(mode);
       toast({
@@ -387,10 +438,11 @@ function AdminPage() {
   };
 
   const syncBinance = async () => {
-    if (!token) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     setSyncingBinance(true);
     try {
-      const r = await adminSyncBinanceRateApi(token);
+      const r = await adminSyncBinanceRateApi(activeToken);
       if (r?.error) throw new Error(r.error);
       if (r?.egp_rate) {
         setEgpRate(r.egp_rate);
@@ -409,18 +461,39 @@ function AdminPage() {
   };
 
   const submitCredit = async () => {
-    if (!token || !credit) return;
+    if (!credit) return;
+    const activeToken = await getFreshToken();
+    if (!activeToken) {
+      toast({ title: "انتهت جلسة الأدمن", description: "يرجى تسجيل الدخول كأدمن مجدداً" });
+      setIsAdmin(false);
+      return;
+    }
     const usd = Number(credit.amount);
     if (!Number.isFinite(usd) || usd <= 0) {
       toast({ title: "خطأ", description: "يرجى إدخال مبلغ صحيح بالدولار ($ USD) أكبر من صفر" });
       return;
     }
     try {
-      const r = await adminCreditMerchantApi(token, {
+      let r = await adminCreditMerchantApi(activeToken, {
         merchant_id: credit.id,
         amount_usd: usd,
         ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
       });
+      if (r?.error === "unauthorized" && supabase) {
+        const { data: ref } = await supabase.auth.refreshSession();
+        if (ref?.session?.access_token) {
+          store.setAuth(ref.session.access_token, null, null, {
+            refreshToken: ref.session.refresh_token,
+            expiresAt: ref.session.expires_at,
+            email: ref.session.user?.email,
+          });
+          r = await adminCreditMerchantApi(ref.session.access_token, {
+            merchant_id: credit.id,
+            amount_usd: usd,
+            ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
+          });
+        }
+      }
       if (r?.error) throw new Error(r.error);
       const addedEgp = r?.amount_egp || Math.round(usd * (egpRate || 50) * 100) / 100;
       toast({
@@ -429,7 +502,7 @@ function AdminPage() {
       });
       const targetId = credit.id;
       setCredit(null);
-      await loadMerchants(token, mPage, mQuery);
+      await loadMerchants(activeToken, mPage, mQuery);
       if (profileMerchantId && profileMerchantId === targetId) {
         await openMerchantProfile(profileMerchantId);
       }
@@ -439,17 +512,28 @@ function AdminPage() {
   };
 
   const submitMargin = async () => {
-    if (!token || !marginEdit) return;
+    if (!marginEdit) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     try {
-      const r = await adminSetMarginApi(token, {
+      let r = await adminSetMarginApi(activeToken, {
         merchant_id: marginEdit.id,
         margin_percent: Number(marginEdit.value),
       });
+      if (r?.error === "unauthorized" && supabase) {
+        const { data: ref } = await supabase.auth.refreshSession();
+        if (ref?.session?.access_token) {
+          r = await adminSetMarginApi(ref.session.access_token, {
+            merchant_id: marginEdit.id,
+            margin_percent: Number(marginEdit.value),
+          });
+        }
+      }
       if (r?.error) throw new Error(r.error);
       toast({ title: "تم تحديث هامش التاجر بنجاح" });
       const targetId = marginEdit.id;
       setMarginEdit(null);
-      await loadMerchants(token, mPage, mQuery);
+      await loadMerchants(activeToken, mPage, mQuery);
       if (profileMerchantId && profileMerchantId === targetId) {
         await openMerchantProfile(profileMerchantId);
       }
@@ -548,7 +632,9 @@ function AdminPage() {
   };
 
   const submitAdjustBalance = async () => {
-    if (!token || !adjustBalance) return;
+    if (!adjustBalance) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     setAdjustingBalance(true);
     try {
       const payload: any = {
@@ -560,7 +646,7 @@ function AdminPage() {
       } else {
         payload.balance_egp = Number(adjustBalance.amountEgp);
       }
-      const res = await adminSetMerchantBalanceApi(token, payload);
+      const res = await adminSetMerchantBalanceApi(activeToken, payload);
       if (res?.error) throw new Error(res.error);
       toast({
         title: "تم تعديل رصيد التاجر بنجاح",
@@ -568,7 +654,7 @@ function AdminPage() {
       });
       const targetId = adjustBalance.merchant.id;
       setAdjustBalance(null);
-      await loadMerchants(token, mPage, mQuery);
+      await loadMerchants(activeToken, mPage, mQuery);
       if (profileMerchantId && profileMerchantId === targetId) {
         await openMerchantProfile(profileMerchantId);
       }
@@ -584,10 +670,12 @@ function AdminPage() {
   };
 
   const submitDeleteMerchant = async () => {
-    if (!token || !deleteTarget) return;
+    if (!deleteTarget) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     setDeletingMerchant(true);
     try {
-      const res = await adminDeleteMerchantApi(token, { merchant_id: deleteTarget.id });
+      const res = await adminDeleteMerchantApi(activeToken, { merchant_id: deleteTarget.id });
       if (res?.error) throw new Error(res.error);
       toast({
         title: "تم حذف حساب التاجر بنجاح",
@@ -598,7 +686,7 @@ function AdminPage() {
         setProfileMerchantId(null);
         setProfileData(null);
       }
-      await loadMerchants(token, mPage, mQuery);
+      await loadMerchants(activeToken, mPage, mQuery);
     } catch (e: any) {
       toast({ title: "فشل حذف التاجر", description: e?.message });
     } finally {
@@ -607,13 +695,14 @@ function AdminPage() {
   };
 
   const openMerchantProfile = async (merchantId: string) => {
-    if (!token) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     setProfileMerchantId(merchantId);
     setProfileLoading(true);
     setProfileData(null);
     setProfileTab("packages");
     try {
-      const res = await adminGetMerchantDetailsApi(token, merchantId);
+      const res = await adminGetMerchantDetailsApi(activeToken, merchantId);
       if (res?.error) throw new Error(res.error);
       setProfileData(res);
     } catch (e: any) {
@@ -641,7 +730,9 @@ function AdminPage() {
   };
 
   const submitPackagePrice = async () => {
-    if (!token || !editingPkg) return;
+    if (!editingPkg) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
     const cost = Number(editCostUsd);
     if (!Number.isFinite(cost) || cost <= 0) {
       toast({ title: "خطأ", description: "يرجى إدخال سعر تكلفة صحيح بالدولار أكبر من صفر" });
@@ -649,7 +740,7 @@ function AdminPage() {
     }
     setSavingPkg(true);
     try {
-      const res = await adminUpdatePackagePriceApi(token, {
+      const res = await adminUpdatePackagePriceApi(activeToken, {
         offerId: editingPkg.offerId || editingPkg.id,
         costUsd: cost,
         ...(editPkgName.trim() ? { name: editPkgName.trim() } : {}),
