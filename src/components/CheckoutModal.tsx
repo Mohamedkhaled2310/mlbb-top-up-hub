@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CreditCard, Globe, Loader2, MessageCircle, Package, Share2, User, UserCheck, X, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CreditCard,
+  Globe,
+  Loader2,
+  MessageCircle,
+  Package,
+  Share2,
+  ShieldCheck,
+  Sparkles,
+  User,
+  UserCheck,
+  X,
+  XCircle,
+  Zap,
+} from "lucide-react";
 import { useStore } from "@/lib/store";
 import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "@/lib/pricing";
 import { getServerLabel } from "@/lib/regions";
@@ -42,9 +58,38 @@ export default function CheckoutModal({
   const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
   const [summaryRegion, setSummaryRegion] = useState<string>("global");
   const [isFallbackValid, setIsFallbackValid] = useState<boolean>(false);
+  const [processPercent, setProcessPercent] = useState<number>(18);
+  const [processStage, setProcessStage] = useState<number>(1);
   const submitted = useRef(false);
   const latestRegionRef = useRef(player.region || "");
   latestRegionRef.current = player.region || "";
+
+  useEffect(() => {
+    if (step !== "processing") return;
+    setProcessPercent(18);
+    setProcessStage(1);
+
+    const t1 = setTimeout(() => {
+      setProcessPercent(45);
+      setProcessStage(2);
+    }, 650);
+
+    const t2 = setTimeout(() => {
+      setProcessPercent(76);
+      setProcessStage(3);
+    }, 1600);
+
+    const t3 = setTimeout(() => {
+      setProcessPercent(92);
+      setProcessStage(3);
+    }, 3000);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [step]);
 
   useEffect(() => {
     if (open) {
@@ -178,6 +223,9 @@ export default function CheckoutModal({
         setAuth(effectiveToken, profile, { ...merchant, balance_egp: res.balance_egp });
       }
       if (res?.success) {
+        setProcessPercent(100);
+        setProcessStage(4);
+        await new Promise((resolve) => setTimeout(resolve, 450));
         setStep("success");
         onClear();
         if (onOrderSuccess) {
@@ -213,10 +261,134 @@ export default function CheckoutModal({
           onClick={onClose}
           disabled={step === "processing"}
           aria-label="إغلاق"
-          className="absolute top-3 end-3 sm:top-4 sm:end-4 h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-50"
+          className="absolute top-3 end-3 sm:top-4 sm:end-4 h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-50 z-20"
         >
           <X className="w-4 h-4" />
         </button>
+
+        {/* Dynamic Operation Stepper Progress Bar */}
+        <div className="mb-4 pb-3 border-b border-slate-800/80 pt-1">
+          <div className="flex items-center justify-between text-xs mb-2 px-1">
+            <span className="font-bold text-slate-300 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>مراحل عملية الشحن</span>
+            </span>
+            <span className="font-mono text-[10px] sm:text-[11px] font-bold text-cyan-300 bg-[#080d1e] px-2.5 py-0.5 rounded-full border border-slate-800 shadow-inner">
+              {step === "form"
+                ? "1/3 • إدخال البيانات"
+                : step === "review"
+                ? "2/3 • مراجعة الحساب"
+                : step === "processing"
+                ? `${processPercent}% • جاري التنفيذ`
+                : step === "success"
+                ? "100% • اكتمل الشحن بنجاح"
+                : "فشل العملية"}
+            </span>
+          </div>
+
+          <div className="relative flex items-center justify-between px-3 sm:px-6 py-1">
+            {/* Background track */}
+            <div className="absolute top-1/2 left-6 right-6 -translate-y-1/2 h-1 bg-slate-800/90 rounded-full -z-0" />
+            {/* Active filled track */}
+            <div
+              className="absolute top-1/2 right-6 -translate-y-1/2 h-1 bg-gradient-to-l from-rose-500 via-purple-500 to-emerald-400 rounded-full -z-0 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(244,63,94,0.4)]"
+              style={{
+                width:
+                  step === "form"
+                    ? "10%"
+                    : step === "review"
+                    ? "50%"
+                    : step === "processing"
+                    ? `${Math.max(50, Math.min(95, processPercent))}%`
+                    : "100%",
+              }}
+            />
+
+            {/* Step 1: Info */}
+            <div className="flex flex-col items-center gap-1 z-10">
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 shadow-md ${
+                  step !== "form"
+                    ? "bg-emerald-500 text-slate-950 ring-2 ring-emerald-400/40"
+                    : "bg-rose-500 text-white ring-4 ring-rose-500/20"
+                }`}
+              >
+                {step !== "form" ? <CheckCircle2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" /> : "1"}
+              </div>
+              <span
+                className={`text-[10px] sm:text-[11px] font-medium ${
+                  step === "form" ? "text-rose-400 font-bold" : "text-emerald-400"
+                }`}
+              >
+                بيانات الشحن
+              </span>
+            </div>
+
+            {/* Step 2: Review */}
+            <div className="flex flex-col items-center gap-1 z-10">
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 shadow-md ${
+                  step === "success"
+                    ? "bg-emerald-500 text-slate-950 ring-2 ring-emerald-400/40"
+                    : step === "processing"
+                    ? "bg-purple-500 text-white ring-2 ring-purple-400/40"
+                    : step === "review"
+                    ? "bg-rose-500 text-white ring-4 ring-rose-500/20"
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}
+              >
+                {step === "processing" || step === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                ) : (
+                  "2"
+                )}
+              </div>
+              <span
+                className={`text-[10px] sm:text-[11px] font-medium ${
+                  step === "review"
+                    ? "text-rose-400 font-bold"
+                    : step === "processing" || step === "success"
+                    ? "text-emerald-400"
+                    : "text-slate-500"
+                }`}
+              >
+                مراجعة الطلب
+              </span>
+            </div>
+
+            {/* Step 3: Fulfillment */}
+            <div className="flex flex-col items-center gap-1 z-10">
+              <div
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 shadow-md ${
+                  step === "success"
+                    ? "bg-emerald-500 text-slate-950 ring-4 ring-emerald-400/30"
+                    : step === "processing"
+                    ? "bg-purple-600 text-white ring-4 ring-purple-500/30 animate-pulse"
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}
+              >
+                {step === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                ) : step === "processing" ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  "3"
+                )}
+              </div>
+              <span
+                className={`text-[10px] sm:text-[11px] font-medium ${
+                  step === "success"
+                    ? "text-emerald-400 font-bold"
+                    : step === "processing"
+                    ? "text-purple-300 font-bold"
+                    : "text-slate-500"
+                }`}
+              >
+                {step === "success" ? "تم الشحن" : "تنفيذ العملية"}
+              </span>
+            </div>
+          </div>
+        </div>
 
         {step === "form" && (
           <div className="space-y-4 pt-2 sm:pt-0">
@@ -437,10 +609,116 @@ export default function CheckoutModal({
         )}
 
         {step === "processing" && (
-          <div className="py-10 text-center space-y-3">
-            <Loader2 className="w-10 h-10 animate-spin mx-auto text-rose-400" />
-            <div className="font-semibold">جاري معالجة الطلب...</div>
-            <div className="text-sm text-slate-400">يتم التحقق والخصم والتنفيذ بشكل آمن على الخادم.</div>
+          <div className="py-5 sm:py-7 space-y-4 text-center">
+            {/* Top pulsing badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold animate-pulse shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>جاري تنفيذ عملية الشحن عبر FazerCards</span>
+            </div>
+
+            {/* Glowing circular loader with live percentage */}
+            <div className="relative w-24 h-24 sm:w-28 sm:h-28 mx-auto flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-slate-800" />
+              <div
+                className="absolute inset-0 rounded-full border-4 border-rose-500 border-t-transparent animate-spin"
+                style={{ animationDuration: "1.2s" }}
+              />
+              <div className="text-center z-10">
+                <span className="font-mono text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  {processPercent}%
+                </span>
+                <span className="block text-[9px] sm:text-[10px] text-slate-400 font-medium">تقدم العملية</span>
+              </div>
+            </div>
+
+            {/* Linear Progress Bar with glowing neon fill */}
+            <div className="space-y-1.5 max-w-md mx-auto text-right">
+              <div className="flex justify-between text-xs text-slate-400 font-medium px-1">
+                <span>
+                  {processStage === 1
+                    ? "التحقق من بيانات الحساب وتأمين الرصيد..."
+                    : processStage === 2
+                    ? "الاتصال المباشر بنظام المزود (FazerCards)..."
+                    : processStage === 3
+                    ? "إرسال الجواهر وتأكيد الشحنة..."
+                    : "تم التنفيذ بنجاح! جاري عرض الإيصال..."}
+                </span>
+                <span className="font-mono text-cyan-300 font-bold">{processPercent}%</span>
+              </div>
+              <div className="w-full bg-slate-950/90 rounded-full h-3 border border-slate-800 overflow-hidden p-0.5 shadow-inner">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-purple-500 via-rose-500 to-emerald-400 transition-all duration-500 ease-out shadow-[0_0_12px_rgba(244,63,94,0.6)]"
+                  style={{ width: `${processPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Stage Checklist */}
+            <div className="max-w-md mx-auto rounded-xl border border-slate-800 bg-[#080d1e] p-3 space-y-2 text-right text-xs">
+              {/* Stage 1 */}
+              <div className="flex items-center justify-between py-1 border-b border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  {processStage >= 2 ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Loader2 className="w-4 h-4 text-purple-400 animate-spin shrink-0" />
+                  )}
+                  <span className={processStage >= 2 ? "text-slate-200 font-medium" : "text-purple-300 font-bold"}>
+                    فحص معرف اللاعب والسيرفر
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-slate-400">
+                  {player.name || player.id} {player.zoneId ? `(${player.zoneId})` : ""}
+                </span>
+              </div>
+
+              {/* Stage 2 */}
+              <div className="flex items-center justify-between py-1 border-b border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  {processStage >= 3 ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : processStage === 2 ? (
+                    <Loader2 className="w-4 h-4 text-purple-400 animate-spin shrink-0" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border border-slate-700 flex items-center justify-center shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                    </div>
+                  )}
+                  <span className={processStage >= 3 ? "text-slate-200 font-medium" : processStage === 2 ? "text-purple-300 font-bold" : "text-slate-500"}>
+                    الاتصال بخادم الشحن (FazerCards API)
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-slate-400">
+                  {getServerLabel(region || "global", activeGameId)}
+                </span>
+              </div>
+
+              {/* Stage 3 */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2">
+                  {processPercent >= 100 ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : processStage >= 3 ? (
+                    <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border border-slate-700 flex items-center justify-center shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                    </div>
+                  )}
+                  <span className={processPercent >= 100 ? "text-emerald-300 font-bold" : processStage >= 3 ? "text-emerald-300 font-bold" : "text-slate-500"}>
+                    إيداع الجواهر وتسليم الباقة
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-slate-400 font-bold">
+                  {formatDecimals3(total)} ج.م
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 flex items-center justify-center gap-1.5 pt-0.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/70" />
+              <span>المعاملة مؤمنة بالكامل مع استرداد فوري في حال تعذر الاتصال بالمزود</span>
+            </div>
           </div>
         )}
 

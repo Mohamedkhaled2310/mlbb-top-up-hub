@@ -2084,7 +2084,7 @@ function AdminPage() {
 
                             {/* Status & Fazer */}
                             <td className="p-3 text-center">
-                              <div className="flex flex-col items-center gap-1">
+                              <div className="flex flex-col items-center gap-1.5">
                                 <span
                                   className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                                     o.status === "success"
@@ -2094,13 +2094,25 @@ function AdminPage() {
                                         : "bg-amber-500/15 text-amber-300 border-amber-500/30"
                                   }`}
                                 >
-                                  {o.status === "success" && <CheckCircle className="w-3 h-3" />}
-                                  {o.status === "failed" && <AlertTriangle className="w-3 h-3" />}
-                                  {o.status !== "success" && o.status !== "failed" && <Clock className="w-3 h-3" />}
+                                  {o.status === "success" && <CheckCircle className="w-3 h-3 text-emerald-400" />}
+                                  {o.status === "failed" && <AlertTriangle className="w-3 h-3 text-rose-400" />}
+                                  {o.status !== "success" && o.status !== "failed" && <Clock className="w-3 h-3 text-amber-400" />}
                                   <span>
-                                    {o.status === "success" ? "ناجح" : o.status === "failed" ? "فشل" : "معلق"}
+                                    {o.status === "success" ? "ناجح (100%)" : o.status === "failed" ? "فشل" : "معلق (50%)"}
                                   </span>
                                 </span>
+                                {/* Progress track */}
+                                <div className="w-16 bg-slate-950 rounded-full h-1 border border-slate-800 overflow-hidden" title={o.status === "success" ? "مكتمل 100%" : o.status === "failed" ? "فشلت العملية" : "قيد المعالجة 50%"}>
+                                  <div
+                                    className={`h-full rounded-full ${
+                                      o.status === "success"
+                                        ? "bg-emerald-400 w-full"
+                                        : o.status === "failed"
+                                        ? "bg-rose-500 w-full"
+                                        : "bg-amber-400 w-1/2 animate-pulse"
+                                    }`}
+                                  />
+                                </div>
                                 {o.fazer_transaction_id && (
                                   <div className="flex items-center gap-1 font-mono text-[9px] text-slate-400">
                                     <span className="truncate max-w-[90px]" title={o.fazer_transaction_id}>
@@ -2173,8 +2185,21 @@ function AdminPage() {
                             {o.status === "success" && <CheckCircle className="w-2.5 h-2.5" />}
                             {o.status === "failed" && <AlertTriangle className="w-2.5 h-2.5" />}
                             {o.status !== "success" && o.status !== "failed" && <Clock className="w-2.5 h-2.5" />}
-                            <span>{o.status === "success" ? "ناجح" : o.status === "failed" ? "فشل" : "معلق"}</span>
+                            <span>{o.status === "success" ? "ناجح (100%)" : o.status === "failed" ? "فشل" : "معلق (50%)"}</span>
                           </span>
+                        </div>
+
+                        {/* Order Progress Line */}
+                        <div className="w-full bg-slate-950 rounded-full h-1 border border-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              o.status === "success"
+                                ? "bg-emerald-400 w-full"
+                                : o.status === "failed"
+                                ? "bg-rose-500 w-full"
+                                : "bg-amber-400 w-1/2 animate-pulse"
+                            }`}
+                          />
                         </div>
 
                         {/* Account & Time */}
@@ -3722,6 +3747,76 @@ function AdminPage() {
                   </span>
                 </DialogTitle>
               </DialogHeader>
+
+              {/* Operation Progress Timeline */}
+              <div className="rounded-xl border border-slate-800 bg-[#080d1e] p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>مراحل تقدم العملية (Progress Timeline)</span>
+                  </span>
+                  <span className="font-mono text-[11px] font-bold text-cyan-300">
+                    {selectedOrderDetails.status === "success"
+                      ? "100% • مكتملة بنجاح"
+                      : selectedOrderDetails.status === "failed"
+                      ? "توقفت العملية"
+                      : "50% • قيد المعالجة"}
+                  </span>
+                </div>
+
+                <div className="w-full bg-slate-950 rounded-full h-2 border border-slate-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      selectedOrderDetails.status === "success"
+                        ? "w-full bg-gradient-to-r from-purple-500 via-rose-500 to-emerald-400"
+                        : selectedOrderDetails.status === "failed"
+                        ? "w-1/2 bg-rose-500"
+                        : "w-1/2 bg-amber-400 animate-pulse"
+                    }`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-4 gap-1 text-[10px] text-center pt-1">
+                  <div className="space-y-0.5">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto text-xs">
+                      ✓
+                    </div>
+                    <div className="text-emerald-300 font-semibold">استلام الطلب</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto text-xs">
+                      ✓
+                    </div>
+                    <div className="text-emerald-300 font-semibold">تأكيد الحساب</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center mx-auto border text-xs ${
+                      selectedOrderDetails.status === "success"
+                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                        : selectedOrderDetails.status === "failed"
+                        ? "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                        : "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
+                    }`}>
+                      {selectedOrderDetails.status === "success" ? "✓" : selectedOrderDetails.status === "failed" ? "✕" : "⟳"}
+                    </div>
+                    <div className={selectedOrderDetails.status === "success" ? "text-emerald-300 font-semibold" : selectedOrderDetails.status === "failed" ? "text-rose-400 font-semibold" : "text-amber-300 font-semibold"}>
+                      شحن Fazer
+                    </div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center mx-auto border text-xs ${
+                      selectedOrderDetails.status === "success"
+                        ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                        : "bg-slate-800 text-slate-500 border-slate-700"
+                    }`}>
+                      {selectedOrderDetails.status === "success" ? "✓" : "4"}
+                    </div>
+                    <div className={selectedOrderDetails.status === "success" ? "text-emerald-300 font-semibold" : "text-slate-500"}>
+                      التسليم النهائي
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* Order Info & Player ID */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
