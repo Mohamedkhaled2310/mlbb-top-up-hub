@@ -330,7 +330,17 @@ function AdminPage() {
         try {
           await loadMerchants(stored.accessToken, 1, "");
           await loadOrders(stored.accessToken);
-          store.setAuth(stored.accessToken, stored.profile, stored.merchant);
+          store.setAuth(
+            stored.accessToken,
+            stored.profile,
+            stored.merchant,
+            {
+              refreshToken: stored.refreshToken,
+              expiresAt: stored.expiresAt,
+              email: stored.userEmail,
+            },
+            stored.rememberMe,
+          );
           setIsAdmin(true);
           return;
         } catch {
@@ -469,13 +479,35 @@ function AdminPage() {
   const token = store.accessToken;
 
   const getFreshToken = async (): Promise<string | null> => {
+    // Check if token in store is expired or near expiry (within 120 seconds)
+    const storedAuth = loadStoredAuth();
+    const exp = store.expiresAt || storedAuth?.expiresAt || 0;
+    const isExpiredOrClose = exp > 0 && exp - Math.floor(Date.now() / 1000) < 120;
+    const refToken = store.refreshToken || storedAuth?.refreshToken;
+
+    if (isExpiredOrClose && refToken) {
+      try {
+        const res = await refreshSessionApi(refToken);
+        if (res?.accessToken) {
+          store.setAuth(res.accessToken, res.profile, res.merchant, {
+            refreshToken: res.refreshToken,
+            expiresAt: res.expiresAt,
+            email: res.user?.email,
+          });
+          return res.accessToken;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (supabase) {
       try {
         const { data } = await supabase.auth.getSession();
         if (data?.session?.access_token) {
-          const exp = data.session.expires_at || 0;
-          const isExpired = exp && exp - Math.floor(Date.now() / 1000) < 60;
-          if (isExpired) {
+          const sExp = data.session.expires_at || 0;
+          const sIsExpired = sExp && sExp - Math.floor(Date.now() / 1000) < 60;
+          if (sIsExpired) {
             const { data: refreshed } = await supabase.auth.refreshSession();
             if (refreshed?.session?.access_token) {
               store.setAuth(refreshed.session.access_token, null, null, {
@@ -499,9 +531,9 @@ function AdminPage() {
         // fallback
       }
     }
-    if (store.refreshToken) {
+    if (refToken) {
       try {
-        const res = await refreshSessionApi(store.refreshToken);
+        const res = await refreshSessionApi(refToken);
         if (res?.accessToken) {
           store.setAuth(res.accessToken, res.profile, res.merchant, {
             refreshToken: res.refreshToken,
@@ -514,7 +546,47 @@ function AdminPage() {
         // ignore
       }
     }
-    return store.accessToken;
+    return store.accessToken || storedAuth?.accessToken || null;
+  };
+
+  const withAdminAuthRetry = async <T,>(apiFn: (tok: string) => Promise<T>): Promise<T> => {
+    let tok = (await getFreshToken()) || token || store.accessToken || "";
+    let res: any = await apiFn(tok);
+    if (res?.error === "unauthorized") {
+      const storedAuth = loadStoredAuth();
+      const refToken = store.refreshToken || storedAuth?.refreshToken;
+      let freshTok: string | null = null;
+      if (refToken) {
+        try {
+          const ref = await refreshSessionApi(refToken);
+          if (ref?.accessToken) {
+            store.setAuth(ref.accessToken, ref.profile, ref.merchant, {
+              refreshToken: ref.refreshToken,
+              expiresAt: ref.expiresAt,
+              email: ref.user?.email,
+            });
+            freshTok = ref.accessToken;
+          }
+        } catch {}
+      }
+      if (!freshTok && supabase) {
+        try {
+          const { data: sRef } = await supabase.auth.refreshSession();
+          if (sRef?.session?.access_token) {
+            store.setAuth(sRef.session.access_token, null, null, {
+              refreshToken: sRef.session.refresh_token,
+              expiresAt: sRef.session.expires_at,
+              email: sRef.session.user?.email,
+            });
+            freshTok = sRef.session.access_token;
+          }
+        } catch {}
+      }
+      if (freshTok) {
+        res = await apiFn(freshTok);
+      }
+    }
+    return res;
   };
 
   const doSync = async () => {
@@ -596,27 +668,19 @@ function AdminPage() {
       return;
     }
     try {
-      let r = await adminCreditMerchantApi(activeToken, {
-        merchant_id: credit.id,
-        amount_usd: usd,
-        ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
-      });
-      if (r?.error === "unauthorized" && supabase) {
-        const { data: ref } = await supabase.auth.refreshSession();
-        if (ref?.session?.access_token) {
-          store.setAuth(ref.session.access_token, null, null, {
-            refreshToken: ref.session.refresh_token,
-            expiresAt: ref.session.expires_at,
-            email: ref.session.user?.email,
-          });
-          r = await adminCreditMerchantApi(ref.session.access_token, {
-            merchant_id: credit.id,
-            amount_usd: usd,
-            ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
-          });
+      const r = await withAdminAuthRetry((tok) =>
+        adminCreditMerchantApi(tok, {
+          merchant_id: credit.id,
+          amount_usd: usd,
+          ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
+        }),
+      );
+      if (r?.error) {
+        if (r.error === "unauthorized") {
+          throw new Error("انتهت جلسة تسجيل دخول الأدمن. يرجى تسجيل الدخول مجدداً للمتابعة.");
         }
+        throw new Error(r.error);
       }
-      if (r?.error) throw new Error(r.error);
       const addedEgp = r?.amount_egp || Math.round(usd * (egpRate || 50) * 100) / 100;
       toast({
         title: "تمت إضافة الرصيد لمحفظة التاجر بنجاح 💵",
@@ -624,7 +688,8 @@ function AdminPage() {
       });
       const targetId = credit.id;
       setCredit(null);
-      await loadMerchants(activeToken, mPage, mQuery);
+      const currentFreshToken = (await getFreshToken()) || activeToken;
+      await loadMerchants(currentFreshToken, mPage, mQuery);
       if (profileMerchantId && profileMerchantId === targetId) {
         await openMerchantProfile(profileMerchantId);
       }
@@ -906,11 +971,13 @@ function AdminPage() {
         toast({ title: "خطأ", description: "يرجى إدخال سعر صالح بالدولار ($ USD) أكبر من صفر" });
         return;
       }
-      const res = await adminSetMerchantPackagePriceApi(activeToken, {
-        merchant_id: profileMerchantId,
-        offer_id: editingMerchantPkg.offerId,
-        price_usd: priceValUsd,
-      });
+      const res = await withAdminAuthRetry((tok) =>
+        adminSetMerchantPackagePriceApi(tok, {
+          merchant_id: profileMerchantId,
+          offer_id: editingMerchantPkg.offerId,
+          price_usd: priceValUsd,
+        }),
+      );
       if (res?.error) throw new Error(res.error);
       toast({
         title: revert ? "تم إلغاء السعر الخاص" : "تم حفظ سعر التاجر بنجاح",

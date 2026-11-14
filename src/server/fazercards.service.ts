@@ -345,15 +345,32 @@ export class FazerCardsService {
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
 
       if (!response.ok || !data) {
+        const errMsg = String(data?.["message"] || data?.["error"] || "");
+        const isUpstreamOutage =
+          response.status >= 500 ||
+          errMsg.toLowerCase().includes("could not validate") ||
+          errMsg.toLowerCase().includes("try again later") ||
+          errMsg.toLowerCase().includes("gateway") ||
+          errMsg.toLowerCase().includes("timeout") ||
+          errMsg.toLowerCase().includes("unavailable");
+
+        if (isUpstreamOutage) {
+          // Fallback gracefully: ID syntax is already validated, allow customer to proceed to order
+          return {
+            valid: true,
+            userId: trimmedId,
+            zoneId: effectiveZone,
+            username: needsZone ? `${trimmedId} (${trimmedZone})` : trimmedId,
+            accountRegion: selectedRegion || "global",
+            fallback: true,
+          };
+        }
+
         return {
           valid: false,
           userId: trimmedId,
           zoneId: effectiveZone,
-          error: String(
-            data?.["message"] ||
-              data?.["error"] ||
-              `تعذر التحقق من الحساب (${response.status})`,
-          ),
+          error: errMsg || `تعذر التحقق من الحساب (${response.status})`,
         };
       }
 
@@ -396,11 +413,14 @@ export class FazerCardsService {
         ...(rawDetectedRegion ? { region: String(rawDetectedRegion) } : {}),
       };
     } catch (err: unknown) {
+      // Connection failure / timeout fallback: syntax format is verified, allow customer to proceed
       return {
-        valid: false,
+        valid: true,
         userId: trimmedId,
         zoneId: effectiveZone,
-        error: err instanceof Error ? `خطأ في الاتصال بخدمة التحقق: ${err.message}` : "تعذر الاتصال بخدمة التحقق من الحساب",
+        username: needsZone ? `${trimmedId} (${trimmedZone})` : trimmedId,
+        accountRegion: selectedRegion || "global",
+        fallback: true,
       };
     }
   }

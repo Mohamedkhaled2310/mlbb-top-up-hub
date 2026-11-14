@@ -41,6 +41,7 @@ export interface PlayerValidationResult {
   zoneId?: string | undefined;
   accountRegion?: string | null | undefined;
   error?: string | undefined;
+  fallback?: boolean | undefined;
 }
 
 export type OrderStatus = "pending" | "processing" | "success" | "failed" | "incomplete" | "cancelled";

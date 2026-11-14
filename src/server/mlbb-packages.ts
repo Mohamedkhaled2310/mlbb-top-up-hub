@@ -175,12 +175,121 @@ export const MLBB_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = MLBB_GLOBAL_B
 
 export const MLBB_BASE_TARGETS = [86, 172, 257, 706, 2195, 3688, 5532, 9288] as const;
 
+export interface MlbbBonusPkgInfo {
+  offerId: string;
+  name: string;
+  category: "double_diamonds" | "weekly_pass";
+  region: "global" | "br";
+  diamonds?: number;
+  bonusDiamonds?: number;
+  fallbackCostUsd: number;
+}
+
+export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
+  // Global First Top-Up Bonus
+  {
+    offerId: "mobile_legends_global:50_5_diamonds_first_top_up_bonus",
+    name: "50 + 5 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "global",
+    diamonds: 50,
+    bonusDiamonds: 5,
+    fallbackCostUsd: 0.75,
+  },
+  {
+    offerId: "mobile_legends_global:150_15_diamonds_first_top_up_bonus",
+    name: "150 + 15 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "global",
+    diamonds: 150,
+    bonusDiamonds: 15,
+    fallbackCostUsd: 2.0301,
+  },
+  {
+    offerId: "mobile_legends_global:250_25_diamonds_first_top_up_bonus",
+    name: "250 + 25 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "global",
+    diamonds: 250,
+    bonusDiamonds: 25,
+    fallbackCostUsd: 3.2642,
+  },
+  {
+    offerId: "mobile_legends_global:500_65_diamonds_first_top_up_bonus",
+    name: "500 + 65 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "global",
+    diamonds: 500,
+    bonusDiamonds: 65,
+    fallbackCostUsd: 6.7023,
+  },
+  // Global Elite Packs
+  {
+    offerId: "mobile_legends_global:weekly_elite_pack",
+    name: "Weekly Elite Pack",
+    category: "weekly_pass",
+    region: "global",
+    diamonds: 0,
+    bonusDiamonds: 0,
+    fallbackCostUsd: 0.6895,
+  },
+  {
+    offerId: "mobile_legends_global:monthly_elite_pack",
+    name: "Monthly Elite Pack",
+    category: "weekly_pass",
+    region: "global",
+    diamonds: 0,
+    bonusDiamonds: 0,
+    fallbackCostUsd: 3.4295,
+  },
+  // Brazil First Top-Up Bonus
+  {
+    offerId: "mobile_legends_brazil:50_5_diamonds_first_top_up_bonus",
+    name: "50 + 5 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "br",
+    diamonds: 50,
+    bonusDiamonds: 5,
+    fallbackCostUsd: 0.65,
+  },
+  {
+    offerId: "mobile_legends_brazil:150_15_diamonds_first_top_up_bonus",
+    name: "150 + 15 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "br",
+    diamonds: 150,
+    bonusDiamonds: 15,
+    fallbackCostUsd: 1.92,
+  },
+  {
+    offerId: "mobile_legends_brazil:250_25_diamonds_first_top_up_bonus",
+    name: "250 + 25 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "br",
+    diamonds: 250,
+    bonusDiamonds: 25,
+    fallbackCostUsd: 3.17,
+  },
+  {
+    offerId: "mobile_legends_brazil:500_65_diamonds_first_top_up_bonus",
+    name: "500 + 65 Diamonds (First Top-Up Bonus)",
+    category: "double_diamonds",
+    region: "br",
+    diamonds: 500,
+    bonusDiamonds: 65,
+    fallbackCostUsd: 6.5,
+  },
+];
+
 export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
   {
     offerId: "mlbb_composite_344",
     name: "344 Diamonds",
     totalDiamonds: 344,
-    components: [{ baseTotal: 172, qty: 2 }],
+    components: [
+      { baseTotal: 86, qty: 1 },
+      { baseTotal: 257, qty: 1 },
+    ],
   },
   {
     offerId: "mlbb_composite_429",
@@ -230,7 +339,8 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 1050,
     components: [
       { baseTotal: 706, qty: 1 },
-      { baseTotal: 172, qty: 2 },
+      { baseTotal: 86, qty: 1 },
+      { baseTotal: 257, qty: 1 },
     ],
   },
   {
@@ -263,7 +373,8 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 2539,
     components: [
       { baseTotal: 2195, qty: 1 },
-      { baseTotal: 172, qty: 2 },
+      { baseTotal: 86, qty: 1 },
+      { baseTotal: 257, qty: 1 },
     ],
   },
   {
@@ -542,12 +653,38 @@ export async function curateMlbbPackages(sb: any) {
       .eq("offer_id", "mobile_legends_brazil:twilight_pass");
   }
 
-  // 6. Identify all active curated MLBB offer IDs and deactivate noisy uncurated duplicates
+  // 6. Curate Requested First Top-Up Bonus and Elite Pack packages
+  for (const r of MLBB_REQUESTED_PACKAGES) {
+    const existing = pkgs.find((p: any) => p.offer_id === r.offerId);
+    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
+    const effectiveCost = hasAdminCustom
+      ? existing.raw.custom_cost_usd
+      : Number.isFinite(Number(existing?.cost_usd)) && Number(existing.cost_usd) > 0
+        ? Number(existing.cost_usd)
+        : r.fallbackCostUsd;
+
+    await sb
+      .from("fazer_packages")
+      .update({
+        name: r.name,
+        category: r.category,
+        regions: [r.region],
+        cost_usd: effectiveCost,
+        diamonds: r.diamonds ?? 0,
+        bonus_diamonds: r.bonusDiamonds ?? 0,
+        active: true,
+        updated_at: nowIso,
+      })
+      .eq("offer_id", r.offerId);
+  }
+
+  // 7. Identify all active curated MLBB offer IDs and deactivate noisy uncurated duplicates
   const allActiveIds = new Set<string>([
     ...Object.values(MLBB_GLOBAL_BASE_PACKAGES).map((b) => b.baseOfferId),
     ...Object.values(MLBB_BRAZIL_BASE_PACKAGES).map((b) => b.baseOfferId),
     ...globalCompositeRows.map((c) => c.offer_id),
     ...brazilCompositeRows.map((c) => c.offer_id),
+    ...MLBB_REQUESTED_PACKAGES.map((r) => r.offerId),
     "mobile_legends_global:weekly_pass",
     "mobile_legends_brazil:weekly_pass",
     "mobile_legends_global:twilight_pass",

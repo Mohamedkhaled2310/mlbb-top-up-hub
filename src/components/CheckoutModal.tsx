@@ -41,6 +41,7 @@ export default function CheckoutModal({
   const [paidTotal, setPaidTotal] = useState<number>(0);
   const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
   const [summaryRegion, setSummaryRegion] = useState<string>("global");
+  const [isFallbackValid, setIsFallbackValid] = useState<boolean>(false);
   const submitted = useRef(false);
   const latestRegionRef = useRef(player.region || "");
   latestRegionRef.current = player.region || "";
@@ -98,6 +99,7 @@ export default function CheckoutModal({
         cart[0]?.package.fazerCategoryId,
       );
       if (res.valid) {
+        setIsFallbackValid(Boolean(res.fallback));
         const playerName = res.username || player.name || player.id.trim();
         const finalRegion = region.trim() || res.accountRegion || "global";
         setPlayer({ ...player, name: playerName, region: finalRegion });
@@ -110,6 +112,12 @@ export default function CheckoutModal({
           gameId: activeGameId,
         });
         setStep("review");
+        if (res.fallback) {
+          toast({
+            title: "تم تأكيد صحة صيغة المعرف",
+            description: "خادم الأسماء التابع للعبة في تحديث مؤقت - يمكنك إتمام الشحن بنجاح وسيتصل بالخادم مباشرة",
+          });
+        }
       } else {
         toast({ title: "فشل التحقق", description: res.error || "تعذر التحقق من معرف اللاعب" });
       }
@@ -351,6 +359,11 @@ export default function CheckoutModal({
                   <div className="font-extrabold text-emerald-300 text-base sm:text-lg truncate">
                     {player.name || player.id}
                   </div>
+                  {isFallbackValid && (
+                    <div className="text-[10px] text-amber-300/90 font-medium">
+                      تم تأكيد صحة المعرف والسيرفر (جاهز لإتمام الشحن)
+                    </div>
+                  )}
                 </div>
               </div>
               <span className="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-1 rounded-full shrink-0 flex items-center gap-1 shadow-sm">

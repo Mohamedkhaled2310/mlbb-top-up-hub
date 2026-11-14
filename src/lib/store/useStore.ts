@@ -187,9 +187,20 @@ state = {
   clearCart: () => setState({ cart: [] }),
   setCart: (cart) => setState({ cart }),
   setAuth: (accessToken, profile, merchant, sessionMeta, rememberMe = true) => {
-    const nextRefresh = sessionMeta?.refreshToken ?? (accessToken ? state.refreshToken : null);
-    const nextExp = sessionMeta?.expiresAt ?? (accessToken ? state.expiresAt : null);
-    const nextEmail = sessionMeta?.email ?? (accessToken ? state.userEmail : null);
+    const storedAuth = loadStoredAuth();
+    const nextRefresh =
+      sessionMeta?.refreshToken !== undefined
+        ? sessionMeta.refreshToken
+        : (accessToken ? (state.refreshToken || storedAuth?.refreshToken || null) : null);
+    const nextExp =
+      sessionMeta?.expiresAt !== undefined
+        ? sessionMeta.expiresAt
+        : (accessToken ? (state.expiresAt || storedAuth?.expiresAt || null) : null);
+    const nextEmail =
+      sessionMeta?.email !== undefined
+        ? sessionMeta.email
+        : (accessToken ? (state.userEmail || storedAuth?.userEmail || null) : null);
+
     saveStoredAuth({
       accessToken,
       refreshToken: nextRefresh,
@@ -208,6 +219,10 @@ state = {
       merchant: merchant ?? null,
       isMerchant: Boolean(merchant && accessToken),
     });
+
+    if (supabase && accessToken && nextRefresh) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: nextRefresh }).catch(() => {});
+    }
   },
   logout: () => {
     saveStoredAuth({ accessToken: null });
