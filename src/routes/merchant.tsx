@@ -280,8 +280,10 @@ function MerchantPage() {
 
   const getMerchantPrices = useCallback(
     (p: TopUpPackage) => {
+      const customP = (store.merchant?.custom_prices as any)?.[p.offerId];
+      const isCustom = typeof customP === "number" && customP > 0;
       const base = p.merchantBasePriceEgp ?? p.retailPriceEgp;
-      const priceEgp = calcMerchantUnitPriceEgp(base, marginPercent, p.costUsd, store.settings.egp_rate);
+      const priceEgp = isCustom ? customP : calcMerchantUnitPriceEgp(base, marginPercent, p.costUsd, store.settings.egp_rate);
       const converted = calcConvertedPrice(
         priceEgp,
         store.settings.egp_rate,
@@ -290,9 +292,9 @@ function MerchantPage() {
         p.costUsd,
         marginPercent,
       );
-      return { priceEgp, converted };
+      return { priceEgp, converted, isCustom };
     },
-    [marginPercent, store.settings.egp_rate, currencyRate, currencyInfo.decimals],
+    [store.merchant?.custom_prices, marginPercent, store.settings.egp_rate, currencyRate, currencyInfo.decimals],
   );
 
   const rawBalanceEgp = dash?.stats?.balance_egp ?? store.merchant?.balance_egp ?? 0;
@@ -674,6 +676,11 @@ function MerchantPage() {
                               {Boolean(p.raw?.["is_composite"]) && (
                                 <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
                                   مجمعة
+                                </span>
+                              )}
+                              {prices.isCustom && (
+                                <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
+                                  سعر خاص
                                 </span>
                               )}
                             </div>

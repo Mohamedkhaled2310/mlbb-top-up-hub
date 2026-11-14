@@ -101,6 +101,7 @@ export interface MerchantAccount {
   is_active: boolean;
   profile?: Profile | null | undefined;
   email?: string | null | undefined;
+  custom_prices?: Record<string, number> | undefined;
 }
 
 export interface WalletLedgerEntry {

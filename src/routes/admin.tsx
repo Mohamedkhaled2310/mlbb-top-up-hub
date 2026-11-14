@@ -41,6 +41,7 @@ import {
   adminListOrdersApi,
   adminSetMarginApi,
   adminSetMerchantBalanceApi,
+  adminSetMerchantPackagePriceApi,
   adminSetMerchantRegionApi,
   adminSyncBinanceRateApi,
   adminSyncFazerApi,
@@ -98,6 +99,10 @@ function AdminPage() {
   const [editCostUsd, setEditCostUsd] = useState<string>("");
   const [editPkgName, setEditPkgName] = useState<string>("");
   const [savingPkg, setSavingPkg] = useState(false);
+
+  const [editingMerchantPkg, setEditingMerchantPkg] = useState<any | null>(null);
+  const [customPriceInput, setCustomPriceInput] = useState<string>("");
+  const [savingMerchantPkg, setSavingMerchantPkg] = useState(false);
 
   const [credit, setCredit] = useState<{ id: string; amount: string; note: string } | null>(null);
   const [marginEdit, setMarginEdit] = useState<{ id: string; value: string } | null>(null);
@@ -759,6 +764,42 @@ function AdminPage() {
       toast({ title: "فشل تعديل السعر", description: e?.message });
     } finally {
       setSavingPkg(false);
+    }
+  };
+
+  const openEditMerchantPkg = (p: any) => {
+    setEditingMerchantPkg(p);
+    const initialPrice = p.customPriceEgp != null ? p.customPriceEgp : p.merchantPriceEgp;
+    setCustomPriceInput(String(initialPrice));
+  };
+
+  const submitMerchantPackagePrice = async (revert = false) => {
+    if (!editingMerchantPkg || !profileMerchantId) return;
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
+    setSavingMerchantPkg(true);
+    try {
+      const priceVal = revert ? null : Number(customPriceInput);
+      if (!revert && (!Number.isFinite(priceVal) || (priceVal ?? 0) <= 0)) {
+        toast({ title: "خطأ", description: "يرجى إدخال سعر صالح بالجنيه المصري أكبر من صفر" });
+        return;
+      }
+      const res = await adminSetMerchantPackagePriceApi(activeToken, {
+        merchant_id: profileMerchantId,
+        offer_id: editingMerchantPkg.offerId,
+        price_egp: priceVal,
+      });
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: revert ? "تم إلغاء السعر الخاص" : "تم حفظ سعر التاجر بنجاح",
+        description: `${editingMerchantPkg.name} • السعر: ${revert ? "تلقائي حسب الهامش" : `${priceVal} ج.م`}`,
+      });
+      setEditingMerchantPkg(null);
+      await openMerchantProfile(profileMerchantId);
+    } catch (e: any) {
+      toast({ title: "فشل حفظ سعر التاجر", description: e?.message });
+    } finally {
+      setSavingMerchantPkg(false);
     }
   };
 
@@ -1933,6 +1974,113 @@ function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Per-Merchant Package Price Modal */}
+      <Dialog open={!!editingMerchantPkg} onOpenChange={(o) => !o && setEditingMerchantPkg(null)}>
+        <DialogContent className="max-w-md bg-[#0a0f20] border border-amber-500/40 text-slate-100 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-amber-400" />
+              تحديد سعر خاص للباقة لهذا التاجر
+            </DialogTitle>
+          </DialogHeader>
+          {editingMerchantPkg && (
+            <div className="space-y-3.5 text-xs">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white text-sm">{editingMerchantPkg.name}</span>
+                  <span className="uppercase font-mono font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded text-[10px] border border-amber-500/30">
+                    {editingMerchantPkg.gameId}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono">
+                  التاجر: <span className="text-slate-200 font-bold">{profileData?.merchant?.profile?.full_name || profileData?.merchant?.email}</span>
+                </div>
+                {editingMerchantPkg.diamonds > 0 && (
+                  <div className="text-[11px] text-slate-400">
+                    القيمة: <b className="text-amber-300">{editingMerchantPkg.diamonds}</b> ماسة / شدة
+                  </div>
+                )}
+              </div>
+
+              {/* Wholesale cost vs Standard Merchant Price */}
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-2.5 text-center">
+                <div className="space-y-0.5">
+                  <div className="text-[10px] text-slate-400">تكلفة الجملة:</div>
+                  <div className="text-sm font-bold font-mono text-slate-200">
+                    ${formatDecimals3(editingMerchantPkg.costUsd)}
+                  </div>
+                  <div className="text-[9px] text-slate-500 font-mono">
+                    ({formatDecimals3(editingMerchantPkg.costEgp)} ج.م)
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-[10px] text-slate-400">السعر التلقائي (بالهامش {profileData?.merchant?.margin_percent || 0}%):</div>
+                  <div className="text-sm font-bold font-mono text-purple-300">
+                    {formatDecimals3(editingMerchantPkg.standardMerchantPriceEgp || editingMerchantPkg.merchantPriceEgp)} ج.م
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-200 font-semibold block mb-1">
+                  سعر التاجر المخصص لهذا التاجر فقط (ج.م) *
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="مثال: 105.00"
+                  value={customPriceInput}
+                  onChange={(e) => setCustomPriceInput(e.target.value)}
+                  className={`font-mono text-sm ${DARK_INPUT}`}
+                  autoFocus
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  هذا السعر يطبق على هذا التاجر فقط ولا يؤثر على باقي التجار أو أسعار الجمهور.
+                </p>
+              </div>
+
+              {/* Live calculation for custom price */}
+              {Number(customPriceInput) > 0 && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2.5 space-y-1">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>صافي ربح المتجر من الباقة:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      +{formatDecimals3(Math.max(0, Number(customPriceInput) - editingMerchantPkg.costEgp))} ج.م
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>المعادل بالدولار:</span>
+                    <span className="font-mono font-bold text-amber-300">
+                      ≈ ${formatDecimals3(Number(customPriceInput) / (profileData?.egpRate || 50))} USD
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold"
+                  disabled={savingMerchantPkg || !customPriceInput || Number(customPriceInput) <= 0}
+                  onClick={() => submitMerchantPackagePrice(false)}
+                >
+                  {savingMerchantPkg ? "جارٍ الحفظ..." : "حفظ السعر الخاص للتاجر"}
+                </Button>
+                {editingMerchantPkg.isCustomPrice && (
+                  <Button
+                    variant="outline"
+                    className="border-rose-500/40 text-rose-300 hover:bg-rose-950/50 hover:text-white"
+                    disabled={savingMerchantPkg}
+                    onClick={() => submitMerchantPackagePrice(true)}
+                  >
+                    إلغاء التخصيص
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Adjust Merchant Balance Modal */}
       <Dialog open={!!adjustBalance} onOpenChange={(o) => !o && setAdjustBalance(null)}>
         <DialogContent className="max-w-md bg-[#0a0f20] border border-cyan-500/40 text-slate-100 rounded-2xl">
@@ -2476,8 +2624,13 @@ function AdminPage() {
                                   <div className="text-[10px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
                                 </td>
                                 <td className="p-2.5 text-center font-mono bg-purple-950/20">
-                                  <div className="font-extrabold text-purple-300 text-sm">
-                                    {formatDecimals3(p.merchantPriceEgp)} ج.م
+                                  <div className="font-extrabold text-purple-300 text-sm flex items-center justify-center gap-1.5 flex-wrap">
+                                    <span>{formatDecimals3(p.merchantPriceEgp)} ج.م</span>
+                                    {p.isCustomPrice && (
+                                      <span className="font-sans font-bold text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded shrink-0">
+                                        سعر خاص
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-[10px] text-slate-400">
                                     ≈ ${formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50))} USD
@@ -2493,8 +2646,8 @@ function AdminPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 px-2 text-[11px] border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/60 font-semibold gap-1 inline-flex items-center"
-                                    onClick={() => openEditPkg(p)}
+                                    className="h-7 px-2 text-[11px] border-amber-500/40 bg-amber-950/30 text-amber-300 hover:bg-amber-900/60 font-semibold gap-1 inline-flex items-center"
+                                    onClick={() => openEditMerchantPkg(p)}
                                   >
                                     <Pencil className="w-3 h-3" /> تعديل
                                   </Button>
@@ -2565,7 +2718,14 @@ function AdminPage() {
                                 <div className="font-mono text-[9px] text-slate-500">{formatDecimals3(p.costEgp)} ج.م</div>
                               </div>
                               <div className="bg-purple-950/30 border border-purple-500/20 rounded-md py-0.5 px-1">
-                                <div className="text-[10px] text-purple-200 font-semibold">سعر التاجر</div>
+                                <div className="text-[10px] text-purple-200 font-semibold flex items-center justify-center gap-1">
+                                  <span>سعر التاجر</span>
+                                  {p.isCustomPrice && (
+                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[8px] px-1 rounded font-bold">
+                                      خاص
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="font-mono font-extrabold text-purple-300 text-sm">
                                   {formatDecimals3(p.merchantPriceEgp)} ج.م
                                 </div>
@@ -2580,8 +2740,8 @@ function AdminPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-6 px-2 text-[10px] border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60 font-semibold gap-1 mt-1 w-full flex items-center justify-center"
-                                  onClick={() => openEditPkg(p)}
+                                  className="h-6 px-2 text-[10px] border-amber-500/40 bg-amber-950/40 text-amber-300 hover:bg-amber-900/60 font-semibold gap-1 mt-1 w-full flex items-center justify-center"
+                                  onClick={() => openEditMerchantPkg(p)}
                                 >
                                   <Pencil className="w-2.5 h-2.5" /> تعديل
                                 </Button>

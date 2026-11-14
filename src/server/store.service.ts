@@ -605,6 +605,184 @@ async function issueMerchantRefund(
   }
 }
 
+export function findLeastCostComponentCombination(
+  targetDiamonds: number,
+  candidatePkgs: any[],
+  fallbackComponents?: any[],
+): any[] {
+  const fallbackList = Array.isArray(fallbackComponents) ? fallbackComponents : [];
+  const fallbackCost = fallbackList.reduce(
+    (sum, c) => sum + Number(c.cost_usd || c.costUsd || 0) * Number(c.qty || 1),
+    0,
+  );
+
+  if (!targetDiamonds || targetDiamonds <= 0 || !candidatePkgs || candidatePkgs.length === 0) {
+    return fallbackList;
+  }
+
+  // Filter valid base packages with positive diamonds and cost
+  const validPkgs = candidatePkgs
+    .filter((p) => {
+      const d = Number(p.diamonds || 0);
+      const c = Number(p.cost_usd || 0);
+      const isComp = Boolean(p.offer_id?.startsWith?.("comp:") || p.raw?.is_composite);
+      return d > 0 && c > 0 && !isComp && p.active !== false;
+    })
+    .map((p) => ({
+      offer_id: p.offer_id,
+      fazer_offer_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_offer_id) || p.offer_id,
+      fazer_category_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_category_id) || undefined,
+      diamonds: Number(p.diamonds),
+      cost_usd: Number(p.cost_usd),
+      qty: 1,
+    }));
+
+  if (validPkgs.length === 0) return fallbackList;
+
+  // Unbounded knapsack DP: dpCost[d] = minimum cost for exactly d diamonds
+  const INF = 1e9;
+  const dpCost = new Float64Array(targetDiamonds + 1).fill(INF);
+  const dpCount = new Int32Array(targetDiamonds + 1).fill(INF);
+  const dpPkg: Array<any | null> = new Array(targetDiamonds + 1).fill(null);
+
+  dpCost[0] = 0;
+  dpCount[0] = 0;
+
+  for (let d = 1; d <= targetDiamonds; d++) {
+    for (const p of validPkgs) {
+      if (p.diamonds <= d) {
+        const prev = d - p.diamonds;
+        const prevCost = dpCost[prev];
+        const prevCount = dpCount[prev];
+        const currCost = dpCost[d];
+        const currCount = dpCount[d];
+        if (
+          prevCost !== undefined &&
+          prevCost < INF &&
+          prevCount !== undefined &&
+          currCost !== undefined &&
+          currCount !== undefined
+        ) {
+          const newCost = prevCost + p.cost_usd;
+          const newCount = prevCount + 1;
+          const diff = Math.round((newCost - currCost) * 10000);
+          if (diff < 0 || (diff === 0 && newCount < currCount)) {
+            dpCost[d] = newCost;
+            dpCount[d] = newCount;
+            dpPkg[d] = p;
+          }
+        }
+      }
+    }
+  }
+
+  const optimalCost = dpCost[targetDiamonds];
+  if (optimalCost === undefined || optimalCost >= INF) {
+    return fallbackList;
+  }
+
+  // If fallback exists and optimalCost is not cheaper, keep fallback
+  if (fallbackCost > 0 && Math.round((optimalCost - fallbackCost) * 10000) >= 0) {
+    return fallbackList;
+  }
+
+  // Reconstruct components
+  const counts = new Map<string, any>();
+  let curr = targetDiamonds;
+  while (curr > 0) {
+    const p = dpPkg[curr];
+    if (!p) break;
+    const key = p.offer_id;
+    if (!counts.has(key)) {
+      counts.set(key, { ...p, qty: 1 });
+    } else {
+      counts.get(key).qty += 1;
+    }
+    curr -= p.diamonds;
+  }
+
+  return Array.from(counts.values());
+}
+
+export async function getMerchantCustomPrices(merchantId?: string): Promise<Record<string, Record<string, number>>> {
+  const sb = getAdminClient() as any;
+  const { data } = await sb
+    .from("fazer_packages")
+    .select("raw")
+    .eq("offer_id", "config:merchant_custom_prices")
+    .maybeSingle();
+
+  const allMap: Record<string, Record<string, number>> =
+    data?.raw && typeof data.raw === "object" && !Array.isArray(data.raw) ? data.raw : {};
+
+  return allMap;
+}
+
+export async function adminSetMerchantPackagePrice(
+  token: string,
+  body: {
+    merchantId?: string;
+    merchant_id?: string;
+    offerId?: string;
+    offer_id?: string;
+    priceEgp?: number | null;
+    price_egp?: number | null;
+  },
+) {
+  await requireAdmin(token);
+  const merchantId = (body.merchantId || body.merchant_id || "").trim();
+  const offerId = (body.offerId || body.offer_id || "").trim();
+  const priceEgp = body.priceEgp !== undefined ? body.priceEgp : body.price_egp;
+
+  if (!merchantId) throw new Error("معرف التاجر مطلوب");
+  if (!offerId) throw new Error("معرف الباقة مطلوب");
+
+  const sb = getAdminClient() as any;
+  const { data: row } = await sb
+    .from("fazer_packages")
+    .select("*")
+    .eq("offer_id", "config:merchant_custom_prices")
+    .maybeSingle();
+
+  let raw: Record<string, Record<string, number>> = {};
+  if (row?.raw && typeof row.raw === "object" && !Array.isArray(row.raw)) {
+    raw = { ...row.raw };
+  }
+
+  const merchantMap = { ...(raw[merchantId] || {}) };
+  if (typeof priceEgp === "number" && priceEgp > 0) {
+    merchantMap[offerId] = round3(priceEgp);
+  } else {
+    delete merchantMap[offerId];
+  }
+  raw[merchantId] = merchantMap;
+
+  const nowIso = new Date().toISOString();
+  if (row) {
+    const { error } = await sb
+      .from("fazer_packages")
+      .update({ raw, updated_at: nowIso })
+      .eq("offer_id", "config:merchant_custom_prices");
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await sb.from("fazer_packages").insert({
+      offer_id: "config:merchant_custom_prices",
+      name: "Merchant Custom Prices Config",
+      game_id: "config",
+      active: false,
+      diamonds: 0,
+      bonus_diamonds: 0,
+      cost_usd: 0,
+      raw,
+      created_at: nowIso,
+      updated_at: nowIso,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  return { success: true, merchantId, offerId, priceEgp: merchantMap[offerId] ?? null };
+}
+
 export async function submitCustomerOrder(body: any, token?: string | null) {
   const sb = getAdminClient() as any;
   const rawItems: Array<{ offerId?: string; packageId?: string; qty: number }> = Array.isArray(body?.items)
@@ -632,6 +810,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
 
   let userId: string | null = null;
   let merchant: any = null;
+  let authError: string | null = null;
   if (token) {
     try {
       const { user } = await requireUser(token);
@@ -643,13 +822,21 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
         .eq("is_active", true)
         .maybeSingle();
       merchant = m;
-    } catch {
-      // Guest customer order is allowed
+    } catch (err: any) {
+      authError = err?.message || "Invalid auth token";
     }
   }
-  if (asMerchant && !merchant) {
-    return { success: false, error: "حساب التاجر غير موجود أو موقوف. سجّل الدخول بحساب تاجر مفعل." };
+  if (asMerchant) {
+    if (authError || !token) {
+      return { success: false, error: "انتهت صلاحية جلسة تسجيل الدخول للتاجر، يرجى تحديث الصفحة أو تسجيل الدخول مجدداً." };
+    }
+    if (!merchant) {
+      return { success: false, error: "حساب التاجر غير موجود أو موقوف. سجّل الدخول بحساب تاجر مفعل." };
+    }
   }
+
+  const customPricesAll = merchant ? await getMerchantCustomPrices() : {};
+  const merchantCustomPrices = merchant ? (customPricesAll[merchant.id] || {}) : {};
 
   const offerIds = Array.from(new Set(items.map((i) => i.offerId)));
   const { data: pkgs } = await sb.from("fazer_packages").select("*").in("offer_id", offerIds).eq("active", true);
@@ -713,9 +900,13 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const p = byId.get(it.offerId);
     const costUsd = Number(p.cost_usd || 0);
     const merchantBase = calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP);
-    const unitPrice = asMerchant
-      ? calcMerchantUnitPriceEgp(merchantBase, merchantMargin, costUsd, egpRate, DEFAULT_MERCHANT_MARKUP)
-      : calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP);
+    const customPrice = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
+    const unitPrice =
+      typeof customPrice === "number" && customPrice > 0
+        ? round3(customPrice)
+        : (asMerchant
+            ? calcMerchantUnitPriceEgp(merchantBase, merchantMargin, costUsd, egpRate, DEFAULT_MERCHANT_MARKUP)
+            : calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP));
     const catId =
       p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string"
         ? p.raw.fazer_category_id
@@ -800,10 +991,26 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
 
   for (const it of orderItems) {
     if (it.is_composite && Array.isArray(it.components) && it.components.length > 0) {
-      const components = it.components;
+      let components = it.components;
+      try {
+        const { data: gamePkgs } = await sb
+          .from("fazer_packages")
+          .select("offer_id, diamonds, cost_usd, active, raw")
+          .eq("game_id", it.game_id)
+          .eq("active", true);
+        if (gamePkgs && gamePkgs.length > 0 && it.diamonds > 0) {
+          const optimized = findLeastCostComponentCombination(it.diamonds, gamePkgs, it.components);
+          if (optimized && optimized.length > 0) {
+            components = optimized;
+          }
+        }
+      } catch (optErr) {
+        console.error("Dynamic least-cost combination error:", optErr);
+      }
+
       const totalCompCost =
         components.reduce(
-          (sum: number, c: any) => sum + Number(c.cost_usd || 0) * Number(c.qty || 1),
+          (sum: number, c: any) => sum + Number(c.cost_usd || c.costUsd || 0) * Number(c.qty || 1),
           0,
         ) || it.unit_cost_usd || 1;
 
@@ -819,10 +1026,10 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
         for (let cq = 0; cq < cQty; cq++) {
           flattenedComps.push({
             offerId: comp.offer_id,
-            fazerOfferId: comp.fazer_offer_id,
+            fazerOfferId: comp.fazer_offer_id || comp.offer_id,
             fazerCategoryId: comp.fazer_category_id || it.fazer_category_id,
             diamonds: Number(comp.diamonds || 0),
-            costUsd: Number(comp.cost_usd || 0),
+            costUsd: Number(comp.cost_usd || comp.costUsd || 0),
           });
         }
       }
@@ -996,7 +1203,18 @@ export async function getMerchantDashboard(token: string) {
     ).length,
     incomplete_orders: list.filter((o: any) => ["pending", "processing", "incomplete", "failed"].includes(o.status)).length,
   };
-  return { profile, merchant, stats, orders: list, transactions: ledger || [] };
+  const customPricesMap = await getMerchantCustomPrices();
+  const merchantCustomMap = customPricesMap[merchant.id] || {};
+  return {
+    profile,
+    merchant: {
+      ...merchant,
+      custom_prices: merchantCustomMap,
+    },
+    stats,
+    orders: list,
+    transactions: ledger || [],
+  };
 }
 
 export async function adminListMerchants(token: string, opts: { page: number; limit: number; q?: string }) {
@@ -1454,16 +1672,22 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
   const egpRate = Number(settingsRes.data?.egp_rate || DEFAULT_EGP_RATE);
   const marginPercent = Number(merchant.margin_percent || 0);
 
+  const customPricesAll = await getMerchantCustomPrices();
+  const merchantCustomMap = customPricesAll[merchantId] || {};
+
   // Compute exact package pricing preview for this merchant
   const packagesPreview = (packagesRes.data || []).map((p: any) => {
     const costUsd = round3(Number(p.cost_usd || 0));
     const costEgp = calcCostEgp(costUsd, egpRate);
-    const merchantPrice = calcMerchantUnitPriceEgp(
+    const standardMerchantPrice = calcMerchantUnitPriceEgp(
       p.merchant_base_price_egp || costEgp,
       marginPercent,
       costUsd,
       egpRate,
     );
+    const customPrice = merchantCustomMap[p.offer_id];
+    const isCustomPrice = typeof customPrice === "number" && customPrice > 0;
+    const merchantPrice = isCustomPrice ? round3(customPrice) : standardMerchantPrice;
     const retailPrice = calcRetailPriceEgp(costUsd, egpRate);
     const profitPerUnitEgp = Math.max(0, round3(merchantPrice - costEgp));
 
@@ -1476,6 +1700,9 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       regions: p.regions || null,
       costUsd,
       costEgp,
+      isCustomPrice,
+      customPriceEgp: isCustomPrice ? customPrice : null,
+      standardMerchantPriceEgp: standardMerchantPrice,
       merchantPriceEgp: merchantPrice,
       retailPriceEgp: retailPrice,
       profitPerUnitEgp,

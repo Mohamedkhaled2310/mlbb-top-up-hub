@@ -9,6 +9,7 @@ import { toast } from "../hooks/use-toast";
 import { submitOrderApi, validatePlayerApi } from "@/lib/api-client";
 import { CopyButton } from "./CopyButton";
 import { saveRecentAccount } from "../lib/recent-players";
+import { supabase } from "@/integrations/supabase/client";
 import type { CartItem } from "@/types/store";
 
 type CheckoutStep = "form" | "review" | "processing" | "success" | "failed";
@@ -64,6 +65,8 @@ export default function CheckoutModal({
 
   const getItemUnitPrice = (item: CartItem): number => {
     if (isMerchant) {
+      const customP = (merchant as any)?.custom_prices?.[item.package.offerId];
+      if (typeof customP === "number" && customP > 0) return customP;
       const base = item.package.merchantBasePriceEgp ?? item.package.retailPriceEgp;
       return calcMerchantUnitPriceEgp(base, merchantMargin, item.package.costUsd, settings.egp_rate);
     }
@@ -128,6 +131,28 @@ export default function CheckoutModal({
     setSummaryRegion(currentRegion);
     setStep("processing");
     try {
+      let effectiveToken = accessToken;
+      if (isMerchant) {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData?.session?.access_token) {
+            effectiveToken = sessionData.session.access_token;
+            if (effectiveToken !== accessToken) {
+              setAuth(effectiveToken, profile, merchant);
+            }
+          }
+          if (sessionData?.session?.expires_at && sessionData.session.expires_at * 1000 < Date.now() + 60000) {
+            const { data: refreshed } = await supabase.auth.refreshSession();
+            if (refreshed?.session?.access_token) {
+              effectiveToken = refreshed.session.access_token;
+              setAuth(effectiveToken, profile, merchant);
+            }
+          }
+        } catch {
+          // ignore session refresh error
+        }
+      }
+
       const body = {
         playerId: player.id.trim(),
         zoneId: (player.zoneId || "").trim(),
@@ -136,13 +161,13 @@ export default function CheckoutModal({
         items: cart.map((c) => ({ offerId: c.package.offerId, qty: c.qty })),
         asMerchant: isMerchant,
       };
-      const res = await submitOrderApi(body, accessToken);
+      const res = await submitOrderApi(body, effectiveToken);
       setResult(res);
       if (typeof res?.total_egp === "number" && res.total_egp > 0) {
         setPaidTotal(res.total_egp);
       }
-      if (typeof res?.balance_egp === "number" && accessToken && merchant) {
-        setAuth(accessToken, profile, { ...merchant, balance_egp: res.balance_egp });
+      if (typeof res?.balance_egp === "number" && effectiveToken && merchant) {
+        setAuth(effectiveToken, profile, { ...merchant, balance_egp: res.balance_egp });
       }
       if (res?.success) {
         setStep("success");

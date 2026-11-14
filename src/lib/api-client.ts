@@ -214,6 +214,18 @@ export async function adminSetMarginApi(
   return await res.json();
 }
 
+export async function adminSetMerchantPackagePriceApi(
+  token: string,
+  body: { merchant_id: string; offer_id: string; price_egp: number | null },
+): Promise<any> {
+  const res = await fetch("/api/admin/merchants/package-price", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
 export async function adminUpdateEgpRateApi(
   token: string,
   rateOrParams: number | { egp_rate: number; mode?: "manual" | "binance_auto" },
