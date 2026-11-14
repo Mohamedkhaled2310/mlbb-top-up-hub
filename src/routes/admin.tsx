@@ -2023,21 +2023,23 @@ function AdminPage() {
 
       {/* Merchant Complete Profile Dialog */}
       <Dialog open={!!profileMerchantId} onOpenChange={(o) => !o && setProfileMerchantId(null)}>
-        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto bg-[#0a0f20] border border-purple-500/40 text-slate-100 rounded-2xl p-4 sm:p-6">
+        <DialogContent className="w-[96vw] max-w-4xl max-h-[92vh] overflow-y-auto bg-[#0a0f20] border border-purple-500/40 text-slate-100 rounded-2xl p-3.5 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center justify-between gap-2 flex-wrap">
-              <span className="flex items-center gap-2">
-                <Eye className="w-5 h-5 text-purple-400" /> بروفايل التاجر الشامل والأسعار
+              <span className="flex items-center gap-2 text-sm sm:text-base font-bold">
+                <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" /> بروفايل التاجر الشامل والأسعار
               </span>
+
+              {/* Desktop Header Actions (hidden on mobile) */}
               {profileData?.merchant && (
-                <div className="flex items-center gap-1.5 text-xs font-normal">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs font-normal">
                   <Button
                     size="sm"
                     variant="outline"
                     className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 h-7 text-xs"
                     onClick={() => openAdjustBalance(profileData.merchant)}
                   >
-                    <Sliders className="w-3 h-3" /> تعديل الرصيد
+                    <Sliders className="w-3 h-3 ml-1" /> تعديل الرصيد
                   </Button>
                   <Button
                     size="sm"
@@ -2045,7 +2047,7 @@ function AdminPage() {
                     className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 h-7 text-xs font-semibold"
                     onClick={() => setCredit({ id: profileData.merchant.id, amount: "", note: "" })}
                   >
-                    <DollarSign className="w-3 h-3" /> شحن +
+                    <DollarSign className="w-3 h-3 ml-1" /> شحن +
                   </Button>
                   <Button
                     size="sm"
@@ -2053,7 +2055,7 @@ function AdminPage() {
                     className="border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700 h-7 text-xs"
                     onClick={() => setMarginEdit({ id: profileData.merchant.id, value: String(profileData.merchant.margin_percent || 0) })}
                   >
-                    تعديل الهامش
+                    <Pencil className="w-3 h-3 ml-1" /> تعديل الهامش
                   </Button>
                   <Button
                     size="sm"
@@ -2061,11 +2063,49 @@ function AdminPage() {
                     className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 h-7 text-xs"
                     onClick={() => openDeleteMerchant(profileData.merchant)}
                   >
-                    <Trash2 className="w-3 h-3" /> حذف التاجر
+                    <Trash2 className="w-3 h-3 ml-1" /> حذف التاجر
                   </Button>
                 </div>
               )}
             </DialogTitle>
+
+            {/* Mobile Header Actions (visible on mobile only) */}
+            {profileData?.merchant && (
+              <div className="grid grid-cols-2 gap-1.5 sm:hidden pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 h-8 text-xs font-semibold flex items-center justify-center gap-1"
+                  onClick={() => setCredit({ id: profileData.merchant.id, amount: "", note: "" })}
+                >
+                  <DollarSign className="w-3.5 h-3.5" /> شحن رصيد +
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-cyan-600/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 h-8 text-xs flex items-center justify-center gap-1"
+                  onClick={() => openAdjustBalance(profileData.merchant)}
+                >
+                  <Sliders className="w-3.5 h-3.5" /> تعديل الرصيد
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 text-xs flex items-center justify-center gap-1"
+                  onClick={() => setMarginEdit({ id: profileData.merchant.id, value: String(profileData.merchant.margin_percent || 0) })}
+                >
+                  <Pencil className="w-3.5 h-3.5" /> تعديل الهامش
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-rose-700/60 bg-rose-950/30 text-rose-300 hover:bg-rose-900/50 h-8 text-xs flex items-center justify-center gap-1"
+                  onClick={() => openDeleteMerchant(profileData.merchant)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> حذف التاجر
+                </Button>
+              </div>
+            )}
           </DialogHeader>
 
           {profileLoading ? (
@@ -2074,11 +2114,11 @@ function AdminPage() {
               <div className="text-sm text-slate-300">جارٍ جلب وتجهيز بيانات وبروفايل التاجر...</div>
             </div>
           ) : profileData?.merchant ? (
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-1 sm:pt-2">
               {/* Profile Header Info */}
-              <div className="rounded-2xl border border-slate-800 bg-[#0e1428] p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <div className="rounded-2xl border border-slate-800 bg-[#0e1428] p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-1.5 min-w-0">
+                  <div className="text-base sm:text-lg font-bold text-white flex items-center gap-2 flex-wrap">
                     <span>{profileData.merchant.profile?.full_name || "تاجر بدون اسم"}</span>
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -2090,85 +2130,85 @@ function AdminPage() {
                       {profileData.merchant.is_active ? "حساب مفعل" : "حساب موقوف"}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3 font-mono">
+                  <div className="text-xs text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono">
                     {profileData.merchant.email && (
-                      <span className="text-slate-300">البريد: {profileData.merchant.email}</span>
+                      <span className="text-slate-300 break-all">البريد: {profileData.merchant.email}</span>
                     )}
                     {profileData.merchant.profile?.phone && (
                       <span className="text-slate-300">الهاتف: {profileData.merchant.profile.phone}</span>
                     )}
-                    <span className="text-slate-500">ID: {profileData.merchant.id}</span>
+                    <span className="text-slate-500 truncate max-w-full">ID: {profileData.merchant.id}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs shrink-0 self-start md:self-auto">
                   <span className="text-slate-400">الجنسية:</span>
-                  <span className="font-bold text-purple-300 uppercase px-2 py-1 rounded bg-purple-950/60 border border-purple-500/30">
+                  <span className="font-bold text-purple-300 uppercase px-2.5 py-1 rounded bg-purple-950/60 border border-purple-500/30">
                     {profileData.merchant.profile?.region || "EG"}
                   </span>
                 </div>
               </div>
 
               {/* Quick Metrics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3">
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
                     <span>الرصيد المتاح</span>
                     <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
+                  <div className="text-base sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
                     ${profileData.merchant.balance_usd} USD
                   </div>
-                  <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono mt-0.5">
                     {Number(profileData.merchant.balance_egp || 0).toLocaleString("en-US")} ج.م
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-3">
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
                     <span>هامش ربح الأدمن</span>
                     <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold text-purple-300 font-mono mt-1">
+                  <div className="text-base sm:text-xl font-extrabold text-purple-300 font-mono mt-1">
                     +{profileData.merchant.margin_percent}%
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    فوق سعر التكلفة بالجملة
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                    فوق سعر التكلفة
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3">
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
                     <span>إجمالي الطلبات</span>
                     <Package className="w-3.5 h-3.5 text-cyan-400" />
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold text-white font-mono mt-1">
+                  <div className="text-base sm:text-xl font-extrabold text-white font-mono mt-1">
                     {profileData.orders?.length ?? 0}
                   </div>
-                  <div className="text-[11px] text-emerald-400 font-mono mt-0.5">
+                  <div className="text-[10px] sm:text-[11px] text-emerald-400 font-mono mt-0.5">
                     {profileData.orders?.filter((o: any) => o.status === "success").length ?? 0} ناجح
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3">
-                  <div className="text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>سعر الدولار المعتمد</span>
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>سعر الدولار</span>
                     <DollarSign className="w-3.5 h-3.5 text-amber-400" />
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
+                  <div className="text-base sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
                     {profileData.egpRate} ج.م / $
                   </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
                     سعر المتجر الحالي
                   </div>
                 </div>
               </div>
 
-              {/* Tabs Navigation */}
-              <div className="flex items-center gap-1 border-b border-slate-800 pb-2">
+              {/* Tabs Navigation (Scrollable horizontally on mobile) */}
+              <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2 overflow-x-auto scrollbar-none no-scrollbar">
                 <button
                   type="button"
                   onClick={() => setProfileTab("packages")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 whitespace-nowrap ${
                     profileTab === "packages"
                       ? "bg-purple-600 text-white shadow-sm"
                       : "text-slate-400 hover:text-white hover:bg-slate-900"
@@ -2179,7 +2219,7 @@ function AdminPage() {
                 <button
                   type="button"
                   onClick={() => setProfileTab("ledger")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 whitespace-nowrap ${
                     profileTab === "ledger"
                       ? "bg-purple-600 text-white shadow-sm"
                       : "text-slate-400 hover:text-white hover:bg-slate-900"
@@ -2190,7 +2230,7 @@ function AdminPage() {
                 <button
                   type="button"
                   onClick={() => setProfileTab("orders")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shrink-0 whitespace-nowrap ${
                     profileTab === "orders"
                       ? "bg-purple-600 text-white shadow-sm"
                       : "text-slate-400 hover:text-white hover:bg-slate-900"
@@ -2204,7 +2244,7 @@ function AdminPage() {
               {profileTab === "packages" && (
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar">
                       {[
                         { id: "all", label: "كافة الألعاب" },
                         { id: "mlbb", label: "Mobile Legends" },
@@ -2227,7 +2267,7 @@ function AdminPage() {
                       ))}
                     </div>
                     <div className="relative w-full sm:w-56">
-                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                      <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
                       <Input
                         value={profilePkgSearch}
                         onChange={(e) => setProfilePkgSearch(e.target.value)}
@@ -2237,7 +2277,8 @@ function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                  {/* 1.A: Desktop Table for Packages */}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 max-h-80">
                     <table className="w-full text-xs min-w-[700px]">
                       <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
                         <tr>
@@ -2299,133 +2340,304 @@ function AdminPage() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* 1.B: Mobile Responsive Cards for Packages */}
+                  <div className="block md:hidden space-y-2.5 max-h-96 overflow-y-auto pr-0.5">
+                    {profileData.packagesPreview
+                      ?.filter((p: any) => {
+                        const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                        const q = profilePkgSearch.trim().toLowerCase();
+                        const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
+                        return gameMatch && textMatch;
+                      })
+                      .map((p: any) => {
+                        const merchantUsd = (p.merchantPriceEgp / (profileData.egpRate || 50)).toFixed(2);
+                        return (
+                          <div
+                            key={p.id}
+                            className="rounded-xl border border-slate-800 bg-[#0d1326] p-3 space-y-2 shadow-sm"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="uppercase font-mono font-bold text-[10px] text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                                    {p.gameId}
+                                  </span>
+                                  <span className="font-bold text-white text-xs">{p.name}</span>
+                                </div>
+                                {p.diamonds > 0 && (
+                                  <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                                    {p.diamonds} ماسة / شدة
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0">
+                                +{p.profitPerUnitEgp} ج.م ربح
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1.5 bg-[#080c1b] border border-slate-800/80 rounded-lg p-2 text-center text-xs">
+                              <div>
+                                <div className="text-[10px] text-slate-400">تكلفة الجملة</div>
+                                <div className="font-mono text-slate-300 text-xs">${p.costUsd}</div>
+                                <div className="font-mono text-[9px] text-slate-500">{p.costEgp} ج.م</div>
+                              </div>
+                              <div className="bg-purple-950/30 border border-purple-500/20 rounded-md py-0.5 px-1">
+                                <div className="text-[10px] text-purple-200 font-semibold">سعر التاجر</div>
+                                <div className="font-mono font-extrabold text-purple-300 text-sm">
+                                  {p.merchantPriceEgp} ج.م
+                                </div>
+                                <div className="font-mono text-[9px] text-purple-400">≈ ${merchantUsd}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400">سعر الجمهور</div>
+                                <div className="font-mono text-slate-300 text-xs">{p.retailPriceEgp} ج.م</div>
+                                <div className="text-[9px] text-slate-500">للمستهلك</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
 
               {/* Tab 2: Wallet Transactions Ledger */}
               {profileTab === "ledger" && (
-                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
-                  <table className="w-full text-xs min-w-[650px]">
-                    <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
-                      <tr>
-                        <th className="p-2.5 text-right">نوع الحركة</th>
-                        <th className="p-2.5">المبلغ</th>
-                        <th className="p-2.5">الرصيد بعد الحركة</th>
-                        <th className="p-2.5 text-right">الملاحظة / المرجع</th>
-                        <th className="p-2.5 text-left">التاريخ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80">
-                      {profileData.transactions?.map((t: any) => {
-                        const amt = Number(t.amount_egp || 0);
-                        return (
-                          <tr key={t.id} className="hover:bg-slate-900/40">
-                            <td className="p-2.5 text-right">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  t.entry_type === "admin_credit"
-                                    ? "bg-emerald-500/20 text-emerald-300"
+                <div className="space-y-3">
+                  {/* 2.A: Desktop Table for Ledger */}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                    <table className="w-full text-xs min-w-[650px]">
+                      <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
+                        <tr>
+                          <th className="p-2.5 text-right">نوع الحركة</th>
+                          <th className="p-2.5">المبلغ</th>
+                          <th className="p-2.5">الرصيد بعد الحركة</th>
+                          <th className="p-2.5 text-right">الملاحظة / المرجع</th>
+                          <th className="p-2.5 text-left">التاريخ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {profileData.transactions?.map((t: any) => {
+                          const amt = Number(t.amount_egp || 0);
+                          return (
+                            <tr key={t.id} className="hover:bg-slate-900/40">
+                              <td className="p-2.5 text-right">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    t.entry_type === "admin_credit"
+                                      ? "bg-emerald-500/20 text-emerald-300"
+                                      : t.entry_type === "order_debit"
+                                      ? "bg-rose-500/20 text-rose-300"
+                                      : t.entry_type === "refund"
+                                      ? "bg-cyan-500/20 text-cyan-300"
+                                      : "bg-purple-500/20 text-purple-300"
+                                  }`}
+                                >
+                                  {t.entry_type === "admin_credit"
+                                    ? "إيداع رصيد"
                                     : t.entry_type === "order_debit"
-                                    ? "bg-rose-500/20 text-rose-300"
+                                    ? "خصم طلب"
                                     : t.entry_type === "refund"
-                                    ? "bg-cyan-500/20 text-cyan-300"
-                                    : "bg-purple-500/20 text-purple-300"
-                                }`}
-                              >
-                                {t.entry_type === "admin_credit"
-                                  ? "إيداع رصيد"
-                                  : t.entry_type === "order_debit"
-                                  ? "خصم طلب"
-                                  : t.entry_type === "refund"
-                                  ? "استرداد"
-                                  : "تسوية رصيد"}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-center font-mono font-bold">
-                              <span className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
-                                {amt >= 0 ? `+${amt}` : amt} ج.م
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-center font-mono text-slate-300">
-                              {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
-                            </td>
-                            <td className="p-2.5 text-right text-slate-300 font-mono text-[11px]">
-                              {t.note || t.order_id || "—"}
-                            </td>
-                            <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
-                              {new Date(t.created_at).toLocaleString("ar-EG")}
+                                    ? "استرداد"
+                                    : "تسوية رصيد"}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-center font-mono font-bold">
+                                <span className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
+                                  {amt >= 0 ? `+${amt}` : amt} ج.م
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-center font-mono text-slate-300">
+                                {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
+                              </td>
+                              <td className="p-2.5 text-right text-slate-300 font-mono text-[11px]">
+                                {t.note || t.order_id || "—"}
+                              </td>
+                              <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
+                                {new Date(t.created_at).toLocaleString("ar-EG")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {(!profileData.transactions || profileData.transactions.length === 0) && (
+                          <tr>
+                            <td colSpan={5} className="p-6 text-center text-slate-400">
+                              لا توجد حركات محفظة مسجلة لهذا التاجر بعد.
                             </td>
                           </tr>
-                        );
-                      })}
-                      {(!profileData.transactions || profileData.transactions.length === 0) && (
-                        <tr>
-                          <td colSpan={5} className="p-6 text-center text-slate-400">
-                            لا توجد حركات محفظة مسجلة لهذا التاجر بعد.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 2.B: Mobile Responsive Cards for Ledger */}
+                  <div className="block md:hidden space-y-2 max-h-96 overflow-y-auto pr-0.5">
+                    {profileData.transactions?.map((t: any) => {
+                      const amt = Number(t.amount_egp || 0);
+                      const isCredit = amt >= 0;
+                      return (
+                        <div
+                          key={t.id}
+                          className="rounded-xl border border-slate-800 bg-[#0d1326] p-3 space-y-1.5 shadow-sm"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                t.entry_type === "admin_credit"
+                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                  : t.entry_type === "order_debit"
+                                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                  : t.entry_type === "refund"
+                                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                                  : "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                              }`}
+                            >
+                              {t.entry_type === "admin_credit"
+                                ? "إيداع رصيد"
+                                : t.entry_type === "order_debit"
+                                ? "خصم طلب"
+                                : t.entry_type === "refund"
+                                ? "استرداد"
+                                : "تسوية رصيد"}
+                            </span>
+
+                            <span className={`font-mono font-bold text-sm ${isCredit ? "text-emerald-300" : "text-rose-400"}`}>
+                              {isCredit ? `+${amt}` : amt} ج.م
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                            <span className="font-mono text-slate-300 truncate max-w-[65%]">
+                              {t.note || t.order_id || "—"}
+                            </span>
+                            <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                              {new Date(t.created_at).toLocaleDateString("ar-EG")}
+                            </span>
+                          </div>
+
+                          <div className="text-[10px] text-slate-500 font-mono border-t border-slate-800/80 pt-1 flex justify-between">
+                            <span>الرصيد بعد الحركة:</span>
+                            <span className="text-slate-300 font-bold">{Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(!profileData.transactions || profileData.transactions.length === 0) && (
+                      <div className="rounded-xl border border-dashed border-slate-800 p-6 text-center text-xs text-slate-400">
+                        لا توجد حركات محفظة مسجلة لهذا التاجر بعد.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Tab 3: Recent Orders */}
               {profileTab === "orders" && (
-                <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-80">
-                  <table className="w-full text-xs min-w-[650px]">
-                    <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
-                      <tr>
-                        <th className="p-2.5 text-right">المرجع</th>
-                        <th className="p-2.5 text-right">اللعبة / اللاعب</th>
-                        <th className="p-2.5">الإجمالي</th>
-                        <th className="p-2.5">الحالة</th>
-                        <th className="p-2.5 text-left">التاريخ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/80">
-                      {profileData.orders?.map((o: any) => (
-                        <tr key={o.id} className="hover:bg-slate-900/40">
-                          <td className="p-2.5 text-right font-mono text-cyan-300 font-bold">
-                            {o.order_ref}
-                          </td>
-                          <td className="p-2.5 text-right">
-                            <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
-                          </td>
-                          <td className="p-2.5 text-center font-mono font-bold text-white">
-                            {o.total_egp} ج.م
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                o.status === "success"
-                                  ? "bg-emerald-500/20 text-emerald-300"
-                                  : o.status === "failed"
-                                  ? "bg-rose-500/20 text-rose-300"
-                                  : "bg-amber-500/20 text-amber-300"
-                              }`}
-                            >
-                              {o.status === "success"
-                                ? "مكتمل"
-                                : o.status === "failed"
-                                ? "فشل"
-                                : "قيد التنفيذ"}
-                            </span>
-                          </td>
-                          <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
-                            {new Date(o.created_at).toLocaleString("ar-EG")}
-                          </td>
-                        </tr>
-                      ))}
-                      {(!profileData.orders || profileData.orders.length === 0) && (
+                <div className="space-y-3">
+                  {/* 3.A: Desktop Table for Orders */}
+                  <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 max-h-80">
+                    <table className="w-full text-xs min-w-[650px]">
+                      <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-slate-400">
-                            لا توجد طلبات سابقة لهذا التاجر.
-                          </td>
+                          <th className="p-2.5 text-right">المرجع</th>
+                          <th className="p-2.5 text-right">اللعبة / اللاعب</th>
+                          <th className="p-2.5">الإجمالي</th>
+                          <th className="p-2.5">الحالة</th>
+                          <th className="p-2.5 text-left">التاريخ</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/80">
+                        {profileData.orders?.map((o: any) => (
+                          <tr key={o.id} className="hover:bg-slate-900/40">
+                            <td className="p-2.5 text-right font-mono text-cyan-300 font-bold">
+                              {o.order_ref}
+                            </td>
+                            <td className="p-2.5 text-right">
+                              <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-bold text-white">
+                              {o.total_egp} ج.م
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  o.status === "success"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : o.status === "failed"
+                                    ? "bg-rose-500/20 text-rose-300"
+                                    : "bg-amber-500/20 text-amber-300"
+                                }`}
+                              >
+                                {o.status === "success"
+                                  ? "مكتمل"
+                                  : o.status === "failed"
+                                  ? "فشل"
+                                  : "قيد التنفيذ"}
+                              </span>
+                            </td>
+                            <td className="p-2.5 text-left text-slate-400 font-mono text-[10px]">
+                              {new Date(o.created_at).toLocaleString("ar-EG")}
+                            </td>
+                          </tr>
+                        ))}
+                        {(!profileData.orders || profileData.orders.length === 0) && (
+                          <tr>
+                            <td colSpan={5} className="p-6 text-center text-slate-400">
+                              لا توجد طلبات سابقة لهذا التاجر.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 3.B: Mobile Responsive Cards for Orders */}
+                  <div className="block md:hidden space-y-2 max-h-96 overflow-y-auto pr-0.5">
+                    {profileData.orders?.map((o: any) => (
+                      <div
+                        key={o.id}
+                        className="rounded-xl border border-slate-800 bg-[#0d1326] p-3 space-y-1.5 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-mono text-cyan-300 font-bold text-xs truncate">
+                            {o.order_ref}
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              o.status === "success"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : o.status === "failed"
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            }`}
+                          >
+                            {o.status === "success"
+                              ? "مكتمل"
+                              : o.status === "failed"
+                              ? "فشل"
+                              : "قيد التنفيذ"}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-300">
+                          <span className="uppercase font-bold text-purple-300">{o.game_id}</span> • {o.player_id}
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                          <span className="font-mono font-bold text-white">{o.total_egp} ج.م</span>
+                          <span className="font-mono text-[10px] text-slate-500">
+                            {new Date(o.created_at).toLocaleDateString("ar-EG")}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {(!profileData.orders || profileData.orders.length === 0) && (
+                      <div className="rounded-xl border border-dashed border-slate-800 p-6 text-center text-xs text-slate-400">
+                        لا توجد طلبات سابقة لهذا التاجر.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
