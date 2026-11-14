@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Activity,
+  AlertCircle,
   AlertTriangle,
   ArrowUpDown,
   Check,
+  CheckCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
   Copy,
   DollarSign,
+  ExternalLink,
   Eye,
+  FileText,
+  Filter,
   History,
+  Layers,
   Lock,
   LogOut,
   Package,
@@ -74,6 +84,39 @@ function generateTempPassword(): string {
 const DARK_INPUT =
   "bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 focus-visible:border-amber-400";
 
+function formatOrderDate(dateStr: string): string {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString("ar-EG", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function getOrderGameInfo(gameId: string): { name: string; color: string } {
+  const g = (gameId || "").toLowerCase();
+  if (g.includes("mlbb") || g.includes("mobile_legends")) {
+    return { name: "Mobile Legends", color: "text-blue-400 bg-blue-500/10 border-blue-500/30" };
+  }
+  if (g.includes("pubg")) {
+    return { name: "PUBG Mobile", color: "text-amber-400 bg-amber-500/10 border-amber-500/30" };
+  }
+  if (g.includes("free_fire") || g.includes("freefire")) {
+    return { name: "Free Fire", color: "text-orange-400 bg-orange-500/10 border-orange-500/30" };
+  }
+  if (g.includes("hok") || g.includes("honor")) {
+    return { name: "Honor of Kings", color: "text-purple-400 bg-purple-500/10 border-purple-500/30" };
+  }
+  return { name: (gameId || "GAME").toUpperCase(), color: "text-slate-300 bg-slate-800 border-slate-700" };
+}
+
 function AdminPage() {
   const store = useStore();
   const [email, setEmail] = useState("");
@@ -93,6 +136,12 @@ function AdminPage() {
   const [mTotalPages, setMTotalPages] = useState(1);
   const [mQuery, setMQuery] = useState("");
   const [orders, setOrders] = useState<any[]>([]);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState<string>("all");
+  const [orderGameFilter, setOrderGameFilter] = useState<string>("all");
+  const [orderTypeFilter, setOrderTypeFilter] = useState<string>("all");
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
+  const [refreshingOrders, setRefreshingOrders] = useState(false);
   const [pkgGameFilter, setPkgGameFilter] = useState<string>("all");
   const [pkgSearch, setPkgSearch] = useState<string>("");
   const [editingPkg, setEditingPkg] = useState<any | null>(null);
@@ -186,12 +235,80 @@ function AdminPage() {
 
   const loadOrders = useCallback(async (token: string) => {
     try {
-      const d = await adminListOrdersApi(token, 25);
+      setRefreshingOrders(true);
+      const d = await adminListOrdersApi(token, 100);
       if (d?.orders) setOrders(d.orders);
     } catch {
       // Ignore order list error
+    } finally {
+      setRefreshingOrders(false);
     }
   }, []);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o: any) => {
+      if (orderStatusFilter !== "all" && o.status !== orderStatusFilter) return false;
+      if (orderGameFilter !== "all" && o.game_id !== orderGameFilter) return false;
+      if (orderTypeFilter === "merchant" && !o.is_merchant && !o.merchant_id) return false;
+      if (orderTypeFilter === "customer" && (o.is_merchant || o.merchant_id)) return false;
+
+      if (!orderSearch.trim()) return true;
+      const q = orderSearch.trim().toLowerCase();
+      const ref = (o.order_ref || "").toLowerCase();
+      const pid = (o.player_id || "").toLowerCase();
+      const zid = (o.zone_id || "").toLowerCase();
+      const game = (o.game_id || "").toLowerCase();
+      const mEmail = (o.merchant_email || "").toLowerCase();
+      const cEmail = (o.customer_email || "").toLowerCase();
+      const mName = (o.merchant_name || "").toLowerCase();
+      const cName = (o.customer_name || "").toLowerCase();
+      const txId = (o.fazer_transaction_id || "").toLowerCase();
+      const itemsStr = JSON.stringify(o.items || "").toLowerCase();
+
+      return (
+        ref.includes(q) ||
+        pid.includes(q) ||
+        zid.includes(q) ||
+        game.includes(q) ||
+        mEmail.includes(q) ||
+        cEmail.includes(q) ||
+        mName.includes(q) ||
+        cName.includes(q) ||
+        txId.includes(q) ||
+        itemsStr.includes(q)
+      );
+    });
+  }, [orders, orderSearch, orderStatusFilter, orderGameFilter, orderTypeFilter]);
+
+  const orderStats = useMemo(() => {
+    const total = orders.length;
+    const success = orders.filter((o: any) => o.status === "success").length;
+    const failed = orders.filter((o: any) => o.status === "failed").length;
+    const processing = orders.filter(
+      (o: any) => o.status === "processing" || o.status === "pending",
+    ).length;
+    const totalVolumeEgp = orders
+      .filter((o: any) => o.status === "success")
+      .reduce((sum: number, o: any) => sum + Number(o.total_egp || 0), 0);
+    const totalCostUsd = orders
+      .filter((o: any) => o.status === "success")
+      .reduce((sum: number, o: any) => sum + Number(o.total_cost_usd || 0), 0);
+    const totalProfitEgp = orders
+      .filter((o: any) => o.status === "success")
+      .reduce((sum: number, o: any) => sum + Number(o.profit_egp || 0), 0);
+    const successRate = total > 0 ? Math.round((success / total) * 100) : 100;
+
+    return {
+      total,
+      success,
+      failed,
+      processing,
+      totalVolumeEgp: round3(totalVolumeEgp),
+      totalCostUsd: round3(totalCostUsd),
+      totalProfitEgp: round3(totalProfitEgp),
+      successRate,
+    };
+  }, [orders]);
 
   // Initial load & restore session
   useEffect(() => {
@@ -1551,60 +1668,538 @@ function AdminPage() {
               </div>
             </ScrollReveal>
 
-            {/* Recent orders monitor */}
+            {/* Comprehensive Operations & Transactions Log */}
             <ScrollReveal delayMs={70}>
-              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 space-y-3">
-              <h2 className="font-bold text-sm sm:text-base">أحدث الطلبات في النظام ({orders.length})</h2>
-              <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-72">
-                <table className="w-full text-xs min-w-[680px]">
-                  <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
-                    <tr>
-                      <th className="p-2.5 text-right">المرجع</th>
-                      <th className="p-2.5 text-right">اللعبة / اللاعب</th>
-                      <th className="p-2.5">النوع</th>
-                      <th className="p-2.5">الإجمالي</th>
-                      <th className="p-2.5">الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/80">
-                    {orders.map((o: any) => (
-                      <tr key={o.id}>
-                        <td className="p-2.5 text-right font-mono text-cyan-300">
-                          <div className="flex items-center gap-1.5">
+              <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-3.5 sm:p-5 space-y-4">
+                {/* 1. Header & Live Refresh */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-extrabold flex items-center gap-2 text-base sm:text-lg text-white">
+                      <History className="w-5 h-5 text-cyan-400" />
+                      <span>سجل العمليات والطلبات (Operations Log)</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      متابعة فورية لكافة عمليات الشحن، الربح المحقق، أكواد Fazer، وحسابات اللاعبين والتجار
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <span className="text-xs bg-slate-800/80 border border-slate-700/80 px-2.5 py-1 rounded-lg text-slate-300">
+                      معروض <strong className="text-cyan-300 font-mono">{filteredOrders.length}</strong> من{" "}
+                      <strong className="text-white font-mono">{orders.length}</strong>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 px-2.5 text-xs gap-1.5"
+                      disabled={refreshingOrders || !token}
+                      onClick={() => token && loadOrders(token)}
+                      title="تحديث العمليات"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${refreshingOrders ? "animate-spin text-cyan-400" : ""}`} />
+                      <span className="hidden sm:inline">تحديث</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 2. KPI Summary Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                  {/* Total Orders */}
+                  <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span>إجمالي العمليات</span>
+                      <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-lg sm:text-xl font-extrabold font-mono text-white">
+                        {orderStats.total}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <span>نسبة النجاح:</span>
+                        <span
+                          className={`font-bold font-mono ${
+                            orderStats.successRate >= 90
+                              ? "text-emerald-400"
+                              : orderStats.successRate >= 70
+                                ? "text-amber-400"
+                                : "text-rose-400"
+                          }`}
+                        >
+                          {orderStats.successRate}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Total Sales Volume */}
+                  <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span>إجمالي المبيعات</span>
+                      <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-lg sm:text-xl font-extrabold font-mono text-emerald-400">
+                        {orderStats.totalVolumeEgp.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
+                        <span className="text-xs font-normal text-slate-300">ج.م</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        <span className="text-emerald-400 font-bold">{orderStats.success}</span> ناجح •{" "}
+                        <span className="text-rose-400 font-bold">{orderStats.failed}</span> فاشل
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Wholesale Cost */}
+                  <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span>تكلفة الجملة (Fazer)</span>
+                      <Wallet className="w-3.5 h-3.5 text-purple-400" />
+                    </div>
+                    <div className="mt-1.5">
+                      <div className="text-lg sm:text-xl font-extrabold font-mono text-purple-300">
+                        ${orderStats.totalCostUsd.toFixed(3)}{" "}
+                        <span className="text-xs font-normal text-slate-300">USD</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        ≈ {(orderStats.totalCostUsd * (egpRate || 55)).toFixed(2)} ج.م تكلفة
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Realized Profit */}
+                  <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
+                    <div className="flex items-center justify-between text-slate-400 text-xs">
+                      <span>صافي الأرباح المحققة</span>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
+                    <div className="mt-1.5">
+                      <div
+                        className={`text-lg sm:text-xl font-extrabold font-mono ${
+                          orderStats.totalProfitEgp >= 0 ? "text-amber-400" : "text-rose-400"
+                        }`}
+                      >
+                        {orderStats.totalProfitEgp >= 0 ? "+" : ""}
+                        {orderStats.totalProfitEgp.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
+                        <span className="text-xs font-normal text-slate-300">ج.م</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {orderStats.processing > 0 ? (
+                          <span className="text-amber-300">{orderStats.processing} قيد التنفيذ</span>
+                        ) : (
+                          <span className="text-slate-400">من الطلبات الناجحة فقط</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Search & Multi-filter Controls */}
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        placeholder="بحث برقم الطلب (ORD)، ID اللاعب، السيرفر، الإيميل، اللعبة، أو كود Fazer..."
+                        value={orderSearch}
+                        onChange={(e) => setOrderSearch(e.target.value)}
+                        className={`pr-9 pl-8 h-9 text-xs sm:text-sm ${DARK_INPUT}`}
+                      />
+                      {orderSearch && (
+                        <button
+                          onClick={() => setOrderSearch("")}
+                          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {/* Status filter */}
+                    <div className="flex items-center gap-1 bg-[#0e1428] p-1 rounded-xl border border-slate-800">
+                      {[
+                        { id: "all", label: "كافة الحالات" },
+                        { id: "success", label: "ناجح" },
+                        { id: "failed", label: "فشل" },
+                        { id: "processing", label: "قيد التنفيذ" },
+                      ].map((st) => (
+                        <button
+                          key={st.id}
+                          onClick={() => setOrderStatusFilter(st.id)}
+                          className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] sm:text-xs ${
+                            orderStatusFilter === st.id
+                              ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Game filter */}
+                    <div className="flex items-center gap-1 bg-[#0e1428] p-1 rounded-xl border border-slate-800 overflow-x-auto scrollbar-none">
+                      {[
+                        { id: "all", label: "كافة الألعاب" },
+                        { id: "mlbb", label: "Mobile Legends" },
+                        { id: "pubg", label: "PUBG" },
+                        { id: "freefire", label: "Free Fire" },
+                        { id: "hok", label: "Honor of Kings" },
+                      ].map((gf) => (
+                        <button
+                          key={gf.id}
+                          onClick={() => setOrderGameFilter(gf.id)}
+                          className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] sm:text-xs whitespace-nowrap ${
+                            orderGameFilter === gf.id
+                              ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {gf.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Type filter */}
+                    <div className="flex items-center gap-1 bg-[#0e1428] p-1 rounded-xl border border-slate-800">
+                      {[
+                        { id: "all", label: "الكل" },
+                        { id: "merchant", label: "تجار B2B" },
+                        { id: "customer", label: "عملاء قطاعي" },
+                      ].map((tf) => (
+                        <button
+                          key={tf.id}
+                          onClick={() => setOrderTypeFilter(tf.id)}
+                          className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] sm:text-xs ${
+                            orderTypeFilter === tf.id
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "text-slate-400 hover:text-slate-200"
+                          }`}
+                        >
+                          {tf.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Desktop Table View (hidden on small screens) */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 max-h-[460px] overflow-y-auto">
+                  <table className="w-full text-xs min-w-[840px]">
+                    <thead className="bg-[#0e1428] text-slate-300 sticky top-0 z-10 border-b border-slate-800">
+                      <tr>
+                        <th className="p-3 text-right">المرجع / التاريخ</th>
+                        <th className="p-3 text-right">نوع الحساب / العميل</th>
+                        <th className="p-3 text-right">اللعبة / اللاعب</th>
+                        <th className="p-3 text-right">الباقة المشحونة</th>
+                        <th className="p-3 text-center">الماليات (بيع / تكلفة / ربح)</th>
+                        <th className="p-3 text-center">الحالة / مزود Fazer</th>
+                        <th className="p-3 text-center">تفاصيل</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {filteredOrders.map((o: any) => {
+                        const gameInfo = getOrderGameInfo(o.game_id);
+                        const firstItem = Array.isArray(o.items) && o.items[0];
+                        const itemCount = Array.isArray(o.items) ? o.items.length : 0;
+                        const isComp = Boolean(
+                          firstItem?.is_composite ||
+                          (Array.isArray(firstItem?.components) && firstItem?.components.length > 0)
+                        );
+                        const profit = Number(o.profit_egp ?? (Number(o.total_egp || 0) - Number(o.cost_egp || 0)));
+
+                        return (
+                          <tr key={o.id} className="hover:bg-slate-900/50 transition-colors">
+                            {/* Ref & Date */}
+                            <td className="p-3 text-right">
+                              <div className="flex items-center gap-1.5 font-mono text-cyan-300 font-bold">
+                                <span>{o.order_ref}</span>
+                                <CopyButton text={o.order_ref} />
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>{formatOrderDate(o.created_at)}</span>
+                              </div>
+                            </td>
+
+                            {/* Account Type / Email */}
+                            <td className="p-3 text-right">
+                              {o.is_merchant || o.merchant_id ? (
+                                <div className="space-y-0.5">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                    تاجر B2B
+                                  </span>
+                                  <div className="text-slate-200 font-medium truncate max-w-[140px]" title={o.merchant_email || o.merchant_name}>
+                                    {o.merchant_name || o.merchant_email || "تاجر معتمد"}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                    عميل متجر
+                                  </span>
+                                  <div className="text-slate-300 text-[11px] truncate max-w-[140px]" title={o.customer_email || o.customer_phone}>
+                                    {o.customer_email || o.customer_phone || "عميل مباشر"}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Game & Player */}
+                            <td className="p-3 text-right">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${gameInfo.color}`}>
+                                  {gameInfo.name}
+                                </span>
+                                {o.region && (
+                                  <span className="text-[10px] text-slate-400 uppercase font-mono">
+                                    ({o.region})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 flex items-center gap-1 font-mono text-slate-200">
+                                <span className="text-slate-400">ID:</span>
+                                <span className="font-bold text-white">{o.player_id}</span>
+                                {o.zone_id && (
+                                  <span className="text-slate-400 text-[11px]">({o.zone_id})</span>
+                                )}
+                                <CopyButton text={o.zone_id ? `${o.player_id} ${o.zone_id}` : o.player_id} />
+                              </div>
+                            </td>
+
+                            {/* Package */}
+                            <td className="p-3 text-right">
+                              <div className="font-semibold text-slate-100 max-w-[180px] truncate" title={firstItem?.name || "باقة شحن"}>
+                                {firstItem?.name || "باقة شحن"}
+                                {itemCount > 1 && (
+                                  <span className="mr-1 text-[10px] text-cyan-400 font-bold">
+                                    +{itemCount - 1} إضافي
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {isComp ? (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                    <Layers className="w-2.5 h-2.5" /> باقة مجمعة
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400">باقة قياسية</span>
+                                )}
+                                {firstItem?.diamonds > 0 && (
+                                  <span className="text-[10px] font-mono text-cyan-300">
+                                    {firstItem.diamonds + (firstItem.bonus_diamonds || 0)} 💎
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Financials */}
+                            <td className="p-3 text-center">
+                              <div className="font-mono font-bold text-white">
+                                {Number(o.total_egp || 0).toLocaleString()} <span className="text-[10px] text-slate-400">ج.م</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                تكلفة: ${Number(o.total_cost_usd || 0).toFixed(3)}
+                              </div>
+                              <div
+                                className={`text-[10px] font-mono font-bold mt-0.5 ${
+                                  profit > 0
+                                    ? "text-emerald-400"
+                                    : profit < 0
+                                      ? "text-rose-400"
+                                      : "text-slate-400"
+                                }`}
+                              >
+                                {profit > 0 ? `+${profit.toFixed(2)} ج.م ربح` : profit < 0 ? `${profit.toFixed(2)} ج.م` : "0 ج.م ربح"}
+                              </div>
+                            </td>
+
+                            {/* Status & Fazer */}
+                            <td className="p-3 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    o.status === "success"
+                                      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                      : o.status === "failed"
+                                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                                        : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                  }`}
+                                >
+                                  {o.status === "success" && <CheckCircle className="w-3 h-3" />}
+                                  {o.status === "failed" && <AlertTriangle className="w-3 h-3" />}
+                                  {o.status !== "success" && o.status !== "failed" && <Clock className="w-3 h-3" />}
+                                  <span>
+                                    {o.status === "success" ? "ناجح" : o.status === "failed" ? "فشل" : "معلق"}
+                                  </span>
+                                </span>
+                                {o.fazer_transaction_id && (
+                                  <div className="flex items-center gap-1 font-mono text-[9px] text-slate-400">
+                                    <span className="truncate max-w-[90px]" title={o.fazer_transaction_id}>
+                                      {o.fazer_transaction_id}
+                                    </span>
+                                    <CopyButton text={o.fazer_transaction_id} />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Action */}
+                            <td className="p-3 text-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedOrderDetails(o)}
+                                className="border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 h-7 px-2.5 text-xs gap-1"
+                              >
+                                <Eye className="w-3 h-3 text-cyan-400" />
+                                <span>تفاصيل</span>
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {filteredOrders.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-400">
+                            لا توجد عمليات تطابق البحث أو الفلاتر المحددة.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 5. Mobile Cards View (shown on mobile, hidden on desktop) */}
+                <div className="md:hidden space-y-3">
+                  {filteredOrders.map((o: any) => {
+                    const gameInfo = getOrderGameInfo(o.game_id);
+                    const firstItem = Array.isArray(o.items) && o.items[0];
+                    const itemCount = Array.isArray(o.items) ? o.items.length : 0;
+                    const isComp = Boolean(
+                      firstItem?.is_composite ||
+                      (Array.isArray(firstItem?.components) && firstItem?.components.length > 0)
+                    );
+                    const profit = Number(o.profit_egp ?? (Number(o.total_egp || 0) - Number(o.cost_egp || 0)));
+
+                    return (
+                      <div
+                        key={o.id}
+                        className="rounded-xl border border-slate-800 bg-[#0e1428]/90 p-3.5 space-y-2.5 transition-colors"
+                      >
+                        {/* Top Bar: Ref & Status */}
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                          <div className="flex items-center gap-1.5 font-mono text-cyan-300 font-bold text-xs">
                             <span>{o.order_ref}</span>
                             <CopyButton text={o.order_ref} />
                           </div>
-                        </td>
-                        <td className="p-2.5 text-right">
-                          <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
-                        </td>
-                        <td className="p-2.5 text-center">{o.merchant_id ? "تاجر B2B" : "عميل"}</td>
-                        <td className="p-2.5 text-center font-mono">{o.total_egp} ج.م</td>
-                        <td className="p-2.5 text-center">
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                               o.status === "success"
-                                ? "bg-emerald-500/20 text-emerald-300"
+                                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                                 : o.status === "failed"
-                                  ? "bg-rose-500/20 text-rose-300"
-                                  : "bg-amber-500/20 text-amber-300"
+                                  ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                                  : "bg-amber-500/15 text-amber-300 border-amber-500/30"
                             }`}
                           >
-                            {o.status}
+                            {o.status === "success" && <CheckCircle className="w-2.5 h-2.5" />}
+                            {o.status === "failed" && <AlertTriangle className="w-2.5 h-2.5" />}
+                            {o.status !== "success" && o.status !== "failed" && <Clock className="w-2.5 h-2.5" />}
+                            <span>{o.status === "success" ? "ناجح" : o.status === "failed" ? "فشل" : "معلق"}</span>
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {orders.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="p-5 text-center text-slate-400">
-                          لا توجد طلبات مسجلة بعد.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        </div>
+
+                        {/* Account & Time */}
+                        <div className="flex items-center justify-between text-xs">
+                          <div>
+                            {o.is_merchant || o.merchant_id ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                تاجر B2B • {o.merchant_name || o.merchant_email || "معتمد"}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                عميل متجر • {o.customer_email || "مباشر"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {formatOrderDate(o.created_at)}
+                          </div>
+                        </div>
+
+                        {/* Game & Player */}
+                        <div className="rounded-lg bg-slate-900/80 border border-slate-800 p-2 text-xs flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${gameInfo.color}`}>
+                              {gameInfo.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 font-mono text-slate-200">
+                            <span className="text-slate-400 text-[11px]">ID:</span>
+                            <span className="font-bold text-white">{o.player_id}</span>
+                            {o.zone_id && (
+                              <span className="text-slate-400 text-[11px]">({o.zone_id})</span>
+                            )}
+                            <CopyButton text={o.zone_id ? `${o.player_id} ${o.zone_id}` : o.player_id} />
+                          </div>
+                        </div>
+
+                        {/* Package Info */}
+                        <div className="text-xs">
+                          <div className="font-semibold text-slate-100 flex items-center justify-between">
+                            <span className="truncate">{firstItem?.name || "باقة شحن"}</span>
+                            {isComp && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                <Layers className="w-2.5 h-2.5" /> مجمعة
+                              </span>
+                            )}
+                          </div>
+                          {itemCount > 1 && (
+                            <div className="text-[10px] text-cyan-400 mt-0.5">
+                              +{itemCount - 1} عناصر أخرى في نفس الطلب
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Financials Row */}
+                        <div className="grid grid-cols-3 gap-1.5 bg-slate-900/60 p-2 rounded-lg text-center font-mono text-xs">
+                          <div>
+                            <div className="text-[10px] text-slate-400">سعر البيع</div>
+                            <div className="font-bold text-white mt-0.5">{Number(o.total_egp || 0)} ج.م</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400">التكلفة</div>
+                            <div className="text-purple-300 mt-0.5">${Number(o.total_cost_usd || 0).toFixed(2)}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400">صافي الربح</div>
+                            <div className={`font-bold mt-0.5 ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-400"}`}>
+                              {profit > 0 ? `+${profit.toFixed(1)}` : profit.toFixed(1)} ج.م
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Button: View details */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedOrderDetails(o)}
+                          className="w-full border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 h-8 text-xs gap-1.5"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>عرض تفاصيل العملية وبيانات Fazer</span>
+                        </Button>
+                      </div>
+                    );
+                  })}
+
+                  {filteredOrders.length === 0 && (
+                    <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-6 text-center text-slate-400 text-xs">
+                      لا توجد عمليات تطابق البحث أو الفلاتر المحددة.
+                    </div>
+                  )}
+                </div>
               </div>
             </ScrollReveal>
 
@@ -3022,6 +3617,293 @@ function AdminPage() {
               )}
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* 8) Comprehensive Order & Fazer Details Dialog */}
+      <Dialog open={!!selectedOrderDetails} onOpenChange={(o) => !o && setSelectedOrderDetails(null)}>
+        <DialogContent className="w-[96vw] max-w-2xl max-h-[90vh] overflow-y-auto bg-[#0a0f20] border border-cyan-500/40 text-slate-100 rounded-2xl p-4 sm:p-6 shadow-2xl">
+          {selectedOrderDetails && (
+            <div className="space-y-4">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center justify-between gap-2 flex-wrap">
+                  <span className="flex items-center gap-2 text-base font-bold">
+                    <FileText className="w-5 h-5 text-cyan-400" />
+                    <span>تفاصيل العملية ({selectedOrderDetails.order_ref})</span>
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      selectedOrderDetails.status === "success"
+                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                        : selectedOrderDetails.status === "failed"
+                          ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                    }`}
+                  >
+                    {selectedOrderDetails.status === "success" && <CheckCircle className="w-3.5 h-3.5" />}
+                    {selectedOrderDetails.status === "failed" && <AlertTriangle className="w-3.5 h-3.5" />}
+                    {selectedOrderDetails.status !== "success" && selectedOrderDetails.status !== "failed" && (
+                      <Clock className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {selectedOrderDetails.status === "success"
+                        ? "تم الشحن بنجاح"
+                        : selectedOrderDetails.status === "failed"
+                          ? "فشل في التنفيذ"
+                          : "قيد المعالجة"}
+                    </span>
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Order Info & Player ID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Player Card */}
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3 space-y-1.5 text-xs">
+                  <div className="text-slate-400 font-semibold flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>بيانات اللاعب واللعبة</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">اللعبة:</span>
+                    <span className="font-bold text-white uppercase">{selectedOrderDetails.game_id}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">معرف اللاعب (Player ID):</span>
+                    <div className="flex items-center gap-1 font-mono font-bold text-cyan-300">
+                      <span>{selectedOrderDetails.player_id}</span>
+                      <CopyButton text={selectedOrderDetails.player_id} />
+                    </div>
+                  </div>
+                  {selectedOrderDetails.zone_id && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">سيرفر / Zone ID:</span>
+                      <div className="flex items-center gap-1 font-mono font-bold text-purple-300">
+                        <span>{selectedOrderDetails.zone_id}</span>
+                        <CopyButton text={selectedOrderDetails.zone_id} />
+                      </div>
+                    </div>
+                  )}
+                  {selectedOrderDetails.region && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">الريجون:</span>
+                      <span className="font-mono text-slate-300">{selectedOrderDetails.region}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Buyer / Account Card */}
+                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3 space-y-1.5 text-xs">
+                  <div className="text-slate-400 font-semibold flex items-center gap-1.5">
+                    <Shield className="w-3.5 h-3.5 text-purple-400" />
+                    <span>بيانات المشتري / الحساب</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">نوع العملية:</span>
+                    <span
+                      className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        selectedOrderDetails.is_merchant || selectedOrderDetails.merchant_id
+                          ? "bg-purple-500/20 text-purple-300"
+                          : "bg-cyan-500/20 text-cyan-300"
+                      }`}
+                    >
+                      {selectedOrderDetails.is_merchant || selectedOrderDetails.merchant_id
+                        ? "تاجر B2B مسجل"
+                        : "عميل المتجر (قطاعي)"}
+                    </span>
+                  </div>
+                  {(selectedOrderDetails.merchant_email || selectedOrderDetails.customer_email) && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">البريد الإلكتروني:</span>
+                      <span className="font-mono text-white text-[11px] truncate max-w-[150px]">
+                        {selectedOrderDetails.merchant_email || selectedOrderDetails.customer_email}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">تاريخ الطلب:</span>
+                    <span className="text-slate-300 text-[11px]">
+                      {formatOrderDate(selectedOrderDetails.created_at)}
+                    </span>
+                  </div>
+                  {selectedOrderDetails.delivered_at && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">وقت التسليم:</span>
+                      <span className="text-emerald-400 text-[11px]">
+                        {formatOrderDate(selectedOrderDetails.delivered_at)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Financial Summary Card */}
+              <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3 text-xs space-y-2">
+                <div className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>التحليل المالي للعملية</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center font-mono">
+                  <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    <div className="text-[10px] text-slate-400">المدفوع من العميل</div>
+                    <div className="text-sm font-bold text-white mt-0.5">
+                      {Number(selectedOrderDetails.total_egp || 0)} ج.م
+                    </div>
+                  </div>
+                  <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    <div className="text-[10px] text-slate-400">تكلفة Fazer بالجملة</div>
+                    <div className="text-sm font-bold text-purple-300 mt-0.5">
+                      ${Number(selectedOrderDetails.total_cost_usd || 0).toFixed(3)}
+                    </div>
+                  </div>
+                  <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    <div className="text-[10px] text-slate-400">صافي ربح المتجر</div>
+                    <div
+                      className={`text-sm font-bold mt-0.5 ${
+                        (selectedOrderDetails.profit_egp ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"
+                      }`}
+                    >
+                      {Number(selectedOrderDetails.profit_egp ?? 0) >= 0 ? "+" : ""}
+                      {Number(selectedOrderDetails.profit_egp ?? 0).toFixed(2)} ج.م
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items & Composite Breakdown */}
+              <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3 text-xs space-y-2">
+                <div className="text-slate-400 font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-amber-400" />
+                    <span>الباقات المشحونة وتفكيك الباقات المجمعة</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items.length : 0} عنصر
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {(Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items : []).map(
+                    (it: any, idx: number) => {
+                      const comps = Array.isArray(it.components) ? it.components : [];
+                      const hasComps = comps.length > 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-bold text-white text-xs">{it.name}</span>
+                              <span className="text-[11px] text-slate-400 mr-2 font-mono">
+                                (كمية: {it.qty || 1})
+                              </span>
+                            </div>
+                            <div className="font-mono text-xs">
+                              <span className="text-slate-300 font-bold">{it.unit_price_egp} ج.م</span>
+                              <span className="text-slate-500 mr-1.5">
+                                (${Number(it.unit_cost_usd || 0).toFixed(3)})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Components list if composite */}
+                          {hasComps && (
+                            <div className="border-t border-slate-800 pt-2 space-y-1">
+                              <div className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
+                                <Layers className="w-3 h-3" />
+                                <span>تفكيك الشحن لمزود Fazer (أقل تكلفة سحب):</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {comps.map((c: any, cIdx: number) => (
+                                  <div
+                                    key={cIdx}
+                                    className="rounded bg-slate-950/70 border border-slate-800/80 px-2 py-1 text-[11px] flex items-center justify-between font-mono"
+                                  >
+                                    <span className="text-slate-300">
+                                      {c.qty}x {c.fazer_offer_id || c.offer_id} ({c.diamonds}💎)
+                                    </span>
+                                    <span className="text-purple-300 font-bold">
+                                      ${Number(c.cost_usd || c.costUsd || 0).toFixed(3)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+
+              {/* Fazer Provider Status & Execution IDs */}
+              <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-3 text-xs space-y-2">
+                <div className="text-slate-400 font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Server className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>سجل تنفيذ مزود الخدمة (Fazer Cards API)</span>
+                  </div>
+                  {selectedOrderDetails.fazer_transaction_id && (
+                    <div className="flex items-center gap-1 font-mono text-[11px] text-cyan-300">
+                      <span>Ref: {selectedOrderDetails.fazer_transaction_id}</span>
+                      <CopyButton text={selectedOrderDetails.fazer_transaction_id} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Error Banner if failed */}
+                {selectedOrderDetails.error_message && (
+                  <div className="rounded-lg border border-rose-500/50 bg-rose-500/10 p-2.5 text-xs text-rose-300 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold">رسالة الخطأ المسجلة:</div>
+                      <div className="font-mono mt-0.5">{selectedOrderDetails.error_message}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Collapsible raw Fazer response payload */}
+                {selectedOrderDetails.fazer_response && (
+                  <details className="text-[11px] text-slate-400 bg-slate-900/60 rounded-lg p-2 border border-slate-800">
+                    <summary className="cursor-pointer text-slate-300 font-semibold hover:text-white flex items-center gap-1">
+                      <span>عرض الرد الخام من Fazer (Raw API Response)</span>
+                    </summary>
+                    <pre className="mt-2 text-[10px] font-mono text-cyan-200 bg-black/60 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
+                      {JSON.stringify(selectedOrderDetails.fazer_response, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
+
+              {/* Footer Controls */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const text = JSON.stringify(selectedOrderDetails, null, 2);
+                    navigator.clipboard.writeText(text);
+                    toast({ title: "تم النسخ", description: "تم نسخ كافة بيانات العملية إلى الحافظة" });
+                  }}
+                  className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>نسخ بيانات العملية بالكامل (JSON)</span>
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => setSelectedOrderDetails(null)}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4"
+                >
+                  إغلاق
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

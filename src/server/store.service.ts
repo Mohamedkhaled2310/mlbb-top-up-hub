@@ -609,6 +609,8 @@ export function findLeastCostComponentCombination(
   targetDiamonds: number,
   candidatePkgs: any[],
   fallbackComponents?: any[],
+  targetRegion?: string,
+  targetGame?: string,
 ): any[] {
   const fallbackList = Array.isArray(fallbackComponents) ? fallbackComponents : [];
   const fallbackCost = fallbackList.reduce(
@@ -620,35 +622,75 @@ export function findLeastCostComponentCombination(
     return fallbackList;
   }
 
+  // Detect target region if not explicitly passed
+  let regionFilter = targetRegion;
+  if (!regionFilter && fallbackList.length > 0) {
+    const firstComp = fallbackList[0]?.offer_id || "";
+    if (firstComp.includes("brazil") || firstComp.includes(":br_") || firstComp.includes("br_")) {
+      regionFilter = "br";
+    } else if (firstComp.includes("global")) {
+      regionFilter = "global";
+    }
+  }
+
   // Filter valid base packages with positive diamonds and cost
   const validPkgs = candidatePkgs
     .filter((p) => {
-      const d = Number(p.diamonds || 0);
+      const isComp = Boolean(
+        p.offer_id?.startsWith?.("comp:") ||
+        p.offer_id?.startsWith?.("mlbb_composite") ||
+        p.raw?.is_composite,
+      );
+      if (isComp || p.active === false) return false;
+      if (targetGame && p.game_id && p.game_id !== targetGame) return false;
+
       const c = Number(p.cost_usd || 0);
-      const isComp = Boolean(p.offer_id?.startsWith?.("comp:") || p.raw?.is_composite);
-      return d > 0 && c > 0 && !isComp && p.active !== false;
+      if (c <= 0) return false;
+
+      const pRegs = Array.isArray(p.regions) ? p.regions : [];
+      const isBr = p.offer_id.includes("brazil") || pRegs.includes("br");
+      const isGlobal = p.offer_id.includes("global") || pRegs.includes("global") || pRegs.length === 0;
+
+      if (regionFilter === "br") {
+        if (!isBr) return false;
+      } else if (regionFilter === "global") {
+        if (isBr || !isGlobal) return false;
+      }
+
+      const totalDia =
+        Number(p.diamonds || 0) +
+        Number(p.bonus_diamonds || p.raw?.bonus_diamonds || p.raw?.bonus || 0);
+      const dia = totalDia > 0 ? totalDia : Number(p.diamonds || 0);
+      return dia > 0;
     })
-    .map((p) => ({
-      offer_id: p.offer_id,
-      fazer_offer_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_offer_id) || p.offer_id,
-      fazer_category_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_category_id) || undefined,
-      diamonds: Number(p.diamonds),
-      cost_usd: Number(p.cost_usd),
-      qty: 1,
-    }));
+    .map((p) => {
+      const totalDia =
+        Number(p.diamonds || 0) +
+        Number(p.bonus_diamonds || p.raw?.bonus_diamonds || p.raw?.bonus || 0);
+      const dia = totalDia > 0 ? totalDia : Number(p.diamonds || 0);
+      return {
+        offer_id: p.offer_id,
+        fazer_offer_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_offer_id) || p.offer_id,
+        fazer_category_id: (p.raw && typeof p.raw === "object" && p.raw.fazer_category_id) || undefined,
+        diamonds: dia,
+        cost_usd: Number(p.cost_usd),
+        qty: 1,
+      };
+    });
 
   if (validPkgs.length === 0) return fallbackList;
 
   // Unbounded knapsack DP: dpCost[d] = minimum cost for exactly d diamonds
+  const maxTarget = targetDiamonds;
   const INF = 1e9;
-  const dpCost = new Float64Array(targetDiamonds + 1).fill(INF);
-  const dpCount = new Int32Array(targetDiamonds + 1).fill(INF);
-  const dpPkg: Array<any | null> = new Array(targetDiamonds + 1).fill(null);
+  const dpCost = new Float64Array(maxTarget + 1).fill(INF);
+  const dpCount = new Int32Array(maxTarget + 1).fill(INF);
+  const dpPkg: Array<any | null> = new Array(maxTarget + 1).fill(null);
 
   dpCost[0] = 0;
   dpCount[0] = 0;
 
-  for (let d = 1; d <= targetDiamonds; d++) {
+  for (let d = 1; d <= maxTarget; d++) {
     for (const p of validPkgs) {
       if (p.diamonds <= d) {
         const prev = d - p.diamonds;
@@ -676,19 +718,30 @@ export function findLeastCostComponentCombination(
     }
   }
 
-  const optimalCost = dpCost[targetDiamonds];
-  if (optimalCost === undefined || optimalCost >= INF) {
-    return fallbackList;
+  // Consider targetDiamonds as well as targetDiamonds - 1 (e.g. 343 for 344)
+  const candidateTargets = [targetDiamonds];
+  if (targetDiamonds > 1) candidateTargets.push(targetDiamonds - 1);
+
+  let bestTarget = -1;
+  let bestCost = fallbackCost > 0 ? fallbackCost : INF;
+
+  for (const t of candidateTargets) {
+    const cost = dpCost[t];
+    if (cost !== undefined && cost < INF) {
+      if (bestCost >= INF || Math.round((cost - bestCost) * 10000) < 0) {
+        bestCost = cost;
+        bestTarget = t;
+      }
+    }
   }
 
-  // If fallback exists and optimalCost is not cheaper, keep fallback
-  if (fallbackCost > 0 && Math.round((optimalCost - fallbackCost) * 10000) >= 0) {
+  if (bestTarget === -1 || (fallbackCost > 0 && Math.round((bestCost - fallbackCost) * 10000) >= 0)) {
     return fallbackList;
   }
 
   // Reconstruct components
   const counts = new Map<string, any>();
-  let curr = targetDiamonds;
+  let curr = bestTarget;
   while (curr > 0) {
     const p = dpPkg[curr];
     if (!p) break;
@@ -1009,11 +1062,18 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       try {
         const { data: gamePkgs } = await sb
           .from("fazer_packages")
-          .select("offer_id, diamonds, cost_usd, active, raw")
+          .select("offer_id, diamonds, bonus_diamonds, cost_usd, active, raw, regions, game_id")
           .eq("game_id", it.game_id)
           .eq("active", true);
         if (gamePkgs && gamePkgs.length > 0 && it.diamonds > 0) {
-          const optimized = findLeastCostComponentCombination(it.diamonds, gamePkgs, it.components);
+          const targetRegion = it.region || ((it as any).regions && (it as any).regions[0]);
+          const optimized = findLeastCostComponentCombination(
+            it.diamonds,
+            gamePkgs,
+            it.components,
+            targetRegion,
+            it.game_id,
+          );
           if (optimized && optimized.length > 0) {
             components = optimized;
           }
@@ -1757,16 +1817,96 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
   };
 }
 
-export async function adminListRecentOrders(token: string, limit = 30) {
+export async function adminListRecentOrders(token: string, limit = 50) {
   await requireAdmin(token);
   const sba = getAdminClient() as any;
-  const { data, error } = await sba
+  const { data: orders, error } = await sba
     .from("orders")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(Math.min(100, Math.max(1, limit)));
   if (error) throw new Error(error.message);
-  return { orders: data || [] };
+
+  const { data: settings } = await sba.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const egpRate = Number(settings?.egp_rate || 55);
+
+  const merchantIds = [...new Set((orders || []).map((o: any) => o.merchant_id).filter(Boolean))];
+  const userIds = [...new Set((orders || []).map((o: any) => o.user_id).filter(Boolean))];
+
+  const merchantsMap = new Map<string, any>();
+  if (merchantIds.length > 0) {
+    const { data: merchants } = await sba
+      .from("merchant_accounts")
+      .select("id, user_id, margin_percent")
+      .in("id", merchantIds);
+    for (const m of merchants || []) {
+      merchantsMap.set(m.id, m);
+      if (m.user_id) userIds.push(m.user_id);
+    }
+  }
+
+  const uniqueUserIds = [...new Set(userIds)];
+  const profilesMap = new Map<string, any>();
+  if (uniqueUserIds.length > 0) {
+    const { data: profiles } = await sba
+      .from("profiles")
+      .select("id, full_name, phone, role")
+      .in("id", uniqueUserIds);
+    for (const p of profiles || []) {
+      profilesMap.set(p.id, p);
+    }
+  }
+
+  const emailMap = new Map<string, string>();
+  try {
+    const authAdmin = (sba as any).auth?.admin;
+    if (authAdmin && typeof authAdmin.listUsers === "function") {
+      const { data: usersRes } = await authAdmin.listUsers({ page: 1, perPage: 200 });
+      for (const u of usersRes?.users || []) {
+        if (u?.id && u?.email) emailMap.set(u.id, u.email);
+      }
+    }
+  } catch (err: any) {
+    console.warn("Auth admin listUsers failed in adminListRecentOrders:", err?.message);
+  }
+
+  const enriched = (orders || []).map((o: any) => {
+    const isMerchant = Boolean(o.merchant_id);
+    const mAccount = o.merchant_id ? merchantsMap.get(o.merchant_id) : null;
+    const mUserId = mAccount?.user_id;
+    const mProfile = mUserId ? profilesMap.get(mUserId) : null;
+    const mEmail = mUserId ? emailMap.get(mUserId) : null;
+
+    const uProfile = o.user_id ? profilesMap.get(o.user_id) : null;
+    const uEmail = o.user_id ? emailMap.get(o.user_id) : null;
+
+    const items = Array.isArray(o.items) ? o.items : [];
+    let totalCostUsd = 0;
+    for (const it of items) {
+      const q = Number(it.qty || 1);
+      const uCost = Number(it.unit_cost_usd || it.cost_usd || 0);
+      totalCostUsd += uCost * q;
+    }
+    const costEgp = totalCostUsd * egpRate;
+    const totalEgp = Number(o.total_egp || 0);
+    const profitEgp = totalEgp - costEgp;
+
+    return {
+      ...o,
+      is_merchant: isMerchant,
+      merchant_email: mEmail || null,
+      merchant_name: mProfile?.full_name || null,
+      customer_email: uEmail || null,
+      customer_name: uProfile?.full_name || null,
+      customer_phone: uProfile?.phone || null,
+      total_cost_usd: Number(totalCostUsd.toFixed(3)),
+      cost_egp: Number(costEgp.toFixed(2)),
+      profit_egp: Number(profitEgp.toFixed(2)),
+      egp_rate_used: egpRate,
+    };
+  });
+
+  return { orders: enriched };
 }
 
 export async function adminUpdateEgpRate(
