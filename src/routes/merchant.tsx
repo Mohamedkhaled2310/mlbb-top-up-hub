@@ -533,11 +533,14 @@ function MerchantPage() {
                       </>
                     )}
                   </div>
-                  {currencyInfo.currency !== "EGP" && (
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      (رصيد التسوية: {rawBalanceEgp.toLocaleString("en-US")} ج.م)
-                    </div>
-                  )}
+                  <div className="text-[11px] text-emerald-400/90 font-mono mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span>≈ ${(rawBalanceEgp / (store.settings.egp_rate || 50)).toFixed(2)} USD</span>
+                    {currencyInfo.currency !== "EGP" && (
+                      <span className="text-slate-400 font-sans text-[10px]">
+                        (رصيد التسوية: {rawBalanceEgp.toLocaleString("en-US")} ج.م)
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-[#0a0f20] p-3.5 sm:p-4 hover:-translate-y-0.5 transition-transform duration-200">
                   <div className="text-[11px] sm:text-xs text-slate-400">طلبات اليوم</div>

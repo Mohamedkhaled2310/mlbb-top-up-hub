@@ -1068,28 +1068,47 @@ export async function adminCreditMerchant(token: string, body: any) {
   const sbUser = client as any;
   const sbAdmin = getAdminClient() as any;
   const merchantId = body.merchant_id || body.merchantId;
-  const amount = Number(body.amount);
-  const note = body.note || "إضافة رصيد من الأدمن";
-  if (!merchantId || !(amount > 0)) throw new Error("بيانات الشحن غير صحيحة");
+  const note = body.note;
+
+  // Determine amount in EGP: if amount_usd / amountUsd is provided, convert by current egp_rate
+  const { data: settingsRow } = await sbAdmin.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+
+  let amountEgp = 0;
+  let finalNote = note;
+
+  if (body.amount_usd != null || body.amountUsd != null) {
+    const usd = Number(body.amount_usd ?? body.amountUsd);
+    if (!Number.isFinite(usd) || usd <= 0) throw new Error("مبلغ الشحن بالدولار يجب أن يكون رقماً أكبر من صفر");
+    amountEgp = Math.round(usd * egpRate * 100) / 100;
+    if (!finalNote) {
+      finalNote = `شحن رصيد $${usd} (بسعر ${egpRate} ج.م/$)`;
+    }
+  } else {
+    amountEgp = Number(body.amount);
+    if (!finalNote) finalNote = "إضافة رصيد من الأدمن";
+  }
+
+  if (!merchantId || !(amountEgp > 0)) throw new Error("بيانات الشحن غير صحيحة");
 
   let res = await sbUser.rpc("admin_credit_merchant", {
     p_merchant_id: merchantId,
-    p_amount: amount,
-    p_note: note,
+    p_amount: amountEgp,
+    p_note: finalNote,
     p_reference_type: "admin",
     p_reference_id: null,
   });
   if (res.error) {
     res = await sbAdmin.rpc("admin_credit_merchant", {
       p_merchant_id: merchantId,
-      p_amount: amount,
-      p_note: note,
+      p_amount: amountEgp,
+      p_note: finalNote,
       p_reference_type: "admin",
       p_reference_id: null,
     });
   }
   if (res.error) throw new Error(res.error.message);
-  return { success: true, result: res.data };
+  return { success: true, amount_egp: amountEgp, result: res.data };
 }
 
 export async function adminSetMerchantMargin(token: string, body: any) {
@@ -1127,6 +1146,7 @@ export async function adminCreateMerchant(
     country?: string | undefined;
     marginPercent?: number | undefined;
     initialBalanceEgp?: number | undefined;
+    initialBalanceUsd?: number | undefined;
   },
 ) {
   await requireAdmin(token);
@@ -1139,7 +1159,14 @@ export async function adminCreateMerchant(
   const phone = (body.phone || "").trim() || null;
   const region = (body.region || body.country || "EG").trim().toUpperCase();
   const marginPercent = Math.min(50, Math.max(0, Number(body.marginPercent ?? 5) || 0));
-  const initialBalanceEgp = Math.max(0, Number(body.initialBalanceEgp ?? 0) || 0);
+
+  const { data: sRow } = await sba.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const egpRate = Number(sRow?.egp_rate || DEFAULT_EGP_RATE);
+
+  let initialBalanceEgp = Math.max(0, Number(body.initialBalanceEgp ?? 0) || 0);
+  if (body.initialBalanceUsd != null && Number(body.initialBalanceUsd) > 0) {
+    initialBalanceEgp = Math.round(Number(body.initialBalanceUsd) * egpRate * 100) / 100;
+  }
 
   if (!email || !email.includes("@")) throw new Error("يرجى إدخال بريد إلكتروني صحيح");
   if (password.length < 6) throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
@@ -1211,7 +1238,9 @@ export async function adminCreateMerchant(
     await adminCreditMerchant(token, {
       merchant_id: merchantRow.id,
       amount: initialBalanceEgp,
-      note: "رصيد افتتاحي لحساب التاجر",
+      note: body.initialBalanceUsd
+        ? `رصيد افتتاحي $${body.initialBalanceUsd} (${initialBalanceEgp} ج.م)`
+        : "رصيد افتتاحي لحساب التاجر",
     });
     const { data: refreshed } = await sba
       .from("merchant_accounts")

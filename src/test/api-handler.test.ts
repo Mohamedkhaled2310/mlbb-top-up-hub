@@ -379,6 +379,22 @@ describe("API routes & merchant/admin workflows", () => {
     expect(loginRes?.status).toBe(200);
     const loginJson = await loginRes!.json();
     expect(loginJson.merchant.balance_egp).toBe(1000);
+
+    // Credit merchant in USD ($10 = 500 EGP at 50 rate)
+    const creditRes = await handleApiRoute(
+      new Request("http://localhost/api/admin/merchants/credit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer admin-token" },
+        body: JSON.stringify({
+          merchant_id: createData.merchant.id,
+          amount_usd: 10,
+        }),
+      }),
+    );
+    expect(creditRes?.status).toBe(200);
+    const creditJson = await creditRes!.json();
+    expect(creditJson.success).toBe(true);
+    expect(creditJson.amount_egp).toBe(500);
   });
 
   it("debits merchant atomically on order and issues automatic refund if FazerCards fails", async () => {

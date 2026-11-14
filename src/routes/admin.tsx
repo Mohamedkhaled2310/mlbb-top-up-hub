@@ -99,7 +99,7 @@ function AdminPage() {
     phone: "",
     region: "EG",
     marginPercent: "5",
-    initialBalanceEgp: "1000",
+    initialBalanceUsd: "20",
   });
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -376,18 +376,27 @@ function AdminPage() {
 
   const submitCredit = async () => {
     if (!token || !credit) return;
+    const usd = Number(credit.amount);
+    if (!Number.isFinite(usd) || usd <= 0) {
+      toast({ title: "خطأ", description: "يرجى إدخال مبلغ صحيح بالدولار ($ USD) أكبر من صفر" });
+      return;
+    }
     try {
       const r = await adminCreditMerchantApi(token, {
         merchant_id: credit.id,
-        amount: Number(credit.amount),
-        note: credit.note || "شحن رصيد",
+        amount_usd: usd,
+        ...(credit.note.trim() ? { note: credit.note.trim() } : {}),
       });
       if (r?.error) throw new Error(r.error);
-      toast({ title: "تمت إضافة الرصيد لمحفظة التاجر" });
+      const addedEgp = r?.amount_egp || Math.round(usd * (egpRate || 50) * 100) / 100;
+      toast({
+        title: "تمت إضافة الرصيد لمحفظة التاجر بنجاح 💵",
+        description: `المبلغ: $${usd} USD (يعادل ${addedEgp} ج.م بسعر ${egpRate} ج.م/$)`,
+      });
       setCredit(null);
       await loadMerchants(token, mPage, mQuery);
     } catch (e: any) {
-      toast({ title: "فشل", description: e?.message });
+      toast({ title: "فشل إضافة الرصيد", description: e?.message });
     }
   };
 
@@ -431,7 +440,7 @@ function AdminPage() {
             phone: "01000000001",
             region: "EG",
             marginPercent: 5,
-            initialBalanceEgp: 1000,
+            initialBalanceUsd: 20,
           }
         : {
             email: newMerchant.email.trim(),
@@ -440,7 +449,7 @@ function AdminPage() {
             phone: newMerchant.phone.trim(),
             region: newMerchant.region || "EG",
             marginPercent: Number(newMerchant.marginPercent || 0),
-            initialBalanceEgp: Number(newMerchant.initialBalanceEgp || 0),
+            initialBalanceUsd: Number(newMerchant.initialBalanceUsd || 0),
           };
       const res = await adminCreateMerchantApi(token, payload);
       if (res?.error) throw new Error(res.error);
@@ -453,11 +462,12 @@ function AdminPage() {
         phone: "",
         region: "EG",
         marginPercent: "5",
-        initialBalanceEgp: "1000",
+        initialBalanceUsd: "20",
       });
+      const egpEquivalent = Math.round(payload.initialBalanceUsd * (egpRate || 50) * 100) / 100;
       toast({
         title: "تم إنشاء وتفعيل حساب التاجر بنجاح",
-        description: `${payload.email} • رصيد افتتاحي: ${payload.initialBalanceEgp} ج.م`,
+        description: `${payload.email} • رصيد افتتاحي: $${payload.initialBalanceUsd} (${egpEquivalent} ج.م)`,
       });
       await loadMerchants(token, 1, "");
     } catch (e: any) {
@@ -874,7 +884,7 @@ function AdminPage() {
                     className="border-emerald-500/50 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/60"
                     onClick={() => handleCreateMerchant(true)}
                   >
-                    <Sparkles className="w-4 h-4" /> {creatingMerchant ? "جارٍ الإنشاء..." : "توليد تاجر تجريبي (1000 ج.م)"}
+                    <Sparkles className="w-4 h-4" /> {creatingMerchant ? "جارٍ الإنشاء..." : "توليد تاجر تجريبي ($20)"}
                   </Button>
                 </div>
               </div>
@@ -885,7 +895,7 @@ function AdminPage() {
                     <tr>
                       <th className="p-3 text-right">التاجر</th>
                       <th className="p-3">الجنسية / العملة</th>
-                      <th className="p-3">الرصيد (ج.م)</th>
+                      <th className="p-3">الرصيد ($ USD / ج.م)</th>
                       <th className="p-3">نسبة الخصم %</th>
                       <th className="p-3">الحالة</th>
                       <th className="p-3">إجراءات</th>
@@ -914,7 +924,14 @@ function AdminPage() {
                             ))}
                           </select>
                         </td>
-                        <td className="p-3 text-center font-mono font-bold text-emerald-300">{m.balance_egp}</td>
+                        <td className="p-3 text-center font-mono">
+                          <div className="font-bold text-emerald-300 text-sm">
+                            ${(Number(m.balance_egp || 0) / (egpRate || 50)).toFixed(2)}
+                          </div>
+                          <div className="text-[11px] text-slate-400">
+                            {Number(m.balance_egp || 0).toLocaleString("en-US")} ج.م
+                          </div>
+                        </td>
                         <td className="p-3 text-center font-mono text-purple-300">{m.margin_percent}%</td>
                         <td className="p-3 text-center">
                           <span
@@ -930,10 +947,10 @@ function AdminPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700 hover:text-white"
-                              onClick={() => setCredit({ id: m.id, amount: "", note: "إضافة رصيد من الأدمن" })}
+                              className="border-emerald-600/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/60 font-semibold"
+                              onClick={() => setCredit({ id: m.id, amount: "", note: "" })}
                             >
-                              شحن رصيد
+                              <DollarSign className="w-3.5 h-3.5" /> شحن بالدولار
                             </Button>
                             <Button
                               size="sm"
@@ -1225,13 +1242,17 @@ function AdminPage() {
                 />
               </div>
               <div>
-                <label className="text-slate-300 font-semibold">رصيد افتتاحي (ج.م)</label>
+                <label className="text-slate-300 font-semibold">رصيد افتتاحي ($ USD)</label>
                 <Input
                   type="number"
-                  value={newMerchant.initialBalanceEgp}
-                  onChange={(e) => setNewMerchant((s) => ({ ...s, initialBalanceEgp: e.target.value }))}
+                  step="any"
+                  value={newMerchant.initialBalanceUsd}
+                  onChange={(e) => setNewMerchant((s) => ({ ...s, initialBalanceUsd: e.target.value }))}
                   className={`mt-1 font-mono ${DARK_INPUT}`}
                 />
+                <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                  ≈ {(Math.round((Number(newMerchant.initialBalanceUsd) || 0) * (egpRate || 50) * 100) / 100).toLocaleString("en-US")} ج.م
+                </div>
               </div>
             </div>
             <Button
@@ -1249,24 +1270,57 @@ function AdminPage() {
       <Dialog open={!!credit} onOpenChange={(o) => !o && setCredit(null)}>
         <DialogContent className="max-w-sm bg-[#0a0f20] border border-slate-700 text-slate-100 rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white">شحن رصيد تاجر</DialogTitle>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-emerald-400" /> شحن رصيد تاجر بالدولار ($ USD)
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2.5">
-            <Input
-              type="number"
-              placeholder="المبلغ (ج.م)"
-              value={credit?.amount || ""}
-              onChange={(e) => setCredit((c) => (c ? { ...c, amount: e.target.value } : c))}
-              className={DARK_INPUT}
-            />
-            <Input
-              placeholder="ملاحظة"
-              value={credit?.note || ""}
-              onChange={(e) => setCredit((c) => (c ? { ...c, note: e.target.value } : c))}
-              className={DARK_INPUT}
-            />
-            <Button className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold" onClick={submitCredit}>
-              تأكيد الإضافة
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-300 font-semibold mb-1 block">المبلغ بالدولار ($ USD) *</label>
+              <Input
+                type="number"
+                step="any"
+                placeholder="مثال: 50"
+                value={credit?.amount || ""}
+                onChange={(e) => setCredit((c) => (c ? { ...c, amount: e.target.value } : c))}
+                className={`font-mono text-base ${DARK_INPUT}`}
+                autoFocus
+              />
+            </div>
+
+            {/* Live conversion preview */}
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-xs space-y-1">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>سعر الدولار المعتمد:</span>
+                <span className="font-mono font-bold text-amber-300">{egpRate} ج.م / $</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-300">
+                <span>المعادل المضاف للمحفظة:</span>
+                <span className="font-mono font-bold text-emerald-300">
+                  {credit?.amount && Number(credit.amount) > 0
+                    ? (Math.round(Number(credit.amount) * (egpRate || 50) * 100) / 100).toLocaleString("en-US")
+                    : "0"}{" "}
+                  ج.م
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-300 font-semibold mb-1 block">ملاحظة المعاملة (اختياري)</label>
+              <Input
+                placeholder="مثال: شحن رصيد بالدولار عن طريق باينانس"
+                value={credit?.note || ""}
+                onChange={(e) => setCredit((c) => (c ? { ...c, note: e.target.value } : c))}
+                className={DARK_INPUT}
+              />
+            </div>
+
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+              disabled={!credit?.amount || Number(credit.amount) <= 0}
+              onClick={submitCredit}
+            >
+              تأكيد شحن ${Number(credit?.amount || 0)} USD
             </Button>
           </div>
         </DialogContent>

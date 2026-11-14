@@ -233,6 +233,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
         region: body["region"] || body["country"],
         marginPercent: body["marginPercent"] ?? body["margin_percent"],
         initialBalanceEgp: body["initialBalanceEgp"] ?? body["initial_balance_egp"],
+        initialBalanceUsd: body["initialBalanceUsd"] ?? body["initial_balance_usd"],
       });
       return json(data);
     } catch (e: any) {

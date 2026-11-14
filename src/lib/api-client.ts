@@ -103,6 +103,7 @@ export async function adminCreateMerchantApi(
     country?: string;
     marginPercent?: number;
     initialBalanceEgp?: number;
+    initialBalanceUsd?: number;
   },
 ): Promise<any> {
   const res = await fetch("/api/admin/merchants/create", {
@@ -156,7 +157,7 @@ export async function adminListOrdersApi(token: string, limit = 30): Promise<any
 
 export async function adminCreditMerchantApi(
   token: string,
-  body: { merchant_id: string; amount: number; note?: string },
+  body: { merchant_id: string; amount?: number; amount_usd?: number; note?: string | undefined },
 ): Promise<any> {
   const res = await fetch("/api/admin/merchants/credit", {
     method: "POST",
