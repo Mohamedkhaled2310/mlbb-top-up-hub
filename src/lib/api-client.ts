@@ -216,7 +216,7 @@ export async function adminSetMarginApi(
 
 export async function adminSetMerchantPackagePriceApi(
   token: string,
-  body: { merchant_id: string; offer_id: string; price_egp: number | null },
+  body: { merchant_id: string; offer_id: string; price_usd?: number | null; price_egp?: number | null },
 ): Promise<any> {
   const res = await fetch("/api/admin/merchants/package-price", {
     method: "POST",

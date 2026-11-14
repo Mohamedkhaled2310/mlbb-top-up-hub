@@ -19,7 +19,7 @@ import CheckoutModal from "../components/CheckoutModal";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
-import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency, formatDecimals3 } from "../lib/pricing";
+import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency, formatDecimals3, round3 } from "../lib/pricing";
 import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo, getCurrencyRate } from "../lib/currency";
 import {
@@ -280,10 +280,12 @@ function MerchantPage() {
 
   const getMerchantPrices = useCallback(
     (p: TopUpPackage) => {
-      const customP = (store.merchant?.custom_prices as any)?.[p.offerId];
-      const isCustom = typeof customP === "number" && customP > 0;
+      const customUsd = (store.merchant?.custom_prices as any)?.[p.offerId];
+      const isCustom = typeof customUsd === "number" && customUsd > 0;
       const base = p.merchantBasePriceEgp ?? p.retailPriceEgp;
-      const priceEgp = isCustom ? customP : calcMerchantUnitPriceEgp(base, marginPercent, p.costUsd, store.settings.egp_rate);
+      const priceEgp = isCustom
+        ? round3(customUsd * store.settings.egp_rate)
+        : calcMerchantUnitPriceEgp(base, marginPercent, p.costUsd, store.settings.egp_rate);
       const converted = calcConvertedPrice(
         priceEgp,
         store.settings.egp_rate,

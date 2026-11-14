@@ -704,7 +704,18 @@ export function findLeastCostComponentCombination(
   return Array.from(counts.values());
 }
 
-export async function getMerchantCustomPrices(merchantId?: string): Promise<Record<string, Record<string, number>>> {
+export function extractCustomPriceUsd(entry: any): number | null {
+  if (entry == null) return null;
+  if (typeof entry === "object" && typeof entry.price_usd === "number" && entry.price_usd > 0) {
+    return round3(entry.price_usd);
+  }
+  if (typeof entry === "number" && entry > 0) {
+    return round3(entry);
+  }
+  return null;
+}
+
+export async function getMerchantCustomPrices(merchantId?: string): Promise<Record<string, Record<string, any>>> {
   const sb = getAdminClient() as any;
   const { data } = await sb
     .from("fazer_packages")
@@ -712,7 +723,7 @@ export async function getMerchantCustomPrices(merchantId?: string): Promise<Reco
     .eq("offer_id", "config:merchant_custom_prices")
     .maybeSingle();
 
-  const allMap: Record<string, Record<string, number>> =
+  const allMap: Record<string, Record<string, any>> =
     data?.raw && typeof data.raw === "object" && !Array.isArray(data.raw) ? data.raw : {};
 
   return allMap;
@@ -725,6 +736,8 @@ export async function adminSetMerchantPackagePrice(
     merchant_id?: string;
     offerId?: string;
     offer_id?: string;
+    priceUsd?: number | null;
+    price_usd?: number | null;
     priceEgp?: number | null;
     price_egp?: number | null;
   },
@@ -732,7 +745,7 @@ export async function adminSetMerchantPackagePrice(
   await requireAdmin(token);
   const merchantId = (body.merchantId || body.merchant_id || "").trim();
   const offerId = (body.offerId || body.offer_id || "").trim();
-  const priceEgp = body.priceEgp !== undefined ? body.priceEgp : body.price_egp;
+  const rawPriceUsd = body.priceUsd !== undefined ? body.priceUsd : body.price_usd;
 
   if (!merchantId) throw new Error("معرف التاجر مطلوب");
   if (!offerId) throw new Error("معرف الباقة مطلوب");
@@ -744,14 +757,14 @@ export async function adminSetMerchantPackagePrice(
     .eq("offer_id", "config:merchant_custom_prices")
     .maybeSingle();
 
-  let raw: Record<string, Record<string, number>> = {};
+  let raw: Record<string, Record<string, any>> = {};
   if (row?.raw && typeof row.raw === "object" && !Array.isArray(row.raw)) {
     raw = { ...row.raw };
   }
 
   const merchantMap = { ...(raw[merchantId] || {}) };
-  if (typeof priceEgp === "number" && priceEgp > 0) {
-    merchantMap[offerId] = round3(priceEgp);
+  if (typeof rawPriceUsd === "number" && rawPriceUsd > 0) {
+    merchantMap[offerId] = { price_usd: round3(rawPriceUsd) };
   } else {
     delete merchantMap[offerId];
   }
@@ -780,7 +793,7 @@ export async function adminSetMerchantPackagePrice(
     if (error) throw new Error(error.message);
   }
 
-  return { success: true, merchantId, offerId, priceEgp: merchantMap[offerId] ?? null };
+  return { success: true, merchantId, offerId, priceUsd: rawPriceUsd ? round3(rawPriceUsd) : null };
 }
 
 export async function submitCustomerOrder(body: any, token?: string | null) {
@@ -900,10 +913,11 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const p = byId.get(it.offerId);
     const costUsd = Number(p.cost_usd || 0);
     const merchantBase = calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP);
-    const customPrice = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
+    const customEntry = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
+    const customUsd = extractCustomPriceUsd(customEntry);
     const unitPrice =
-      typeof customPrice === "number" && customPrice > 0
-        ? round3(customPrice)
+      customUsd !== null && customUsd > 0
+        ? round3(customUsd * egpRate)
         : (asMerchant
             ? calcMerchantUnitPriceEgp(merchantBase, merchantMargin, costUsd, egpRate, DEFAULT_MERCHANT_MARKUP)
             : calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP));
@@ -1205,11 +1219,18 @@ export async function getMerchantDashboard(token: string) {
   };
   const customPricesMap = await getMerchantCustomPrices();
   const merchantCustomMap = customPricesMap[merchant.id] || {};
+  const formattedCustomPrices: Record<string, number> = {};
+  for (const [offId, val] of Object.entries(merchantCustomMap)) {
+    const usd = extractCustomPriceUsd(val);
+    if (usd !== null && usd > 0) {
+      formattedCustomPrices[offId] = usd;
+    }
+  }
   return {
     profile,
     merchant: {
       ...merchant,
-      custom_prices: merchantCustomMap,
+      custom_prices: formattedCustomPrices,
     },
     stats,
     orders: list,
@@ -1679,17 +1700,21 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
   const packagesPreview = (packagesRes.data || []).map((p: any) => {
     const costUsd = round3(Number(p.cost_usd || 0));
     const costEgp = calcCostEgp(costUsd, egpRate);
-    const standardMerchantPrice = calcMerchantUnitPriceEgp(
+    const standardMerchantPriceEgp = calcMerchantUnitPriceEgp(
       p.merchant_base_price_egp || costEgp,
       marginPercent,
       costUsd,
       egpRate,
     );
-    const customPrice = merchantCustomMap[p.offer_id];
-    const isCustomPrice = typeof customPrice === "number" && customPrice > 0;
-    const merchantPrice = isCustomPrice ? round3(customPrice) : standardMerchantPrice;
+    const standardMerchantUsd = round3(standardMerchantPriceEgp / egpRate);
+    const customEntry = merchantCustomMap[p.offer_id];
+    const customPriceUsd = extractCustomPriceUsd(customEntry);
+    const isCustomPrice = customPriceUsd !== null && customPriceUsd > 0;
+    const merchantPriceUsd = isCustomPrice ? customPriceUsd : standardMerchantUsd;
+    const merchantPriceEgp = isCustomPrice ? round3(customPriceUsd * egpRate) : standardMerchantPriceEgp;
     const retailPrice = calcRetailPriceEgp(costUsd, egpRate);
-    const profitPerUnitEgp = Math.max(0, round3(merchantPrice - costEgp));
+    const profitPerUnitEgp = Math.max(0, round3(merchantPriceEgp - costEgp));
+    const profitPerUnitUsd = Math.max(0, round3(merchantPriceUsd - costUsd));
 
     return {
       id: p.id,
@@ -1701,11 +1726,15 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       costUsd,
       costEgp,
       isCustomPrice,
-      customPriceEgp: isCustomPrice ? customPrice : null,
-      standardMerchantPriceEgp: standardMerchantPrice,
-      merchantPriceEgp: merchantPrice,
+      customPriceUsd: isCustomPrice ? customPriceUsd : null,
+      customPriceEgp: isCustomPrice ? merchantPriceEgp : null,
+      standardMerchantPriceEgp,
+      standardMerchantUsd,
+      merchantPriceEgp,
+      merchantPriceUsd,
       retailPriceEgp: retailPrice,
       profitPerUnitEgp,
+      profitPerUnitUsd,
       marginPercent,
       merchantBasePriceEgp: p.merchant_base_price_egp || costEgp,
       active: p.active !== false,
