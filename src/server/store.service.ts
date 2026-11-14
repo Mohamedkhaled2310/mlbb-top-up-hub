@@ -1129,7 +1129,13 @@ export async function adminSetMerchantMargin(token: string, body: any) {
       p_margin_percent: margin,
     });
   }
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) {
+    const directRes = await sbAdmin
+      .from("merchant_accounts")
+      .update({ margin_percent: margin, updated_at: new Date().toISOString() })
+      .eq("id", merchantId);
+    if (directRes.error) throw new Error(res.error.message || directRes.error.message);
+  }
   return { success: true };
 }
 
@@ -1425,8 +1431,9 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       .from("fazer_packages")
       .select("*")
       .eq("active", true)
+      .order("game_id", { ascending: true })
       .order("diamonds", { ascending: true })
-      .limit(100),
+      .limit(1000),
   ]);
 
   const egpRate = Number(settingsRes.data?.egp_rate || DEFAULT_EGP_RATE);
@@ -1458,6 +1465,8 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       retailPriceEgp: retailPrice,
       profitPerUnitEgp,
       marginPercent,
+      merchantBasePriceEgp: p.merchant_base_price_egp || costEgp,
+      active: p.active !== false,
     };
   });
 

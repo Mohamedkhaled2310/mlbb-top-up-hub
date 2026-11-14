@@ -427,8 +427,12 @@ function AdminPage() {
         title: "تمت إضافة الرصيد لمحفظة التاجر بنجاح 💵",
         description: `المبلغ: $${usd} USD (يعادل ${addedEgp} ج.م بسعر ${egpRate} ج.م/$)`,
       });
+      const targetId = credit.id;
       setCredit(null);
       await loadMerchants(token, mPage, mQuery);
+      if (profileMerchantId && profileMerchantId === targetId) {
+        await openMerchantProfile(profileMerchantId);
+      }
     } catch (e: any) {
       toast({ title: "فشل إضافة الرصيد", description: e?.message });
     }
@@ -442,11 +446,15 @@ function AdminPage() {
         margin_percent: Number(marginEdit.value),
       });
       if (r?.error) throw new Error(r.error);
-      toast({ title: "تم تحديث هامش التاجر" });
+      toast({ title: "تم تحديث هامش التاجر بنجاح" });
+      const targetId = marginEdit.id;
       setMarginEdit(null);
       await loadMerchants(token, mPage, mQuery);
+      if (profileMerchantId && profileMerchantId === targetId) {
+        await openMerchantProfile(profileMerchantId);
+      }
     } catch (e: any) {
-      toast({ title: "فشل", description: e?.message });
+      toast({ title: "فشل تحديث الهامش", description: e?.message });
     }
   };
 
@@ -558,8 +566,12 @@ function AdminPage() {
         title: "تم تعديل رصيد التاجر بنجاح",
         description: `الرصيد الجديد: $${res.balance_usd} (${Number(res.balance_egp).toLocaleString("en-US")} ج.م)`,
       });
+      const targetId = adjustBalance.merchant.id;
       setAdjustBalance(null);
       await loadMerchants(token, mPage, mQuery);
+      if (profileMerchantId && profileMerchantId === targetId) {
+        await openMerchantProfile(profileMerchantId);
+      }
     } catch (e: any) {
       toast({ title: "فشل تعديل الرصيد", description: e?.message });
     } finally {
@@ -649,6 +661,9 @@ function AdminPage() {
       });
       setEditingPkg(null);
       await loadStore();
+      if (profileMerchantId) {
+        await openMerchantProfile(profileMerchantId);
+      }
     } catch (e: any) {
       toast({ title: "فشل تعديل السعر", description: e?.message });
     } finally {
@@ -2306,7 +2321,7 @@ function AdminPage() {
 
                   {/* 1.A: Desktop Table for Packages */}
                   <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800 max-h-80">
-                    <table className="w-full text-xs min-w-[700px]">
+                    <table className="w-full text-xs min-w-[750px]">
                       <thead className="bg-[#0e1428] text-slate-300 sticky top-0">
                         <tr>
                           <th className="p-2.5 text-right">الباقة</th>
@@ -2319,22 +2334,28 @@ function AdminPage() {
                             صافي ربح الأدمن
                           </th>
                           <th className="p-2.5">سعر الجمهور</th>
+                          <th className="p-2.5 text-center">تعديل السعر</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/80">
                         {profileData.packagesPreview
                           ?.filter((p: any) => {
                             const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
-                            const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
-                            const serverMatch = profilePkgServer === "all" || pReg === profilePkgServer.toLowerCase();
+                            const regList: string[] = Array.isArray(p.regions) && p.regions.length
+                              ? p.regions.map((r: any) => String(r).toLowerCase())
+                              : p.offerId?.includes("brazil") ? ["br"] : ["global"];
+                            const serverMatch = profilePkgServer === "all" || regList.includes(profilePkgServer.toLowerCase());
                             const q = profilePkgSearch.trim().toLowerCase();
-                            const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
+                            const textMatch = !q || (p.name || "").toLowerCase().includes(q) || (p.offerId || "").toLowerCase().includes(q);
                             return gameMatch && serverMatch && textMatch;
                           })
                           .map((p: any) => {
-                            const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
-                            const srvLabel = pReg === "br" ? "البرازيل (Brazil)" : pReg === "mena" ? "MENA" : "عالمي (Global)";
-                            const isBr = pReg === "br";
+                            const regList: string[] = Array.isArray(p.regions) && p.regions.length
+                              ? p.regions.map((r: any) => String(r).toLowerCase())
+                              : p.offerId?.includes("brazil") ? ["br"] : ["global"];
+                            const isBr = regList.includes("br") || p.offerId?.includes("brazil");
+                            const isMena = regList.includes("mena");
+                            const srvLabel = isBr ? "البرازيل (Brazil)" : isMena ? "MENA" : "عالمي (Global)";
                             return (
                               <tr key={p.id} className="hover:bg-slate-900/40">
                                 <td className="p-2.5 text-right">
@@ -2377,6 +2398,16 @@ function AdminPage() {
                                 <td className="p-2.5 text-center font-mono text-slate-400">
                                   {formatDecimals3(p.retailPriceEgp)} ج.م
                                 </td>
+                                <td className="p-2.5 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[11px] border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/60 font-semibold gap-1 inline-flex items-center"
+                                    onClick={() => openEditPkg(p)}
+                                  >
+                                    <Pencil className="w-3 h-3" /> تعديل
+                                  </Button>
+                                </td>
                               </tr>
                             );
                           })}
@@ -2389,17 +2420,22 @@ function AdminPage() {
                     {profileData.packagesPreview
                       ?.filter((p: any) => {
                         const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
-                        const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
-                        const serverMatch = profilePkgServer === "all" || pReg === profilePkgServer.toLowerCase();
+                        const regList: string[] = Array.isArray(p.regions) && p.regions.length
+                          ? p.regions.map((r: any) => String(r).toLowerCase())
+                          : p.offerId?.includes("brazil") ? ["br"] : ["global"];
+                        const serverMatch = profilePkgServer === "all" || regList.includes(profilePkgServer.toLowerCase());
                         const q = profilePkgSearch.trim().toLowerCase();
-                        const textMatch = !q || p.name.toLowerCase().includes(q) || p.offerId.toLowerCase().includes(q);
+                        const textMatch = !q || (p.name || "").toLowerCase().includes(q) || (p.offerId || "").toLowerCase().includes(q);
                         return gameMatch && serverMatch && textMatch;
                       })
                       .map((p: any) => {
                         const merchantUsd = formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50));
-                        const pReg = Array.isArray(p.regions) && p.regions.length ? p.regions[0].toLowerCase() : (p.offerId?.includes("brazil") ? "br" : "global");
-                        const srvLabel = pReg === "br" ? "البرازيل (Brazil)" : pReg === "mena" ? "MENA" : "عالمي (Global)";
-                        const isBr = pReg === "br";
+                        const regList: string[] = Array.isArray(p.regions) && p.regions.length
+                          ? p.regions.map((r: any) => String(r).toLowerCase())
+                          : p.offerId?.includes("brazil") ? ["br"] : ["global"];
+                        const isBr = regList.includes("br") || p.offerId?.includes("brazil");
+                        const isMena = regList.includes("mena");
+                        const srvLabel = isBr ? "البرازيل (Brazil)" : isMena ? "MENA" : "عالمي (Global)";
                         return (
                           <div
                             key={p.id}
@@ -2444,10 +2480,20 @@ function AdminPage() {
                                 </div>
                                 <div className="font-mono text-[9px] text-purple-400">≈ ${merchantUsd}</div>
                               </div>
-                              <div>
-                                <div className="text-[10px] text-slate-400">سعر الجمهور</div>
-                                <div className="font-mono text-slate-300 text-xs">{formatDecimals3(p.retailPriceEgp)} ج.م</div>
-                                <div className="text-[9px] text-slate-500">للمستهلك</div>
+                              <div className="flex flex-col justify-between items-center">
+                                <div>
+                                  <div className="text-[10px] text-slate-400">سعر الجمهور</div>
+                                  <div className="font-mono text-slate-300 text-xs">{formatDecimals3(p.retailPriceEgp)} ج.م</div>
+                                  <div className="text-[9px] text-slate-500 mb-0.5">للمستهلك</div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[10px] border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60 font-semibold gap-1 mt-1 w-full flex items-center justify-center"
+                                  onClick={() => openEditPkg(p)}
+                                >
+                                  <Pencil className="w-2.5 h-2.5" /> تعديل
+                                </Button>
                               </div>
                             </div>
                           </div>
