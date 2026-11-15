@@ -1558,10 +1558,10 @@ export async function autoSyncPendingOrders(specificOrderId?: string): Promise<{
       .limit(10);
 
     if (specificOrderId) {
-      query = sb
-        .from("orders")
-        .select("*")
-        .or(`id.eq.${specificOrderId},order_ref.eq.${specificOrderId}`);
+      const isUid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(specificOrderId);
+      query = isUid
+        ? sb.from("orders").select("*").eq("id", specificOrderId)
+        : sb.from("orders").select("*").eq("order_ref", specificOrderId);
     }
 
     const { data: pendingOrders } = await query;
@@ -1595,11 +1595,11 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
   const targetId = body.order_id || body.order_ref;
   if (!targetId) throw new Error("معرف الطلب مطلوب للمزامنة");
 
-  const { data: order, error: oErr } = await sb
-    .from("orders")
-    .select("*")
-    .or(`id.eq.${targetId},order_ref.eq.${targetId}`)
-    .maybeSingle();
+  const isUid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+  const { data: order, error: oErr } = await (isUid
+    ? sb.from("orders").select("*").eq("id", targetId)
+    : sb.from("orders").select("*").eq("order_ref", targetId)
+  ).maybeSingle();
 
   if (oErr || !order) throw new Error("الطلب غير موجود");
 
@@ -2608,11 +2608,11 @@ export async function getOrderStatus(targetRefOrId: string) {
   const clean = String(targetRefOrId || "").trim();
   if (!clean) return { found: false };
 
-  const { data: order } = await sb
-    .from("orders")
-    .select("*")
-    .or(`order_ref.eq.${clean},id.eq.${clean}`)
-    .maybeSingle();
+  const isUid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
+  const q = isUid
+    ? sb.from("orders").select("*").eq("id", clean)
+    : sb.from("orders").select("*").eq("order_ref", clean);
+  const { data: order } = await q.maybeSingle();
 
   if (!order) return { found: false };
 
