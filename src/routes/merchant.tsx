@@ -219,19 +219,22 @@ function MerchantPage() {
     }
   };
 
-  // Automatic real-time live wallet/orders refresh (ultra-fast 500ms polling when invoice is open on pending order, or 1.5s for pending orders)
+  // Automatic real-time live wallet/orders refresh (ultra-fast 300ms polling when invoice is open on pending order, or 1.2s for pending orders)
   useEffect(() => {
     if (!store.accessToken || !store.merchant) return;
     const isModalPending = selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status);
     const hasProcessing = (dash?.orders || []).some((o: any) =>
       ["processing", "pending", "incomplete"].includes(o.status),
     );
-    // 500ms if watching a pending invoice directly, 1500ms if there are active processing orders, 15000ms idle
-    const pollInterval = isModalPending ? 500 : hasProcessing ? 1500 : 15000;
+    // 300ms if watching a pending invoice directly, 1200ms if there are active processing orders, 15000ms idle
+    const pollInterval = isModalPending ? 300 : hasProcessing ? 1200 : 15000;
+    let inFlight = false;
     const interval = setInterval(async () => {
-      // If invoice modal is open on an in-progress order, sync it directly in real-time
-      if (selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status)) {
-        try {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        // If invoice modal is open on an in-progress order, sync it directly in real-time
+        if (selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status)) {
           const freshTok = (await getFreshAuthToken()) || store.accessToken;
           if (freshTok) {
             const res = await merchantSyncOrderWithFazerApi(freshTok, {
@@ -241,9 +244,12 @@ function MerchantPage() {
               setSelectedOrder(res.order || { ...selectedOrder, status: res.new_status });
             }
           }
-        } catch {}
+        }
+        await refreshAll(true);
+      } catch {
+      } finally {
+        inFlight = false;
       }
-      refreshAll(true);
     }, pollInterval);
 
     const onFocus = () => refreshAll(true);

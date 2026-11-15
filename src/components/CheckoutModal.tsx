@@ -79,12 +79,15 @@ export default function CheckoutModal({
     }
   }, [open, cart, player.region, player.name]);
 
-  // Real-time automatic polling when order is placed and in processing/pending state (every 500ms)
+  // Real-time automatic polling when order is placed and in processing/pending state (ultra-fast every 300ms)
   useEffect(() => {
     if (!open || step !== "success" || !result?.order_ref) return;
     if (result.status !== "processing" && result.status !== "pending") return;
 
+    let inFlight = false;
     const interval = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const check = await getOrderStatusApi(result.order_ref, accessToken);
         if (check?.found && check.status && check.status !== result.status) {
@@ -99,8 +102,11 @@ export default function CheckoutModal({
                   : prev?.message,
           }));
         }
-      } catch {}
-    }, 500);
+      } catch {
+      } finally {
+        inFlight = false;
+      }
+    }, 300);
 
     return () => clearInterval(interval);
   }, [open, step, result?.order_ref, result?.status, accessToken]);
