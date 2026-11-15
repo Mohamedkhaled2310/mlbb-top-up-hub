@@ -847,7 +847,21 @@ function MerchantPage() {
                                 <span className="text-[10px] text-amber-400 font-normal animate-pulse">● قيد التنفيذ</span>
                               )}
                             </div>
-                            <div className="text-slate-400 text-[11px] truncate">
+                            {/* Recharged package details (e.g. 514 Diamonds / 429 💎 / Weekly Pass) */}
+                            {Array.isArray(o.items) && o.items.length > 0 && (
+                              <div className="text-xs font-semibold text-purple-200 truncate mt-0.5 flex items-center gap-1">
+                                <Package className="w-3 h-3 text-purple-400 shrink-0" />
+                                <span className="truncate">
+                                  {o.items.map((it: any) => `${it.qty > 1 ? `${it.qty}x ` : ""}${it.name}`).join(" + ")}
+                                </span>
+                                {o.items.some((it: any) => Number(it.diamonds) > 0) && (
+                                  <span className="text-emerald-400 font-mono text-[10px] shrink-0 font-bold">
+                                    ({o.items.reduce((s: number, it: any) => s + (Number(it.diamonds || 0) + Number(it.bonus_diamonds || 0)) * (it.qty || 1), 0)} 💎)
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div className="text-slate-400 text-[11px] truncate mt-0.5">
                               ID: {o.player_id} {o.zone_id ? `(${o.zone_id})` : ""} • <span className="uppercase text-slate-300">{o.game_id}</span>
                             </div>
                           </div>
@@ -998,6 +1012,20 @@ function MerchantPage() {
                   <span className="text-cyan-300 font-bold">{selectedOrder.order_ref}</span>
                   <CopyButton text={selectedOrder.order_ref} />
                 </div>
+                {/* Quick package summary pill in invoice header */}
+                {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 && (
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-[11px] text-purple-200 font-semibold">
+                      <Package className="w-3 h-3 text-purple-400" />
+                      <span>{selectedOrder.items.map((it: any) => `${it.qty > 1 ? `${it.qty}x ` : ""}${it.name}`).join(" + ")}</span>
+                    </span>
+                    {selectedOrder.items.some((it: any) => Number(it.diamonds) > 0) && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-[11px] text-emerald-300 font-mono font-bold">
+                        💎 {selectedOrder.items.reduce((s: number, it: any) => s + (Number(it.diamonds || 0) + Number(it.bonus_diamonds || 0)) * (it.qty || 1), 0)} جوهرة
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1055,6 +1083,62 @@ function MerchantPage() {
                 )}
               </div>
             </div>
+
+            {/* Recharged Packages & Diamonds Card */}
+            {Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0 && (
+              <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-3.5 mb-4 space-y-2 text-xs">
+                <div className="text-[11px] font-bold text-purple-300 border-b border-purple-800/40 pb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-purple-400" />
+                    <span>الباقات المشحونة (تفاصيل الشحنة والجواهر)</span>
+                  </span>
+                  {selectedOrder.items.some((it: any) => Number(it.diamonds) > 0) && (
+                    <span className="font-mono text-emerald-400 font-bold text-xs">
+                      إجمالي: {selectedOrder.items.reduce((s: number, it: any) => s + (Number(it.diamonds || 0) + Number(it.bonus_diamonds || 0)) * (it.qty || 1), 0)} جوهرة 💎
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  {selectedOrder.items.map((it: any, idx: number) => {
+                    const itemDiamonds = (Number(it.diamonds || 0) + Number(it.bonus_diamonds || 0)) * (it.qty || 1);
+                    return (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                        <div className="min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span className="text-purple-300 font-mono">{it.qty}x</span>
+                            <span>{it.name}</span>
+                          </div>
+                          {itemDiamonds > 0 ? (
+                            <div className="text-[11px] text-emerald-400 font-mono mt-0.5 font-semibold flex items-center gap-1">
+                              <span>💎 {itemDiamonds} جوهرة</span>
+                              {it.bonus_diamonds > 0 && (
+                                <span className="text-amber-300 text-[10px] mr-1">(بونص مضاعف: +{it.bonus_diamonds * (it.qty || 1)})</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-cyan-300 mt-0.5">
+                              بطاقة / تصريح معتمد
+                            </div>
+                          )}
+                          {it.is_composite && Array.isArray(it.components) && it.components.length > 0 && (
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              تجميعة: {it.components.map((c: any) => `${c.diamonds}💎`).join(" + ")}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-left shrink-0 font-mono">
+                          <span className="font-bold text-emerald-300 text-xs">
+                            {(Number(it.unit_price_egp) * (it.qty || 1)).toFixed(3)} ج.م
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Invoice Breakdown Details */}
             <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-3.5 mb-4 space-y-2 text-xs">
@@ -1144,7 +1228,16 @@ function MerchantPage() {
                       : selectedOrder.status === "failed"
                         ? "فشلت وتم استرداد الرصيد ❌"
                         : "قيد المعالجة في السيرفر ⏳";
-                  const text = `🧾 فاتورة شحن METO STORE\nرقم الطلب: ${selectedOrder.order_ref}\nاللاعب: ${selectedOrder.player_id}${selectedOrder.zone_id ? ` (${selectedOrder.zone_id})` : ""}\nاللعبة: ${(selectedOrder.game_id || "MLBB").toUpperCase()}\nالمبلغ: ${selectedOrder.total_egp} ج.م\nالحالة: ${statusDesc}\nhttps://meto-three.vercel.app`;
+                  const itemsSummary =
+                    Array.isArray(selectedOrder.items) && selectedOrder.items.length > 0
+                      ? selectedOrder.items
+                          .map((it: any) => {
+                            const dia = (Number(it.diamonds || 0) + Number(it.bonus_diamonds || 0)) * (it.qty || 1);
+                            return `${it.qty > 1 ? `${it.qty}x ` : ""}${it.name}${dia > 0 ? ` (${dia} جوهرة 💎)` : ""}`;
+                          })
+                          .join(" + ")
+                      : "شحن رصيد";
+                  const text = `🧾 فاتورة شحن METO STORE\nرقم الطلب: ${selectedOrder.order_ref}\nاللاعب: ${selectedOrder.player_id}${selectedOrder.zone_id ? ` (${selectedOrder.zone_id})` : ""}\nاللعبة: ${(selectedOrder.game_id || "MLBB").toUpperCase()}\nالباقة المشحونة: ${itemsSummary}\nالمبلغ: ${selectedOrder.total_egp} ج.م\nالحالة: ${statusDesc}\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                 }}
               >

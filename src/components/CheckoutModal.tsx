@@ -777,6 +777,20 @@ export default function CheckoutModal({
                   <CopyButton text={player.id} />
                 </div>
               </div>
+              {/* Package and Diamonds Details */}
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <span className="text-slate-400">الباقة المشحونة:</span>
+                <div className="text-right">
+                  <div className="font-semibold text-purple-300">
+                    {cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن"}
+                  </div>
+                  {cart.some((c) => Number(c.package.diamonds) > 0) && (
+                    <div className="text-emerald-400 font-mono text-[11px] font-bold">
+                      💎 {cart.reduce((s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty, 0)} جوهرة
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">اللعبة والمنطقة:</span>
                 <span className="font-semibold text-slate-200">
@@ -799,7 +813,10 @@ export default function CheckoutModal({
                   const finalPaid = formatDecimals3(typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total);
                   const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
                   const statusText = result?.status === "processing" ? "قيد التنفيذ والمعالجة ⏳" : "تم الشحن بنجاح ✅";
-                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
+                  const totalDia = cart.reduce((s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty, 0);
+                  const pkgSummary = cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن";
+                  const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
+                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaid} ج.م\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                 }}
               >
