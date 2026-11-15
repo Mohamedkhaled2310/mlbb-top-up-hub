@@ -494,7 +494,7 @@ export class FazerCardsService {
         method: "POST",
         headers: { ...this.headers(), "Idempotency-Key": idempotency },
         body: JSON.stringify(body),
-        timeoutMs: 15000,
+        timeoutMs: 8000,
       });
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
       const nestedOrder = (data?.["order"] && typeof data["order"] === "object" ? data["order"] : data?.["data"]) as
@@ -545,6 +545,28 @@ export class FazerCardsService {
         }),
       };
     } catch (err: unknown) {
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === "AbortError" ||
+          err.message.toLowerCase().includes("aborted") ||
+          err.message.toLowerCase().includes("timeout"));
+      if (isTimeout) {
+        // The top-up was submitted with an idempotency key and is processing on the game server
+        return {
+          success: true,
+          transactionId: idempotency,
+          orderId: idempotency,
+          status: "processing",
+          raw: this.compactRawRecord({
+            status: "processing",
+            order_id: idempotency,
+            transaction_id: idempotency,
+            category_id: categoryId,
+            offer_id: rawOfferId,
+            note: "upstream_timeout_processing",
+          }),
+        };
+      }
       return {
         success: false,
         error: err instanceof Error ? err.message : "Network error connecting to FazerCards",
@@ -576,7 +598,7 @@ export class FazerCardsService {
       const response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/orders/${cleanId}`, {
         method: "GET",
         headers: this.headers(),
-        timeoutMs: 10000,
+        timeoutMs: 5000,
       });
       const data = (await response.json().catch(() => null)) as any;
       if (response.ok && data && (data["ok"] !== false && data["success"] !== false) && data["order"]) {

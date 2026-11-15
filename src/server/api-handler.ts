@@ -17,6 +17,7 @@ import {
   adminUpdatePackagePrice,
   getMerchantDashboard,
   getMyProfile,
+  getOrderStatus,
   getPublicAuthConfig,
   getStoreData,
   loginWithPasswordServer,
@@ -199,6 +200,18 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       return json(result, result.success ? 200 : 400);
     } catch (e: any) {
       return json({ success: false, error: e?.message || "Order failed" }, 500);
+    }
+  }
+
+  // Order status check (polling & network recovery)
+  if (path === "/api/orders/status" && request.method === "GET") {
+    try {
+      const target = url.searchParams.get("order_ref") || url.searchParams.get("id");
+      if (!target) return json({ found: false, error: "معرف الطلب مطلوب" }, 400);
+      const data = await getOrderStatus(target);
+      return json(data);
+    } catch (e: any) {
+      return json({ found: false, error: e?.message || "Order not found" }, 404);
     }
   }
 

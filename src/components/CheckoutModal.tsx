@@ -21,7 +21,7 @@ import { getCountryCurrencyInfo } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
-import { submitOrderApi, validatePlayerApi } from "@/lib/api-client";
+import { getOrderStatusApi, submitOrderApi, validatePlayerApi } from "@/lib/api-client";
 import { CopyButton } from "./CopyButton";
 import { saveRecentAccount } from "../lib/recent-players";
 import type { CartItem } from "@/types/store";
@@ -217,6 +217,8 @@ export default function CheckoutModal({
       gameId: currentGame,
     });
 
+    const clientOrderId = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
     try {
       let effectiveToken = accessToken;
       if (isMerchant) {
@@ -229,15 +231,47 @@ export default function CheckoutModal({
       }
 
       const body = {
+        clientOrderId,
         playerId: player.id.trim(),
         zoneId: (player.zoneId || "").trim(),
+        playerName: verifiedPlayerName || player.name || undefined,
+        accountRegion: currentRegion,
         gameId: currentGame,
         region: currentRegion,
         items: cart.map((c) => ({ offerId: c.package.offerId, qty: c.qty })),
         asMerchant: isMerchant,
       };
 
-      const res = await submitOrderApi(body, effectiveToken);
+      let res: any;
+      try {
+        res = await submitOrderApi(body, effectiveToken);
+      } catch (fetchErr: any) {
+        // If network disconnected or timed out, check if the server processed the order
+        try {
+          await new Promise((r) => setTimeout(r, 1200));
+          const statusCheck = await getOrderStatusApi(clientOrderId, effectiveToken);
+          if (statusCheck?.found) {
+            res = {
+              success: statusCheck.status === "success" || statusCheck.status === "processing",
+              order_ref: statusCheck.order_ref,
+              status: statusCheck.status,
+              total_egp: statusCheck.total_egp,
+              game_id: statusCheck.game_id,
+              player_name: verifiedPlayerName || player.id.trim(),
+              error: statusCheck.error_message,
+              message:
+                statusCheck.status === "success"
+                  ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
+                  : "تم استلام الطلب وهو قيد المعالجة بالسيرفر حالياً ⏳",
+            };
+          } else {
+            throw fetchErr;
+          }
+        } catch {
+          throw fetchErr;
+        }
+      }
+
       setResult(res);
 
       if (typeof res?.total_egp === "number" && res.total_egp > 0) {
@@ -260,7 +294,11 @@ export default function CheckoutModal({
         }
       }
     } catch (e: any) {
-      setResult({ error: e?.message || "حدث خطأ غير متوقع أثناء معالجة الشحن" });
+      const isFetchErr = String(e?.message || "").toLowerCase().includes("fetch");
+      const friendlyMsg = isFetchErr
+        ? "تعذر التأكد من حالة الطلب بسبب انقطاع مؤقت في الشبكة. يرجى مراجعة سجل الطلبات قبل إعادة المحاولة."
+        : e?.message || "حدث خطأ غير متوقع أثناء معالجة الشحن";
+      setResult({ error: friendlyMsg, isNetworkTimeout: isFetchErr });
       setStep("failed");
     } finally {
       submitted.current = false;
@@ -744,9 +782,14 @@ export default function CheckoutModal({
                 {result?.error || result?.message || "حدث خطأ أثناء معالجة الشحن، يرجى التحقق من صحة المعرف والسيرفر."}
               </div>
             </div>
-            {isMerchant && (
+            {isMerchant && !result?.isNetworkTimeout && (
               <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 text-xs text-emerald-300 max-w-md mx-auto">
                 ✓ لم يتم خصم أي رصيد من محفظتك / تم الاسترداد التلقائي الفوري بالكامل.
+              </div>
+            )}
+            {isMerchant && result?.isNetworkTimeout && (
+              <div className="bg-amber-950/40 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-300 max-w-md mx-auto">
+                ⚠️ يرجى التحقق من سجل طلباتك ورصيد المحفظة قبل تكرار المحاولة لتجنب الشحن المزدوج.
               </div>
             )}
             <div className="flex gap-2 max-w-sm mx-auto pt-2">

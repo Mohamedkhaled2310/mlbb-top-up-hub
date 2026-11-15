@@ -939,6 +939,45 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   const gameId = String(body?.gameId || "mlbb");
   const region = String(body?.region || "").trim() || "global";
   const asMerchant = Boolean(body?.asMerchant);
+  const clientOrderId =
+    typeof body?.clientOrderId === "string" && body.clientOrderId.trim().startsWith("ORD-")
+      ? body.clientOrderId.trim()
+      : typeof body?.orderRef === "string" && body.orderRef.trim().startsWith("ORD-")
+        ? body.orderRef.trim()
+        : null;
+
+  // Idempotency: If this client order ID was already processed, return existing order to avoid duplicate charges
+  if (clientOrderId) {
+    const { data: existingOrder } = await sb
+      .from("orders")
+      .select("*")
+      .eq("order_ref", clientOrderId)
+      .maybeSingle();
+
+    if (existingOrder) {
+      return {
+        success:
+          existingOrder.status === "success" ||
+          existingOrder.status === "processing" ||
+          existingOrder.status === "incomplete",
+        order_ref: existingOrder.order_ref,
+        status: existingOrder.status,
+        total_egp: Number(existingOrder.total_egp || 0),
+        game_id: existingOrder.game_id,
+        region: existingOrder.region,
+        transaction_ids: (existingOrder.fazer_transaction_id || "").split(",").filter(Boolean),
+        player_name: body?.playerName || `ID #${playerId}`,
+        account_region: existingOrder.account_region,
+        error: existingOrder.error_message,
+        message:
+          existingOrder.status === "success"
+            ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
+            : existingOrder.status === "processing"
+              ? "الطلب قيد المعالجة بالسيرفر حالياً ⏳"
+              : existingOrder.error_message || "تعذر إكمال الطلب.",
+      };
+    }
+  }
 
   if (!playerId) return { success: false, error: "يرجى إدخال معرف اللاعب" };
   if (!items.length) return { success: false, error: "يرجى اختيار باقة واحدة على الأقل" };
@@ -986,6 +1025,16 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   }
   const effectiveGameId = itemGames[0] || gameId;
 
+  // Strict regex format validation
+  if (effectiveGameId === "mlbb") {
+    if (!/^\d{4,15}$/.test(playerId)) {
+      return { success: false, error: "معرف اللاعب (Player ID) في MLBB يجب أن يكون أرقاماً فقط (4-15 رقم)" };
+    }
+    if (zoneId && !/^\d{2,8}$/.test(zoneId)) {
+      return { success: false, error: "رقم السيرفر (Zone ID) غير صالح" };
+    }
+  }
+
   const { data: settingsRow } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
   const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
 
@@ -1000,23 +1049,33 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     }
   }
 
-  const firstPkg = byId.get(offerIds[0]!);
-  const validationCategoryId =
-    firstPkg?.raw && typeof firstPkg.raw === "object" && typeof firstPkg.raw.fazer_category_id === "string"
-      ? firstPkg.raw.fazer_category_id
-      : undefined;
+  let playerName =
+    typeof body?.playerName === "string" && body.playerName.trim() ? body.playerName.trim() : null;
+  let accRegion: string | null =
+    typeof body?.accountRegion === "string" && body.accountRegion.trim() ? body.accountRegion.trim() : null;
 
-  const validation = await FazerCardsService.validatePlayer(
-    playerId,
-    zoneId,
-    effectiveGameId,
-    region === "global" || region === "all" ? undefined : region,
-    validationCategoryId,
-  );
-  if (!validation.valid) {
-    return { success: false, error: validation.error || "تعذر التحقق من معرف اللاعب" };
+  // If client did not provide pre-verified player name, run fast validation
+  if (!playerName) {
+    const firstPkg = byId.get(offerIds[0]!);
+    const validationCategoryId =
+      firstPkg?.raw && typeof firstPkg.raw === "object" && typeof firstPkg.raw.fazer_category_id === "string"
+        ? firstPkg.raw.fazer_category_id
+        : undefined;
+
+    const validation = await FazerCardsService.validatePlayer(
+      playerId,
+      zoneId,
+      effectiveGameId,
+      region === "global" || region === "all" ? undefined : region,
+      validationCategoryId,
+    );
+    if (!validation.valid && !validation.fallback) {
+      return { success: false, error: validation.error || "تعذر التحقق من معرف اللاعب" };
+    }
+    playerName = validation.username || `ID #${playerId}`;
+    accRegion = validation.accountRegion || null;
   }
-  const accRegion = validation.accountRegion || null;
+
   if (
     accRegion &&
     region !== "global" &&
@@ -1087,7 +1146,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   if (!Number.isFinite(total) || total <= 0) {
     return { success: false, error: "قيمة الطلب غير صحيحة" };
   }
-  const orderRef = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  const orderRef = clientOrderId || `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
   const { data: order, error: oerr } = await sb
     .from("orders")
@@ -1368,7 +1427,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     refunded_egp: asMerchant && failedAmount > 0 ? failedAmount : 0,
     balance_egp: updatedBalance,
     transaction_ids: txIds,
-    player_name: validation.username,
+    player_name: playerName || `ID #${playerId}`,
     account_region: accRegion,
     error: lastErr,
     message: asMerchant
@@ -1510,15 +1569,17 @@ export async function autoSyncPendingOrders(specificOrderId?: string): Promise<{
       return { synced: 0, updated: 0 };
     }
 
-    let updatedCount = 0;
-    for (const ord of pendingOrders) {
-      try {
-        const res = await syncSingleOrderInternal(sb, ord);
-        if (res.updated) updatedCount++;
-      } catch (err) {
-        console.error(`autoSyncPendingOrders error on ${ord.id}:`, err);
-      }
-    }
+    const syncResults = await Promise.all(
+      pendingOrders.map(async (ord: any) => {
+        try {
+          return await syncSingleOrderInternal(sb, ord);
+        } catch (err) {
+          console.error(`autoSyncPendingOrders error on ${ord.id}:`, err);
+          return null;
+        }
+      })
+    );
+    const updatedCount = syncResults.filter((r) => r?.updated).length;
     return { synced: pendingOrders.length, updated: updatedCount };
   } catch (err) {
     console.error("autoSyncPendingOrders unexpected error:", err);
@@ -1603,12 +1664,14 @@ export async function getMerchantDashboard(token: string) {
     .order("created_at", { ascending: false })
     .limit(100);
 
-  // Auto-sync any in-flight pending/processing orders live with the game server
-  const hasProcessing = (orders || []).some((o: any) => ["pending", "processing"].includes(o.status));
-  if (hasProcessing && !process.env["VITEST"]) {
+  // Auto-sync any in-flight pending/processing orders for this merchant
+  const processingOrders = (orders || []).filter((o: any) => ["pending", "processing"].includes(o.status));
+  if (processingOrders.length > 0 && !process.env["VITEST"]) {
     try {
-      const syncRes = await autoSyncPendingOrders();
-      if (syncRes.updated > 0) {
+      const syncResults = await Promise.all(
+        processingOrders.slice(0, 5).map((ord: any) => syncSingleOrderInternal(sb, ord).catch(() => null))
+      );
+      if (syncResults.some((r) => r?.updated)) {
         const [{ data: freshOrders }, { data: freshMerchant }] = await Promise.all([
           sb.from("orders").select("*").eq("merchant_id", merchant.id).order("created_at", { ascending: false }).limit(100),
           sb.from("merchant_accounts").select("*").eq("user_id", user.id).maybeSingle(),
@@ -2538,4 +2601,33 @@ export async function adminUpdatePackagePrice(
   }
 
   return { success: true, package: updated };
+}
+
+export async function getOrderStatus(targetRefOrId: string) {
+  const sb = getAdminClient() as any;
+  const clean = String(targetRefOrId || "").trim();
+  if (!clean) return { found: false };
+
+  const { data: order } = await sb
+    .from("orders")
+    .select("*")
+    .or(`order_ref.eq.${clean},id.eq.${clean}`)
+    .maybeSingle();
+
+  if (!order) return { found: false };
+
+  return {
+    found: true,
+    id: order.id,
+    order_ref: order.order_ref,
+    status: order.status,
+    total_egp: Number(order.total_egp || 0),
+    game_id: order.game_id,
+    player_id: order.player_id,
+    region: order.region,
+    account_region: order.account_region,
+    error_message: order.error_message,
+    created_at: order.created_at,
+    delivered_at: order.delivered_at,
+  };
 }

@@ -69,6 +69,17 @@ export async function submitOrderApi(data: any, token?: string | null): Promise<
   return await res.json();
 }
 
+export async function getOrderStatusApi(orderRefOrId: string, token?: string | null): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`/api/orders/status?order_ref=${encodeURIComponent(orderRefOrId)}`, {
+    method: "GET",
+    headers,
+    cache: "no-store",
+  });
+  return await res.json().catch(() => ({ found: false }));
+}
+
 export async function getMerchantDashboardApi(token: string): Promise<any> {
   const res = await fetch("/api/merchant/dashboard", {
     headers: { Authorization: `Bearer ${token}` },
