@@ -176,14 +176,15 @@ function MerchantPage() {
       if (!activeToken) return;
       if (!silent) setRefreshing(true);
       try {
-        await Promise.all([loadDashboard(activeToken), loadStore()]);
+        // Fast-path: Only refresh merchant wallet & orders. Packages do not change every second!
+        await loadDashboard(activeToken);
       } catch {
         // Keep existing state on transient errors
       } finally {
         if (!silent) setRefreshing(false);
       }
     },
-    [store.accessToken, loadDashboard, loadStore],
+    [store.accessToken, loadDashboard],
   );
 
   const syncOrder = async (orderId: string) => {

@@ -381,7 +381,15 @@ export async function persistFazerAccountBalance(account: {
   }
 }
 
+// Global server cache for store packages to serve /api/store instantly (< 10ms)
+let STORE_DATA_CACHE: { data: any; expiresAt: number } | null = null;
+
 export async function getStoreData(gameId?: string) {
+  // If no game filter, use cached store payload if fresher than 60 seconds
+  if (!gameId && STORE_DATA_CACHE && STORE_DATA_CACHE.expiresAt > Date.now()) {
+    return STORE_DATA_CACHE.data;
+  }
+
   const sb = getAdminClient() as any;
   const [{ data: initialSettingsRow }, fxResult, { data: fxConfigRow }] = await Promise.all([
     sb.from("store_settings").select("*").eq("id", 1).maybeSingle(),
@@ -581,7 +589,7 @@ export async function getStoreData(gameId?: string) {
     return (a.costUsd || 0) - (b.costUsd || 0);
   });
 
-  return {
+  const payload = {
     success: true,
     packages,
     settings: {
@@ -598,6 +606,15 @@ export async function getStoreData(gameId?: string) {
       fx_updated_at: fxResult?.updatedAt ?? null,
     },
   };
+
+  if (!gameId) {
+    STORE_DATA_CACHE = {
+      data: payload,
+      expiresAt: Date.now() + 60 * 1000, // 60 seconds fast in-memory cache
+    };
+  }
+
+  return payload;
 }
 
 export async function syncFazerPackagesAndBalance(opts: { token?: string | null | undefined; secret?: string | null | undefined }) {
