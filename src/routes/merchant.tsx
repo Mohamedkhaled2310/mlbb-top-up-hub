@@ -271,15 +271,22 @@ function MerchantPage() {
 
       const authRes = await loginWithPasswordApi(email, password);
       if (authRes?.success && authRes?.accessToken) {
-        const d = await loadDashboard(
-          authRes.accessToken,
-          {
-            refreshToken: authRes.refreshToken,
-            expiresAt: authRes.expiresAt,
-            email: authRes.user?.email,
-          },
-          rememberMe,
-        );
+        const sessionMeta = {
+          refreshToken: authRes.refreshToken,
+          expiresAt: authRes.expiresAt,
+          email: authRes.user?.email,
+        };
+
+        if (authRes.merchant) {
+          // Immediately authenticate and switch to the merchant dashboard!
+          store.setAuth(authRes.accessToken, authRes.profile, authRes.merchant, sessionMeta, rememberMe);
+          toast({ title: "تم تسجيل الدخول بنجاح" });
+          // Fetch full dashboard data in background
+          loadDashboard(authRes.accessToken, sessionMeta, rememberMe).catch(() => {});
+          return;
+        }
+
+        const d = await loadDashboard(authRes.accessToken, sessionMeta, rememberMe);
         if (!d?.merchant) {
           toast({
             title: "الحساب غير مفعل كتاجر",

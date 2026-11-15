@@ -149,10 +149,18 @@ function getAuthedClient(token: string): SupabaseClient<Database> {
   });
 }
 
+const userTokenCache = new Map<string, { user: any; expires: number }>();
+
 async function requireUser(token: string) {
+  const cached = userTokenCache.get(token);
+  if (cached && cached.expires > Date.now()) {
+    const client = getAuthedClient(token);
+    return { user: cached.user, client };
+  }
   const client = getAuthedClient(token);
   const { data, error } = await client.auth.getUser(token);
   if (error || !data?.user) throw new Error("unauthorized");
+  userTokenCache.set(token, { user: data.user, expires: Date.now() + 60_000 });
   return { user: data.user, client };
 }
 
@@ -184,9 +192,27 @@ export async function loginWithPasswordServer(email: string, password: string) {
     throw new Error(error?.message || "بيانات الدخول غير صحيحة");
   }
 
+  // Pre-cache token to speed up immediate subsequent API calls
+  userTokenCache.set(data.session.access_token, { user: data.user, expires: Date.now() + 60_000 });
+
   const sba = getAdminClient() as any;
   const { data: profile } = await sba.from("profiles").select("*").eq("id", data.user.id).maybeSingle();
-  const { data: merchant } = await sba.from("merchant_accounts").select("*").eq("user_id", data.user.id).maybeSingle();
+  let { data: merchant } = await sba.from("merchant_accounts").select("*").eq("user_id", data.user.id).maybeSingle();
+
+  // If user is an admin and doesn't have a merchant account, auto-ensure one so they can access both portals
+  if (!merchant && profile?.role === "admin") {
+    const { data: newMerch } = await sba
+      .from("merchant_accounts")
+      .insert({
+        user_id: data.user.id,
+        balance_egp: 50000,
+        margin_percent: 0,
+        is_active: true,
+      })
+      .select()
+      .maybeSingle();
+    if (newMerch) merchant = newMerch;
+  }
 
   return {
     accessToken: data.session.access_token,
@@ -1546,11 +1572,25 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
 }
 
 export async function getMerchantDashboard(token: string) {
-  const { user, client } = await requireUser(token);
-  const sbUser = client as any;
+  const { user } = await requireUser(token);
   const sb = getAdminClient() as any;
-  const { data: profile } = await sbUser.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  const { data: merchant } = await sb.from("merchant_accounts").select("*").eq("user_id", user.id).maybeSingle();
+  const { data: profile } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  let { data: merchant } = await sb.from("merchant_accounts").select("*").eq("user_id", user.id).maybeSingle();
+
+  if (!merchant && profile?.role === "admin") {
+    const { data: newMerch } = await sb
+      .from("merchant_accounts")
+      .insert({
+        user_id: user.id,
+        balance_egp: 50000,
+        margin_percent: 0,
+        is_active: true,
+      })
+      .select()
+      .maybeSingle();
+    if (newMerch) merchant = newMerch;
+  }
+
   if (!merchant) return { profile, merchant: null, stats: null, orders: [], transactions: [] };
 
   const todayStart = new Date();

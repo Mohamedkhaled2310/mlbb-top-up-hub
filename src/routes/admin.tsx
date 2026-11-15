@@ -473,6 +473,9 @@ function AdminPage() {
 
       const authRes = await loginWithPasswordApi(email, password);
       if (authRes?.success && authRes?.accessToken) {
+        if (authRes.profile?.role && authRes.profile.role !== "admin") {
+          throw new Error("هذا الحساب مسجل كتاجر وليس كمسؤول (أدمن). يمكنك تسجيل الدخول عبر بوابة التاجر (/merchant).");
+        }
         token = authRes.accessToken;
         profileData = authRes.profile;
         merchantData = authRes.merchant;
@@ -481,26 +484,39 @@ function AdminPage() {
           expiresAt: authRes.expiresAt,
           email: authRes.user?.email,
         };
+        const authToken = token;
+        if (!authToken) throw new Error("لم يتم إنشاء جلسة دخول");
+        // Authenticate immediately and open admin panel!
+        store.setAuth(authToken, profileData, merchantData, sessionMeta, rememberMe);
+        setIsAdmin(true);
+        refreshStatus();
+        toast({ title: "تم الدخول كأدمن بنجاح" });
+
+        // Load tables in background
+        loadMerchants(authToken, 1, "").catch(() => {});
+        loadOrders(authToken).catch(() => {});
+        return;
       } else if (supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         token = data.session?.access_token;
+        const authToken = token;
+        if (!authToken) throw new Error("لم يتم إنشاء جلسة دخول");
         sessionMeta = {
           refreshToken: data.session?.refresh_token,
           expiresAt: data.session?.expires_at,
           email: data.session?.user?.email,
         };
+        store.setAuth(authToken, profileData, merchantData, sessionMeta, rememberMe);
+        setIsAdmin(true);
+        refreshStatus();
+        toast({ title: "تم الدخول كأدمن بنجاح" });
+        loadMerchants(authToken, 1, "").catch(() => {});
+        loadOrders(authToken).catch(() => {});
+        return;
       } else {
         throw new Error(authRes?.error || "بيانات الدخول غير صحيحة");
       }
-
-      if (!token) throw new Error("لم يتم إنشاء جلسة دخول");
-      await loadMerchants(token, 1, "");
-      await loadOrders(token);
-      store.setAuth(token, profileData, merchantData, sessionMeta, rememberMe);
-      setIsAdmin(true);
-      refreshStatus();
-      toast({ title: "تم الدخول كأدمن بنجاح" });
     } catch (e: any) {
       setIsAdmin(false);
       toast({ title: "فشل الدخول أو غير مصرح", description: e?.message || "بيانات الدخول غير صحيحة" });

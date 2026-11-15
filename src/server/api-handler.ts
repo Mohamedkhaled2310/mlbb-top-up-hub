@@ -71,7 +71,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
   if (path === "/api/auth/login" && request.method === "POST") {
     if (!process.env["VITEST"]) {
       const ip = getClientIp(request);
-      const rl = checkRateLimit(`auth:${ip}`, 8, 60_000);
+      const rl = checkRateLimit(`auth:${ip}`, 30, 60_000);
       if (!rl.allowed) {
         return rateLimitResponse(rl.retryAfterSeconds, "محاولات تسجيل دخول كثيرة، يرجى الانتظار دقيقة والمحاولة ثانية.");
       }
