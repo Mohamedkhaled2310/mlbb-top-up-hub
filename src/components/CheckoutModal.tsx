@@ -9,6 +9,7 @@ import {
   Package,
   Share2,
   ShieldCheck,
+  UserCheck,
   X,
   XCircle,
   Zap,
@@ -20,7 +21,7 @@ import { getCountryCurrencyInfo } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
-import { submitOrderApi } from "@/lib/api-client";
+import { submitOrderApi, validatePlayerApi } from "@/lib/api-client";
 import { CopyButton } from "./CopyButton";
 import { saveRecentAccount } from "../lib/recent-players";
 import type { CartItem } from "@/types/store";
@@ -53,6 +54,9 @@ export default function CheckoutModal({
   const [paidTotal, setPaidTotal] = useState<number>(0);
   const [summaryGameId, setSummaryGameId] = useState<string>("mlbb");
   const [summaryRegion, setSummaryRegion] = useState<string>("global");
+  const [validating, setValidating] = useState(false);
+  const [verifiedPlayerName, setVerifiedPlayerName] = useState<string | null>(player.name || null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const submitted = useRef(false);
   const latestRegionRef = useRef(player.region || "");
   latestRegionRef.current = player.region || "";
@@ -62,6 +66,9 @@ export default function CheckoutModal({
       setStep("form");
       setResult(null);
       setPaidTotal(0);
+      setVerifiedPlayerName(player.name || null);
+      setValidationError(null);
+      setValidating(false);
       const pkgServer =
         (Array.isArray(cart[0]?.package.regions) && cart[0]?.package.regions[0]) ||
         latestRegionRef.current ||
@@ -70,7 +77,7 @@ export default function CheckoutModal({
       setRegion(pkgServer.toLowerCase());
       submitted.current = false;
     }
-  }, [open, cart, player.region]);
+  }, [open, cart, player.region, player.name]);
 
   if (!open) return null;
 
@@ -117,6 +124,66 @@ export default function CheckoutModal({
   const totalUsd = round3(cart.reduce((sum, item) => sum + item.qty * getItemUnitPriceUsd(item), 0));
   const total = totalEgp;
 
+  const handleValidatePlayer = async () => {
+    const rawId = (player.id || "").trim();
+    const rawZone = (player.zoneId || "").trim();
+    if (!rawId) {
+      toast({ title: "معرف اللاعب مطلوب", description: "يرجى كتابة الـ Player ID أولاً لفحصه" });
+      return;
+    }
+    if (needsZone && !rawZone) {
+      toast({ title: "رقم السيرفر مطلوب", description: "يرجى كتابة معرف السيرفر (Zone ID) لفحص الحساب" });
+      return;
+    }
+
+    setValidating(true);
+    setValidationError(null);
+    try {
+      const categoryId = cart[0]?.package.fazerCategoryId;
+      const res = await validatePlayerApi(
+        rawId,
+        rawZone,
+        activeGameId,
+        region || undefined,
+        categoryId,
+      );
+
+      if (res.valid) {
+        const username = res.username || "لاعب معتمد";
+        const accRegion = res.accountRegion || region || "global";
+        setVerifiedPlayerName(username);
+        setPlayer({ ...player, name: username, region: accRegion });
+        if (res.accountRegion) {
+          setRegion(res.accountRegion);
+        }
+        saveRecentAccount({
+          id: rawId,
+          zoneId: rawZone,
+          name: username,
+          region: accRegion,
+          gameId: activeGameId,
+        });
+        toast({
+          title: "تم التحقق من الحساب بنجاح ✅",
+          description: `اسم اللاعب: ${username}${res.accountRegion ? ` • سيرفر: ${getServerLabel(res.accountRegion, activeGameId)}` : ""}`,
+        });
+      } else {
+        setVerifiedPlayerName(null);
+        setValidationError(res.error || "تعذر التحقق من صحة المعرف، يرجى مراجعة الـ ID والسيرفر.");
+        toast({
+          title: "تعذر التحقق من الحساب ❌",
+          description: res.error || "تأكد من كتابة الـ ID والسيرفر بشكل صحيح",
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      setVerifiedPlayerName(null);
+      setValidationError(e?.message || "حدث خطأ أثناء فحص بيانات الحساب");
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const submit = async () => {
     if (submitted.current) return;
     if (!player.id.trim()) {
@@ -145,7 +212,7 @@ export default function CheckoutModal({
     saveRecentAccount({
       id: player.id.trim(),
       zoneId: player.zoneId?.trim(),
-      name: player.name || player.id.trim(),
+      name: verifiedPlayerName || player.name || player.id.trim(),
       region: currentRegion,
       gameId: currentGame,
     });
@@ -234,25 +301,96 @@ export default function CheckoutModal({
         {/* Form View (Direct Fast Checkout) */}
         {step === "form" && (
           <div className="space-y-4 pt-1">
-            <div>
-              <label className="text-xs sm:text-sm text-slate-300 font-medium">معرف اللاعب (Player ID) *</label>
-              <Input
-                value={player.id}
-                onChange={(e) => setPlayer({ ...player, id: e.target.value })}
-                placeholder="مثال: 12345678"
-                className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
-              />
-            </div>
-
-            {needsZone && (
+            {/* Player ID & Server ID inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs sm:text-sm text-slate-300 font-medium">معرف السيرفر (Zone ID) *</label>
+                <label className="text-xs sm:text-sm text-slate-300 font-medium">معرف اللاعب (Player ID) *</label>
                 <Input
-                  value={player.zoneId || ""}
-                  onChange={(e) => setPlayer({ ...player, zoneId: e.target.value })}
-                  placeholder="مثال: 2024"
+                  value={player.id}
+                  onChange={(e) => {
+                    setPlayer({ ...player, id: e.target.value, name: undefined });
+                    setVerifiedPlayerName(null);
+                    setValidationError(null);
+                  }}
+                  placeholder="مثال: 12345678"
                   className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
                 />
+              </div>
+
+              {needsZone ? (
+                <div>
+                  <label className="text-xs sm:text-sm text-slate-300 font-medium">معرف السيرفر (Zone ID) *</label>
+                  <Input
+                    value={player.zoneId || ""}
+                    onChange={(e) => {
+                      setPlayer({ ...player, zoneId: e.target.value, name: undefined });
+                      setVerifiedPlayerName(null);
+                      setValidationError(null);
+                    }}
+                    placeholder="مثال: 2024"
+                    className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {/* Check/Verify Player Info Button */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={validating || !player.id.trim() || (needsZone && !(player.zoneId || "").trim())}
+                onClick={handleValidatePlayer}
+                className="w-full sm:w-auto h-9 px-4 text-xs font-bold gap-2 border-cyan-500/40 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/60 hover:text-white transition-all disabled:opacity-40 rounded-xl"
+              >
+                {validating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                    <span>جاري التحقق من السيرفر...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <span>التحقق من بيانات اللاعب 🔍</span>
+                  </>
+                )}
+              </Button>
+              {verifiedPlayerName && (
+                <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>تم الفحص وتأكيد الحساب</span>
+                </span>
+              )}
+            </div>
+
+            {/* Verified Player Info Card */}
+            {verifiedPlayerName && (
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] text-emerald-400/80 font-medium">اسم اللاعب المسجل في اللعبة:</div>
+                    <div className="text-sm font-extrabold text-white truncate flex items-center gap-1.5">
+                      <span>{verifiedPlayerName}</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                    حساب مؤكد ومطابق ✓
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Error Message */}
+            {validationError && (
+              <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-2.5 flex items-center gap-2 text-xs text-rose-300 animate-in fade-in duration-200">
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="flex-1">{validationError}</span>
               </div>
             )}
 
@@ -468,7 +606,7 @@ export default function CheckoutModal({
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">حساب اللاعب:</span>
                 <div className="flex items-center gap-1.5 font-mono text-white">
-                  <span>{player.name ? `${player.name} (${player.id})` : player.id}</span>
+                  <span>{(verifiedPlayerName || player.name) ? `${verifiedPlayerName || player.name} (${player.id})` : player.id}</span>
                   {player.zoneId && <span className="text-slate-400">({player.zoneId})</span>}
                   <CopyButton text={player.id} />
                 </div>
@@ -576,7 +714,10 @@ export default function CheckoutModal({
                     const pkgSummary =
                       cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن";
                     const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
-                    const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
+                    const receiptPlayer = (verifiedPlayerName || player.name)
+                      ? `${verifiedPlayerName || player.name} (${player.id})`
+                      : player.id;
+                    const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${receiptPlayer}\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                     window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                   }}
                 >
