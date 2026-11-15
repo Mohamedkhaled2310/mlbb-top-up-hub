@@ -163,21 +163,14 @@ export class FazerCardsService {
     url: string,
     init: { method: "GET" | "POST"; headers?: Record<string, string>; body?: string; timeoutMs?: number },
   ): Promise<Response> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 8000);
-    try {
-      const requestInit: RequestInit = {
-        method: init.method,
-        headers: init.headers ?? this.headers(),
-        signal: controller.signal,
-      };
-      if (init.body !== undefined) {
-        requestInit.body = init.body;
-      }
-      return await fetch(url, requestInit);
-    } finally {
-      clearTimeout(timer);
+    const requestInit: RequestInit = {
+      method: init.method,
+      headers: init.headers ?? this.headers(),
+    };
+    if (init.body !== undefined) {
+      requestInit.body = init.body;
     }
+    return await fetch(url, requestInit);
   }
 
   static async checkAccount(): Promise<{

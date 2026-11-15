@@ -278,9 +278,8 @@ export default function CheckoutModal({
       try {
         res = await submitOrderApi(body, effectiveToken);
       } catch (fetchErr: any) {
-        // If network disconnected or timed out, check if the server processed the order
+        // If network error occurred, immediately query status endpoint without delay
         try {
-          await new Promise((r) => setTimeout(r, 1200));
           const statusCheck = await getOrderStatusApi(clientOrderId, effectiveToken);
           if (statusCheck?.found) {
             res = {
