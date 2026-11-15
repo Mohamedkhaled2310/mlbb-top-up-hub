@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -220,51 +220,57 @@ function MerchantPage() {
     }
   };
 
-  // Automatic real-time live wallet/orders refresh (ultra-fast 300ms polling when invoice is open on pending order, or 1.2s for pending orders)
+  const refreshAllRef = useRef<((silent?: boolean) => Promise<void>) | undefined>(undefined);
+  refreshAllRef.current = refreshAll;
+
+  const selectedOrderRef = useRef(selectedOrder);
+  selectedOrderRef.current = selectedOrder;
+
+  // Stable, leak-proof live wallet & orders polling without recreating timer on every state change
   useEffect(() => {
     if (!store.accessToken || !store.merchant) return;
-    const isModalPending = selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status);
-    const hasProcessing = (dash?.orders || []).some((o: any) =>
+
+    const hasPendingOrders = (dash?.orders || []).some((o: any) =>
       ["processing", "pending", "incomplete"].includes(o.status),
     );
-    // 300ms if watching a pending invoice directly, 1200ms if there are active processing orders, 15000ms idle
-    const pollInterval = isModalPending ? 300 : hasProcessing ? 1200 : 15000;
+    const isModalPending = selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status);
+
+    // Fast polling only if there are active in-progress orders, otherwise calm 30s
+    const pollInterval = isModalPending ? 1000 : hasPendingOrders ? 2500 : 30000;
     let inFlight = false;
-    const interval = setInterval(async () => {
+
+    const tick = async () => {
       if (inFlight) return;
       inFlight = true;
       try {
-        // If invoice modal is open on an in-progress order, sync it directly in real-time
-        if (selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status)) {
+        const currentModalOrder = selectedOrderRef.current;
+        if (currentModalOrder && ["processing", "pending", "incomplete"].includes(currentModalOrder.status)) {
           const freshTok = (await getFreshAuthToken()) || store.accessToken;
           if (freshTok) {
             const res = await merchantSyncOrderWithFazerApi(freshTok, {
-              order_id: selectedOrder.id || selectedOrder.order_ref,
+              order_id: currentModalOrder.id || currentModalOrder.order_ref,
             });
-            if (res?.new_status && res.new_status !== selectedOrder.status) {
-              setSelectedOrder(res.order || { ...selectedOrder, status: res.new_status });
+            if (res?.new_status && res.new_status !== currentModalOrder.status) {
+              setSelectedOrder(res.order || { ...currentModalOrder, status: res.new_status });
             }
           }
         }
-        await refreshAll(true);
+        if (refreshAllRef.current) {
+          await refreshAllRef.current(true);
+        }
       } catch {
+        // Ignore background tick failure
       } finally {
         inFlight = false;
       }
-    }, pollInterval);
-
-    const onFocus = () => refreshAll(true);
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") refreshAll(true);
     };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibility);
+
+    const interval = setInterval(tick, pollInterval);
+
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [store.accessToken, store.merchant, refreshAll, dash?.orders, selectedOrder]);
+  }, [store.accessToken, store.merchant, (dash?.orders || []).length, !!selectedOrder]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;

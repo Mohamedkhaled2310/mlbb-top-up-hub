@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Activity,
@@ -422,28 +422,33 @@ function AdminPage() {
     })();
   }, []);
 
-  // Live auto-refresh of store packages, merchants, and orders (ultra-fast 300ms polling when detail modal is open or 1.2s for pending orders)
+  const loadOrdersRef = useRef(loadOrders);
+  loadOrdersRef.current = loadOrders;
+
+  const selectedOrderDetailsRef = useRef(selectedOrderDetails);
+  selectedOrderDetailsRef.current = selectedOrderDetails;
+
+  // Stable, leak-proof admin live polling without rapid interval recreation
   useEffect(() => {
-    const isModalPending = selectedOrderDetails && ["processing", "pending"].includes(selectedOrderDetails.status);
+    if (!isAdmin || !store.accessToken) return;
+
     const hasPendingOrders = (orders || []).some((o: any) => ["processing", "pending"].includes(o.status));
-    const intervalMs = isModalPending ? 300 : hasPendingOrders ? 1200 : 15000;
+    const isModalPending = selectedOrderDetails && ["processing", "pending"].includes(selectedOrderDetails.status);
+    const intervalMs = isModalPending ? 1000 : hasPendingOrders ? 3000 : 30000;
     let inFlight = false;
+
     const refreshLive = async () => {
       if (inFlight) return;
       inFlight = true;
       try {
-        if (isAdmin && store.accessToken) {
-          await loadOrders(store.accessToken);
-          if (selectedOrderDetails && ["processing", "pending"].includes(selectedOrderDetails.status)) {
-            const updated = (orders || []).find((x: any) => x.id === selectedOrderDetails.id);
-            if (updated && updated.status !== selectedOrderDetails.status) {
+        if (store.accessToken && loadOrdersRef.current) {
+          await loadOrdersRef.current(store.accessToken);
+          const currentModal = selectedOrderDetailsRef.current;
+          if (currentModal && ["processing", "pending"].includes(currentModal.status)) {
+            const updated = (orders || []).find((x: any) => x.id === currentModal.id);
+            if (updated && updated.status !== currentModal.status) {
               setSelectedOrderDetails(updated);
             }
-          }
-          if (!hasPendingOrders && !isModalPending) {
-            refreshStatus();
-            loadStore();
-            loadMerchants(store.accessToken, mPage, mQuery).catch(() => {});
           }
         }
       } catch {
@@ -451,19 +456,13 @@ function AdminPage() {
         inFlight = false;
       }
     };
+
     const interval = setInterval(refreshLive, intervalMs);
-    const onFocus = () => refreshLive();
-    const onVis = () => {
-      if (document.visibilityState === "visible") refreshLive();
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVis);
+
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isAdmin, store.accessToken, orders, mPage, mQuery, refreshStatus, loadStore, loadMerchants, loadOrders, selectedOrderDetails]);
+  }, [isAdmin, store.accessToken, (orders || []).length, !!selectedOrderDetails]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;
