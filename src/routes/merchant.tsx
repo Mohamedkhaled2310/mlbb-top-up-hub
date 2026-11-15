@@ -219,16 +219,18 @@ function MerchantPage() {
     }
   };
 
-  // Automatic real-time live wallet/orders refresh (faster 2.5s polling if there are pending/processing orders)
+  // Automatic real-time live wallet/orders refresh (ultra-fast 500ms polling when invoice is open on pending order, or 1.5s for pending orders)
   useEffect(() => {
     if (!store.accessToken || !store.merchant) return;
+    const isModalPending = selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status);
     const hasProcessing = (dash?.orders || []).some((o: any) =>
       ["processing", "pending", "incomplete"].includes(o.status),
     );
-    const pollInterval = hasProcessing ? 2500 : 15000;
+    // 500ms if watching a pending invoice directly, 1500ms if there are active processing orders, 15000ms idle
+    const pollInterval = isModalPending ? 500 : hasProcessing ? 1500 : 15000;
     const interval = setInterval(async () => {
-      // If modal is open on an in-progress order, sync it directly
-      if (selectedOrder && ["processing", "pending"].includes(selectedOrder.status)) {
+      // If invoice modal is open on an in-progress order, sync it directly in real-time
+      if (selectedOrder && ["processing", "pending", "incomplete"].includes(selectedOrder.status)) {
         try {
           const freshTok = (await getFreshAuthToken()) || store.accessToken;
           if (freshTok) {

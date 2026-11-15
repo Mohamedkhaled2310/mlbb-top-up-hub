@@ -79,6 +79,32 @@ export default function CheckoutModal({
     }
   }, [open, cart, player.region, player.name]);
 
+  // Real-time automatic polling when order is placed and in processing/pending state (every 500ms)
+  useEffect(() => {
+    if (!open || step !== "success" || !result?.order_ref) return;
+    if (result.status !== "processing" && result.status !== "pending") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const check = await getOrderStatusApi(result.order_ref, accessToken);
+        if (check?.found && check.status && check.status !== result.status) {
+          setResult((prev: any) => ({
+            ...prev,
+            status: check.status,
+            message:
+              check.status === "success"
+                ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
+                : check.status === "failed"
+                  ? "تعذر تنفيذ الشحن وتم استرداد الرصيد إلى محفظتك"
+                  : prev?.message,
+          }));
+        }
+      } catch {}
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [open, step, result?.order_ref, result?.status, accessToken]);
+
   if (!open) return null;
 
   const activeGameId = cart[0]?.package.gameId || "mlbb";
