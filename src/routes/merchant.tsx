@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
   CheckCircle2,
   Clock,
   ExternalLink,
+  FileText,
   Gamepad2,
   Globe,
   LogIn,
@@ -13,6 +16,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Share2,
   ShieldCheck,
   ShoppingCart,
   Wallet,
@@ -192,7 +196,7 @@ function MerchantPage() {
     try {
       const res = await merchantSyncOrderWithFazerApi(activeToken, { order_id: orderId });
       if (res?.error) {
-        toast({ title: "فشل المزامنة مع Fazer", description: res.error, variant: "destructive" });
+        toast({ title: "فشل تحديث حالة الطلب", description: res.error, variant: "destructive" });
         return;
       }
       toast({
@@ -200,25 +204,46 @@ function MerchantPage() {
           res.new_status === "success"
             ? "اكتملت العملية بنجاح! 🚀"
             : res.new_status === "failed"
-              ? "فشلت العملية في Fazer وتم استرداد الرصيد ❌"
-              : "العملية لا تزال قيد التنفيذ في Fazer ⏳",
-        description: res.message || `حالة الطلب الآن: ${res.new_status}`,
+              ? "فشلت العملية وتم استرداد الرصيد إلى محفظتك ❌"
+              : "الطلب لا يزال قيد التنفيذ والمعالجة ⏳",
+        description: res.message || `حالة الطلب الآن: ${ORDER_STATUS_LABEL[res.new_status] || res.new_status}`,
       });
       if (selectedOrder && (selectedOrder.id === orderId || selectedOrder.order_ref === orderId)) {
         setSelectedOrder(res.order || { ...selectedOrder, status: res.new_status });
       }
       await refreshAll(true);
     } catch (e: any) {
-      toast({ title: "خطأ في المزامنة", description: e?.message });
+      toast({ title: "خطأ في التحديث", description: e?.message });
     } finally {
       setSyncingOrderId(null);
     }
   };
 
-  // Automatic real-time wallet/orders/packages refresh every 15s and on window focus
+  // Automatic real-time live wallet/orders refresh (faster 4s polling if there are pending/processing orders)
   useEffect(() => {
     if (!store.accessToken || !store.merchant) return;
-    const interval = setInterval(() => refreshAll(true), 15000);
+    const hasProcessing = (dash?.orders || []).some((o: any) =>
+      ["processing", "pending", "incomplete"].includes(o.status),
+    );
+    const pollInterval = hasProcessing ? 4000 : 15000;
+    const interval = setInterval(async () => {
+      // If modal is open on an in-progress order, sync it directly
+      if (selectedOrder && ["processing", "pending"].includes(selectedOrder.status)) {
+        try {
+          const freshTok = (await getFreshAuthToken()) || store.accessToken;
+          if (freshTok) {
+            const res = await merchantSyncOrderWithFazerApi(freshTok, {
+              order_id: selectedOrder.id || selectedOrder.order_ref,
+            });
+            if (res?.new_status && res.new_status !== selectedOrder.status) {
+              setSelectedOrder(res.order || { ...selectedOrder, status: res.new_status });
+            }
+          }
+        } catch {}
+      }
+      refreshAll(true);
+    }, pollInterval);
+
     const onFocus = () => refreshAll(true);
     const onVisibility = () => {
       if (document.visibilityState === "visible") refreshAll(true);
@@ -230,7 +255,7 @@ function MerchantPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [store.accessToken, store.merchant, refreshAll]);
+  }, [store.accessToken, store.merchant, refreshAll, dash?.orders, selectedOrder]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;
@@ -766,7 +791,7 @@ function MerchantPage() {
                   })}
                   {pkgs.length === 0 && (
                     <div className="col-span-full py-6 text-center text-xs text-slate-400">
-                      لا توجد باقات متزامنة حالياً لهذه اللعبة. قم بمزامنة Fazer من لوحة الإدارة.
+                      لا توجد باقات متاحة حالياً لهذه اللعبة. قم بتحديث الباقات من لوحة الإدارة.
                     </div>
                   )}
                 </div>
@@ -777,35 +802,65 @@ function MerchantPage() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-bold text-sm sm:text-base">آخر الطلبات</h3>
-                    <span className="text-[11px] text-slate-400">انقر على أي طلب لعرض التفاصيل وتحديث حالته</span>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm sm:text-base">آخر الطلبات</h3>
+                      {(dash?.orders || []).some((o: any) => ["processing", "pending"].includes(o.status)) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                          <Clock className="w-3 h-3 animate-spin" />
+                          <span>تحديث لحظي</span>
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-400">انقر لعرض الفاتورة</span>
                   </div>
                   <div className="space-y-2 max-h-80 overflow-auto text-xs">
                     {(dash?.orders || []).slice(0, 30).map((o: any) => (
                       <div
                         key={o.id}
                         onClick={() => setSelectedOrder(o)}
-                        className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 p-1.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors"
+                        className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 p-2 rounded-xl hover:bg-slate-800/40 cursor-pointer transition-colors"
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 font-mono text-cyan-300">
-                            <span>{o.order_ref}</span>
-                            <span className="text-[10px] text-slate-400">🔍</span>
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          {/* Clean Status Icon */}
+                          <div className="shrink-0">
+                            {o.status === "success" && (
+                              <div title="مكتمل بنجاح" className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                                <CheckCircle2 className="w-4 h-4" />
+                              </div>
+                            )}
+                            {o.status === "failed" && (
+                              <div title="فشل الشحن" className="w-7 h-7 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                                <XCircle className="w-4 h-4" />
+                              </div>
+                            )}
+                            {["processing", "pending"].includes(o.status) && (
+                              <div title="قيد التنفيذ والمعالجة" className="w-7 h-7 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                                <Clock className="w-4 h-4 animate-spin" />
+                              </div>
+                            )}
                           </div>
-                          <div className="text-slate-400 truncate">
-                            {o.player_id} • {o.game_id} • {o.total_egp} ج.م
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 font-mono text-cyan-300 font-bold text-xs">
+                              <span>#{o.order_ref}</span>
+                              {["processing", "pending"].includes(o.status) && (
+                                <span className="text-[10px] text-amber-400 font-normal animate-pulse">● قيد التنفيذ</span>
+                              )}
+                            </div>
+                            <div className="text-slate-400 text-[11px] truncate">
+                              ID: {o.player_id} {o.zone_id ? `(${o.zone_id})` : ""} • <span className="uppercase text-slate-300">{o.game_id}</span>
+                            </div>
                           </div>
                         </div>
-                        <span
-                          className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${o.status === "success"
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                            : o.status === "failed"
-                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
-                            }`}
-                        >
-                          {ORDER_STATUS_LABEL[o.status] || o.status}
-                        </span>
+
+                        <div className="text-left shrink-0">
+                          <div className="font-mono font-bold text-emerald-400 text-xs">
+                            {o.total_egp} ج.م
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {new Date(o.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        </div>
                       </div>
                     ))}
                     {(!dash?.orders || dash.orders.length === 0) && (
@@ -818,20 +873,36 @@ function MerchantPage() {
                   <h3 className="font-bold mb-3 text-sm sm:text-base">حركات المحفظة (Ledger)</h3>
                   <div className="space-y-2 max-h-80 overflow-auto text-xs">
                     {(dash?.transactions || []).slice(0, 30).map((t: any) => (
-                      <div key={t.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-white">
-                            {LEDGER_TYPE_LABEL[t.entry_type] || t.entry_type}
+                      <div key={t.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 p-1.5">
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          <div className="shrink-0">
+                            {Number(t.amount) >= 0 ? (
+                              <div title="إيداع" className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                                <ArrowDownLeft className="w-4 h-4" />
+                              </div>
+                            ) : (
+                              <div title="خصم طلب" className="w-7 h-7 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                                <ArrowUpRight className="w-4 h-4" />
+                              </div>
+                            )}
                           </div>
-                          <div className="text-slate-400 truncate">{t.note || t.reference_id || "-"}</div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white text-xs">
+                              {LEDGER_TYPE_LABEL[t.entry_type] || t.entry_type}
+                            </div>
+                            <div className="text-slate-400 text-[10px] truncate">{t.note || t.reference_id || "-"}</div>
+                          </div>
                         </div>
-                        <div
-                          className={`shrink-0 font-mono font-bold ${Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"
-                            }`}
-                        >
-                          {Number(t.amount) >= 0 ? "+" : ""}
-                          {t.amount}{" "}
-                          <span className="text-slate-400 font-normal">(بعدها: {t.balance_after})</span>
+                        <div className="text-left shrink-0">
+                          <div
+                            className={`font-mono font-bold text-xs ${Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"}`}
+                          >
+                            {Number(t.amount) >= 0 ? "+" : ""}
+                            {t.amount} ج.م
+                          </div>
+                          <div className="text-slate-500 text-[10px] font-mono">
+                            بعدها: {t.balance_after}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -900,117 +971,97 @@ function MerchantPage() {
       />
 
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1226] p-4 sm:p-5 shadow-2xl text-slate-100 max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-700/80 bg-gradient-to-b from-[#0f172a] to-[#0a0f1d] p-5 sm:p-6 shadow-2xl text-slate-100 max-h-[92vh] overflow-y-auto">
+            {/* Close button */}
             <button
               onClick={() => setSelectedOrder(null)}
-              className="absolute top-4 left-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="absolute top-4 left-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2 mb-4">
-              <Package className="w-5 h-5 text-purple-400" />
-              <h3 className="font-bold text-base sm:text-lg">تفاصيل الطلب</h3>
-            </div>
-
-            {/* Reference + Status Badge */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 mb-4 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs text-slate-400">رقم الطلب (Order Ref):</span>
-                <div className="flex items-center gap-1.5 font-mono text-cyan-300 font-bold text-sm">
-                  <span>{selectedOrder.order_ref}</span>
+            {/* Invoice Top Header */}
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-base sm:text-lg text-white">فاتورة شحن إلكترونية</h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                    METO STORE
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono mt-0.5">
+                  <span>رقم الفاتورة:</span>
+                  <span className="text-cyan-300 font-bold">{selectedOrder.order_ref}</span>
                   <CopyButton text={selectedOrder.order_ref} />
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
-                <span className="text-xs text-slate-400">حالة الطلب:</span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                    selectedOrder.status === "success"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : selectedOrder.status === "failed"
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
-                        : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                  }`}
-                >
-                  {selectedOrder.status === "success" && <CheckCircle2 className="w-3.5 h-3.5" />}
-                  {selectedOrder.status === "failed" && <XCircle className="w-3.5 h-3.5" />}
-                  {selectedOrder.status === "processing" && <Clock className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{ORDER_STATUS_LABEL[selectedOrder.status] || selectedOrder.status}</span>
-                </span>
-              </div>
             </div>
 
-            {/* Timeline Progress */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 mb-4 space-y-2.5">
-              <div className="text-xs font-bold text-purple-300">مراحل تنفيذ العملية:</div>
-              <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400 flex items-center justify-center font-bold">✓</div>
-                  <span className="text-slate-300">تم الطلب</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400 flex items-center justify-center font-bold">✓</div>
-                  <span className="text-slate-300">ربط Fazer</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold border ${
-                    selectedOrder.status === "success"
-                      ? "bg-emerald-500/30 text-emerald-300 border-emerald-400"
-                      : selectedOrder.status === "failed"
-                        ? "bg-rose-500/30 text-rose-300 border-rose-400"
-                        : "bg-amber-500/30 text-amber-300 border-amber-400 animate-pulse"
-                  }`}>
-                    {selectedOrder.status === "success" ? "✓" : selectedOrder.status === "failed" ? "✗" : "⏳"}
+            {/* Status Banner with Clean Icon */}
+            <div
+              className={`rounded-xl p-3 mb-4 flex items-center justify-between border ${
+                selectedOrder.status === "success"
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  : selectedOrder.status === "failed"
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                    : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {selectedOrder.status === "success" && (
+                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <span className="text-slate-300">معالجة السيرفر</span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold border ${
-                    selectedOrder.status === "success"
-                      ? "bg-emerald-500/30 text-emerald-300 border-emerald-400"
-                      : selectedOrder.status === "failed"
-                        ? "bg-rose-500/30 text-rose-300 border-rose-400"
-                        : "bg-slate-800 text-slate-500 border-slate-700"
-                  }`}>
-                    {selectedOrder.status === "success" ? "✓" : selectedOrder.status === "failed" ? "✗" : "4"}
-                  </div>
-                  <span className="text-slate-300">تسليم الشحن</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Order Details Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
-                <span className="text-slate-400 text-[11px] block">معرف اللاعب:</span>
-                <span className="font-mono font-bold text-white text-xs">{selectedOrder.player_id}</span>
-                {selectedOrder.zone_id && (
-                  <span className="text-slate-400 text-[10px] block font-mono">سيرفر: ({selectedOrder.zone_id})</span>
                 )}
+                {selectedOrder.status === "failed" && (
+                  <div className="w-7 h-7 rounded-full bg-rose-500/20 flex items-center justify-center">
+                    <XCircle className="w-4 h-4 text-rose-400" />
+                  </div>
+                )}
+                {selectedOrder.status === "processing" && (
+                  <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-amber-400 animate-spin" />
+                  </div>
+                )}
+                <div>
+                  <div className="text-xs font-bold">
+                    {selectedOrder.status === "success"
+                      ? "تم اكتمال الشحن بنجاح"
+                      : selectedOrder.status === "failed"
+                        ? "تعذر تنفيذ الشحن"
+                        : "قيد المعالجة المباشرة في السيرفر"}
+                  </div>
+                  <div className="text-[10px] opacity-80">
+                    {selectedOrder.status === "success"
+                      ? "تم تسليم الجواهر إلى حساب اللاعب مباشرة"
+                      : selectedOrder.status === "failed"
+                        ? "تم استرداد كامل المبلغ إلى محفظتك تلقائياً"
+                        : "جاري المتابعة اللحظية حتى اكتمال التنفيذ..."}
+                  </div>
+                </div>
               </div>
-              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
-                <span className="text-slate-400 text-[11px] block">اللعبة والسيرفر:</span>
-                <span className="font-semibold text-white uppercase text-xs">
-                  {selectedOrder.game_id || "mlbb"} • {selectedOrder.region || "global"}
-                </span>
-              </div>
-              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
-                <span className="text-slate-400 text-[11px] block">المبلغ المخصوم:</span>
-                <span className="font-mono font-bold text-emerald-400 text-sm">
+              <div className="text-right">
+                <span className="font-mono text-xs font-extrabold text-white">
                   {selectedOrder.total_egp} ج.م
                 </span>
                 {selectedOrder.total_usd && (
-                  <span className="text-slate-400 text-[10px] block font-mono">
-                    (${selectedOrder.total_usd} USD)
+                  <span className="block text-[10px] text-slate-400 font-mono">
+                    (${selectedOrder.total_usd})
                   </span>
                 )}
               </div>
-              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
-                <span className="text-slate-400 text-[11px] block">تاريخ الطلب:</span>
-                <span className="text-slate-300 text-[11px] block">
-                  {new Date(selectedOrder.created_at).toLocaleDateString("ar-EG", {
+            </div>
+
+            {/* Invoice Breakdown Details */}
+            <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-3.5 mb-4 space-y-2 text-xs">
+              <div className="text-[11px] font-bold text-slate-400 border-b border-slate-800 pb-1.5 flex items-center justify-between">
+                <span>بيانات الحساب والطلب</span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {new Date(selectedOrder.created_at).toLocaleString("ar-EG", {
                     month: "short",
                     day: "numeric",
                     hour: "2-digit",
@@ -1018,25 +1069,58 @@ function MerchantPage() {
                   })}
                 </span>
               </div>
-            </div>
 
-            {/* Fazer Transaction ID */}
-            {selectedOrder.fazer_transaction_id && (
-              <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-2.5 mb-4 text-xs">
-                <span className="text-cyan-300 text-[11px] block mb-1">معرف عملية Fazer Cards:</span>
-                <div className="flex items-center justify-between gap-1 font-mono text-cyan-200">
-                  <span className="truncate">{selectedOrder.fazer_transaction_id}</span>
-                  <CopyButton text={selectedOrder.fazer_transaction_id} />
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">معرف اللاعب (Player ID):</span>
+                  <div className="flex items-center gap-1 font-mono font-bold text-white text-xs mt-0.5">
+                    <span>{selectedOrder.player_id}</span>
+                    <CopyButton text={selectedOrder.player_id} />
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-slate-400 block">معرف السيرفر (Zone ID):</span>
+                  <span className="font-mono font-bold text-slate-200 text-xs block mt-0.5">
+                    {selectedOrder.zone_id || "—"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-slate-400 block">اللعبة:</span>
+                  <span className="font-semibold text-white uppercase text-xs block mt-0.5">
+                    {selectedOrder.game_id || "MLBB"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-slate-400 block">سيرفر الشحن:</span>
+                  <span className="font-semibold text-cyan-300 text-xs block mt-0.5 uppercase">
+                    {selectedOrder.region || "Global"}
+                  </span>
                 </div>
               </div>
-            )}
 
-            {/* Fail Reason if any */}
+              {/* Direct Server Reference ID (No Fazer mention) */}
+              {selectedOrder.fazer_transaction_id && (
+                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 bg-slate-950/40 p-2 rounded-lg">
+                  <span className="text-[11px] text-slate-400">الرقم المرجعي للسيرفر (Ref ID):</span>
+                  <div className="flex items-center gap-1 font-mono text-cyan-300 text-xs font-semibold">
+                    <span className="truncate max-w-[180px]">{selectedOrder.fazer_transaction_id}</span>
+                    <CopyButton text={selectedOrder.fazer_transaction_id} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Fail Reason Alert if failed */}
             {selectedOrder.status === "failed" && selectedOrder.fail_reason && (
-              <div className="rounded-lg border border-rose-500/30 bg-rose-950/30 p-2.5 mb-4 text-xs text-rose-300">
-                <span className="font-bold block mb-0.5">سبب الفشل:</span>
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/30 p-3 mb-4 text-xs text-rose-300">
+                <span className="font-bold block mb-0.5">سبب عدم الاكتمال:</span>
                 <span>{selectedOrder.fail_reason}</span>
-                <span className="block text-[10px] text-rose-400 mt-1">تم استرداد المبلغ بالكامل إلى محفظتك تلقائياً.</span>
+                <span className="block text-[10px] text-emerald-400 mt-1 font-semibold">
+                  ✓ تم إعادة المبلغ كاملاً إلى رصيدك المتاح تلقائياً.
+                </span>
               </div>
             )}
 
@@ -1044,18 +1128,41 @@ function MerchantPage() {
             <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
               <Button
                 variant="outline"
-                className="flex-1 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs"
+                className="border-slate-700 bg-slate-800/90 text-slate-200 hover:bg-slate-700 text-xs px-3"
                 onClick={() => setSelectedOrder(null)}
               >
                 إغلاق
               </Button>
+
+              <Button
+                variant="outline"
+                className="border-cyan-500/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 text-xs flex items-center justify-center gap-1.5 flex-1"
+                onClick={() => {
+                  const statusDesc =
+                    selectedOrder.status === "success"
+                      ? "تم الشحن بنجاح ✅"
+                      : selectedOrder.status === "failed"
+                        ? "فشلت وتم استرداد الرصيد ❌"
+                        : "قيد المعالجة في السيرفر ⏳";
+                  const text = `🧾 فاتورة شحن METO STORE\nرقم الطلب: ${selectedOrder.order_ref}\nاللاعب: ${selectedOrder.player_id}${selectedOrder.zone_id ? ` (${selectedOrder.zone_id})` : ""}\nاللعبة: ${(selectedOrder.game_id || "MLBB").toUpperCase()}\nالمبلغ: ${selectedOrder.total_egp} ج.م\nالحالة: ${statusDesc}\nhttps://meto-three.vercel.app`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+                }}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>مشاركة الفاتورة</span>
+              </Button>
+
               <Button
                 disabled={syncingOrderId === (selectedOrder.id || selectedOrder.order_ref)}
-                className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+                className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 flex-1"
                 onClick={() => syncOrder(selectedOrder.id || selectedOrder.order_ref)}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === (selectedOrder.id || selectedOrder.order_ref) ? "animate-spin" : ""}`} />
-                <span>تحديث الحالة من Fazer</span>
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    syncingOrderId === (selectedOrder.id || selectedOrder.order_ref) ? "animate-spin" : ""
+                  }`}
+                />
+                <span>تحديث لحظي</span>
               </Button>
             </div>
           </div>

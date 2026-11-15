@@ -86,7 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "متجر METO STORE لشحن جواهر Mobile Legends وشدات PUBG Mobile وجواهر Free Fire وتوكنز Honor of Kings بالجنيه المصري مع تنفيذ آلي فوري عبر FazerCards.",
+          "متجر METO STORE لشحن جواهر Mobile Legends وشدات PUBG Mobile وجواهر Free Fire وتوكنز Honor of Kings مع تنفيذ آلي فوري على مدار 24 ساعة.",
       },
       { name: "author", content: "METO STORE" },
       { property: "og:title", content: "METO STORE - متجر شحن الألعاب الفوري" },

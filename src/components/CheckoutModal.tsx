@@ -583,13 +583,13 @@ export default function CheckoutModal({
             {!isMerchant ? (
               <div className="flex gap-2 text-xs text-amber-300 bg-amber-950/30 border border-amber-800/50 p-3 rounded-xl">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>سيتم تنفيذ الشحن مباشرة عبر FazerCards بمجرد تأكيد الدفع/الطلب.</span>
+                <span>تنفيذ فوري مباشر عبر سيرفر الشحن الآلي المعتمد بمجرد تأكيد الطلب.</span>
               </div>
             ) : (
               <div className="flex gap-2 text-xs text-blue-300 bg-blue-950/30 border border-blue-800/50 p-3 rounded-xl">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
-                  كتاجر: سيتم خصم <b>{formatDecimals3(total)} ج.م</b> من محفظتك ذرياً مع استرداد تلقائي إذا تعذر التنفيذ لدى المزود.
+                  كتاجر: سيتم خصم <b>{formatDecimals3(total)} ج.م</b> من محفظتك ذرياً مع استرداد تلقائي فوري إذا تعذر التنفيذ.
                 </span>
               </div>
             )}
@@ -610,7 +610,7 @@ export default function CheckoutModal({
             {/* Top pulsing badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold animate-pulse shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>جاري تنفيذ عملية الشحن عبر FazerCards</span>
+              <span>جاري تنفيذ عملية الشحن الآلي المباشر...</span>
             </div>
 
             {/* Glowing circular loader with live percentage */}
@@ -635,7 +635,7 @@ export default function CheckoutModal({
                   {processStage === 1
                     ? "التحقق من بيانات الحساب وتأمين الرصيد..."
                     : processStage === 2
-                    ? "الاتصال المباشر بنظام المزود (FazerCards)..."
+                    ? "الاتصال المباشر بسيرفر الشحن الآلي..."
                     : processStage === 3
                     ? "إرسال الجواهر وتأكيد الشحنة..."
                     : "تم التنفيذ بنجاح! جاري عرض الإيصال..."}
@@ -682,7 +682,7 @@ export default function CheckoutModal({
                     </div>
                   )}
                   <span className={processStage >= 3 ? "text-slate-200 font-medium" : processStage === 2 ? "text-purple-300 font-bold" : "text-slate-500"}>
-                    الاتصال بخادم الشحن (FazerCards API)
+                    الاتصال بسيرفر الشحن الآلي المعتمد
                   </span>
                 </div>
                 <span className="font-mono text-[10px] text-slate-400">
@@ -737,7 +737,7 @@ export default function CheckoutModal({
             <div>
               <div className={`font-extrabold text-xl ${result?.status === "processing" ? "text-amber-300" : "text-white"}`}>
                 {result?.status === "processing"
-                  ? "الطلب قيد المعالجة لدى مزود الخدمة (Fazer) ⏳"
+                  ? "الطلب قيد المعالجة المباشرة في السيرفر ⏳"
                   : "تم شحن الحساب بنجاح! 🎉"}
               </div>
               <div className={`text-xs sm:text-sm mt-1 ${result?.status === "processing" ? "text-slate-300" : "text-emerald-300"}`}>
@@ -798,7 +798,7 @@ export default function CheckoutModal({
                 onClick={() => {
                   const finalPaid = formatDecimals3(typeof result?.total_egp === "number" && result.total_egp > 0 ? result.total_egp : paidTotal || total);
                   const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
-                  const statusText = result?.status === "processing" ? "قيد التنفيذ لدى Fazer ⏳" : "تم الشحن بنجاح ✅";
+                  const statusText = result?.status === "processing" ? "قيد التنفيذ والمعالجة ⏳" : "تم الشحن بنجاح ✅";
                   const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالإجمالي: ${finalPaid} ج.م\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                 }}

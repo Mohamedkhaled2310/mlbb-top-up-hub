@@ -448,10 +448,10 @@ function CustomerStorePage() {
                 </h2>
                 <p className="text-[11px] text-slate-400">
                   {loadingPkgs
-                    ? "جاري تحديث الباقات من Fazer..."
+                    ? "جاري تحديث قائمة الباقات..."
                     : settings.packages_synced_at
-                      ? `آخر مزامنة: ${new Date(settings.packages_synced_at).toLocaleString("ar-EG")}`
-                      : "يتم التحديث تلقائياً من Fazer"}
+                      ? `آخر تحديث: ${new Date(settings.packages_synced_at).toLocaleString("ar-EG")}`
+                      : "يتم التحديث المباشر تلقائياً"}
                 </p>
               </div>
             </div>
@@ -673,8 +673,8 @@ function CustomerStorePage() {
               <p>لا توجد باقات متاحة حالياً للعبة {activeGame.name}.</p>
               <p className="text-[11px] text-slate-500">
                 {settings.packages_synced_at
-                  ? "قد تكون الباقات تحت التحديث من Fazer — جرّب اختيار لعبة أخرى أو أعد المحاولة بعد لحظات."
-                  : "افتح لوحة الأدمن واضغط مزامنة Fazer لجلب جميع الباقات وتفعيلها."}
+                  ? "قد تكون الباقات تحت التحديث المباشر — جرّب اختيار لعبة أخرى أو أعد المحاولة بعد لحظات."
+                  : "افتح لوحة الإدارة لتحديث قائمة الباقات وتفعيلها."}
               </p>
             </div>
           )}

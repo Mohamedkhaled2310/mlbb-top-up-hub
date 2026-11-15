@@ -476,7 +476,41 @@ export async function getStoreData(gameId?: string) {
     FazerCardsService.checkAccount().then(persistFazerAccountBalance).catch(() => {});
   }
 
-  const packages = (pkgs || []).map((p: any) => {
+  const NOISY_MLBB_TIERS = new Set([
+    "10_1_diamonds",
+    "12_diamonds",
+    "14_diamonds",
+    "19_diamonds",
+    "20_2_diamonds",
+    "28_diamonds",
+    "42_diamonds",
+    "70_diamonds",
+    "140_diamonds",
+    "170_diamonds",
+    "240_diamonds",
+    "284_diamonds",
+    "296_diamonds",
+    "355_diamonds",
+    "429_diamonds",
+    "716_diamonds",
+    "1084_diamonds",
+    "1446_diamonds",
+    "2010_diamonds",
+    "2976_diamonds",
+    "7502_diamonds",
+    "7740_1548_diamonds",
+  ]);
+
+  const packages = (pkgs || [])
+    .filter((p: any) => {
+      if (p.game_id === "mlbb") {
+        const id = String(p.offer_id || "");
+        const rawId = id.includes(":") ? id.split(":")[1] : id;
+        if (NOISY_MLBB_TIERS.has(rawId)) return false;
+      }
+      return true;
+    })
+    .map((p: any) => {
     const costUsd = Number(p.cost_usd || 0);
     const retail = costUsd > 0 ? calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP) : 0;
     const merchantBase = costUsd > 0 ? calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP) : 0;

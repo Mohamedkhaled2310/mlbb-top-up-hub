@@ -950,6 +950,38 @@ export class FazerCardsService {
         ? `${resolvedCategoryId}:${cleanRawOfferId}`
         : cleanRawOfferId;
 
+    // Filter out uncurated odd/noisy MLBB tiers across all servers so they NEVER appear
+    const isNoisyOddMlbbTier =
+      gameHint === "mlbb" &&
+      [
+        "10_1_diamonds",
+        "12_diamonds",
+        "14_diamonds",
+        "19_diamonds",
+        "20_2_diamonds",
+        "28_diamonds",
+        "42_diamonds",
+        "70_diamonds",
+        "140_diamonds",
+        "170_diamonds",
+        "240_diamonds",
+        "284_diamonds",
+        "296_diamonds",
+        "355_diamonds",
+        "429_diamonds",
+        "716_diamonds",
+        "1084_diamonds",
+        "1446_diamonds",
+        "2010_diamonds",
+        "2976_diamonds",
+        "7502_diamonds",
+        "7740_1548_diamonds",
+      ].includes(cleanRawOfferId);
+
+    if (isNoisyOddMlbbTier) {
+      return null;
+    }
+
     return {
       offer_id: storedOfferId,
       game_id,
