@@ -132,12 +132,20 @@ function CustomerStorePage() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // Smooth scroll listener throttled with requestAnimationFrame for 60fps performance
   useEffect(() => {
+    let ticking = false;
     const onScroll = () => {
-      const y = window.scrollY || 0;
-      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-      setShowScrollTop(y > 380);
-      setScrollProgress(docHeight > 0 ? Math.min(100, Math.round((y / docHeight) * 100)) : 0);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const y = window.scrollY || 0;
+          const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+          setShowScrollTop(y > 380);
+          setScrollProgress(docHeight > 0 ? Math.min(100, Math.round((y / docHeight) * 100)) : 0);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
