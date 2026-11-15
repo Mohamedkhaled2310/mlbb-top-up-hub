@@ -13,6 +13,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { Toaster } from "../components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import MaintenanceOverlay from "../components/MaintenanceOverlay";
 
 function NotFoundComponent() {
   return (
@@ -135,9 +136,11 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const isMaintenanceMode = true; // Set to false when updates are finished in the morning
 
   return (
     <QueryClientProvider client={queryClient}>
+      {isMaintenanceMode && <MaintenanceOverlay />}
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       <Toaster richColors position="top-center" />
