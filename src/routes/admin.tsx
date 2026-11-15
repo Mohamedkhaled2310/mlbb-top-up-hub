@@ -422,18 +422,33 @@ function AdminPage() {
     })();
   }, []);
 
-  // Live auto-refresh of store packages, merchants, and orders (fast 3s polling for orders when pending)
+  // Live auto-refresh of store packages, merchants, and orders (ultra-fast 300ms polling when detail modal is open or 1.2s for pending orders)
   useEffect(() => {
+    const isModalPending = selectedOrderDetails && ["processing", "pending"].includes(selectedOrderDetails.status);
     const hasPendingOrders = (orders || []).some((o: any) => ["processing", "pending"].includes(o.status));
-    const intervalMs = hasPendingOrders ? 3000 : 15000;
-    const refreshLive = () => {
-      if (isAdmin && store.accessToken) {
-        loadOrders(store.accessToken).catch(() => {});
-        if (!hasPendingOrders) {
-          refreshStatus();
-          loadStore();
-          loadMerchants(store.accessToken, mPage, mQuery).catch(() => {});
+    const intervalMs = isModalPending ? 300 : hasPendingOrders ? 1200 : 15000;
+    let inFlight = false;
+    const refreshLive = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        if (isAdmin && store.accessToken) {
+          await loadOrders(store.accessToken);
+          if (selectedOrderDetails && ["processing", "pending"].includes(selectedOrderDetails.status)) {
+            const updated = (orders || []).find((x: any) => x.id === selectedOrderDetails.id);
+            if (updated && updated.status !== selectedOrderDetails.status) {
+              setSelectedOrderDetails(updated);
+            }
+          }
+          if (!hasPendingOrders && !isModalPending) {
+            refreshStatus();
+            loadStore();
+            loadMerchants(store.accessToken, mPage, mQuery).catch(() => {});
+          }
         }
+      } catch {
+      } finally {
+        inFlight = false;
       }
     };
     const interval = setInterval(refreshLive, intervalMs);
@@ -448,7 +463,7 @@ function AdminPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isAdmin, store.accessToken, orders, mPage, mQuery, refreshStatus, loadStore, loadMerchants, loadOrders]);
+  }, [isAdmin, store.accessToken, orders, mPage, mQuery, refreshStatus, loadStore, loadMerchants, loadOrders, selectedOrderDetails]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;

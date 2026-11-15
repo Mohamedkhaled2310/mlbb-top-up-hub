@@ -1407,10 +1407,13 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     if (!process.env["VITEST"]) {
       setTimeout(() => {
         autoSyncPendingOrders(order.id).catch(() => {});
-      }, 500);
+      }, 300);
       setTimeout(() => {
         autoSyncPendingOrders(order.id).catch(() => {});
-      }, 2000);
+      }, 1000);
+      setTimeout(() => {
+        autoSyncPendingOrders(order.id).catch(() => {});
+      }, 2500);
       setTimeout(() => {
         autoSyncPendingOrders(order.id).catch(() => {});
       }, 5000);
