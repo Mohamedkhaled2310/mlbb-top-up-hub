@@ -2367,39 +2367,9 @@ export async function adminListRecentOrders(token: string, limit = 50) {
 }
 
 export async function adjustMerchantBalancesForFxRateChange(sb: any, oldRate: number, targetRate: number) {
-  if (!targetRate || targetRate <= 0) return;
-  try {
-    const { data: allMerchants } = await sb.from("merchant_accounts").select("id, balance_egp, user_id");
-    const userIds = (allMerchants || []).map((m: any) => m.user_id).filter(Boolean);
-    const { data: profiles } = await sb.from("profiles").select("id, region").in("id", userIds);
-    const profileRegionMap = new Map((profiles || []).map((p: any) => [p.id, p.region]));
-
-    const nowIso = new Date().toISOString();
-    for (const m of allMerchants || []) {
-      const reg = String(profileRegionMap.get(m.user_id) || "").trim().toUpperCase();
-      const curEgp = Number(m.balance_egp || 0);
-      const isUsdMerchant = reg === "GLOBAL" || reg === "US" || (reg !== "EG" && reg !== "");
-
-      if (isUsdMerchant && curEgp > 0) {
-        // Recalibrate based on old vs new rate so USD value remains constant
-        let effectiveOld = oldRate > 0 ? oldRate : 55.28;
-        // Fix Moeml / 49.632 drift: if balance was frozen at 2764 EGP ($50 * 55.28), recalibrate to full $50
-        if (Math.abs(curEgp - 2764) < 1.0) {
-          effectiveOld = 55.28;
-        }
-        const usdVal = curEgp / effectiveOld;
-        const newBalEgp = Math.round(usdVal * targetRate * 100) / 100;
-        if (Math.abs(newBalEgp - curEgp) >= 0.01) {
-          await sb
-            .from("merchant_accounts")
-            .update({ balance_egp: newBalEgp, updated_at: nowIso })
-            .eq("id", m.id);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to adjust merchant balances for FX rate change:", err);
-  }
+  // RULE ENFORCED: رصيد التاجر ثابت تماماً ومحمي ولا يتغير نهائياً إلا إذا قام الأدمن بتعديله يدوياً.
+  // تغير سعر الصرف أو سعر الدولار لا يؤثر إطلاقاً على رصيد التاجر الحالي في المحفظة.
+  return;
 }
 
 export async function adminUpdateEgpRate(
