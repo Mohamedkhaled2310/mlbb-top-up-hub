@@ -117,6 +117,39 @@ export function findMatchingPackageForServer(
   return globalPkg || currentPkg;
 }
 
+export const NOISY_ODD_MLBB_TIERS = new Set([
+  "10_1_diamonds",
+  "12_diamonds",
+  "14_diamonds",
+  "19_diamonds",
+  "20_2_diamonds",
+  "28_diamonds",
+  "42_diamonds",
+  "70_diamonds",
+  "140_diamonds",
+  "170_diamonds",
+  "240_diamonds",
+  "284_diamonds",
+  "296_diamonds",
+  "355_diamonds",
+  "429_diamonds",
+  "716_diamonds",
+  "1084_diamonds",
+  "1446_diamonds",
+  "2010_diamonds",
+  "2976_diamonds",
+  "7502_diamonds",
+  "7740_1548_diamonds",
+]);
+
+export function isNoisyOddMlbbPackage(pkg: { gameId?: string; offerId?: string; id?: string; name?: string }): boolean {
+  if (pkg.gameId && pkg.gameId !== "mlbb") return false;
+  const id = String(pkg.offerId || pkg.id || "");
+  const rawId = id.includes(":") ? id.split(":")[1] : id;
+  if (rawId && NOISY_ODD_MLBB_TIERS.has(rawId.toLowerCase())) return true;
+  return false;
+}
+
 /**
  * Filters and prioritizes packages for a given game and selected server so that:
  * - For any diamond tier, if an exact server package exists, it is shown.
@@ -132,6 +165,7 @@ export function filterPackagesForServer(
   const selReg = normalizeRegion(serverCode || "global");
 
   const matched = gamePackages.filter((p) => {
+    if (isNoisyOddMlbbPackage(p)) return false;
     if (!p.active) return false;
     if (!q) return true;
     return (

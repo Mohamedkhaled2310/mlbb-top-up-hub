@@ -258,7 +258,7 @@ function AdminPage() {
     try {
       const res = await withAdminAuthRetry((tok) => adminSyncOrderWithFazerApi(tok, { order_id: orderId }));
       if (res?.error) {
-        toast({ title: "فشل المزامنة مع Fazer", description: res.error, variant: "destructive" });
+        toast({ title: "فشل المزامنة مع سيرفر الشحن", description: res.error, variant: "destructive" });
         return;
       }
       toast({
@@ -266,7 +266,7 @@ function AdminPage() {
           res.new_status === "success"
             ? "اكتملت العملية بنجاح! 🚀"
             : res.new_status === "failed"
-              ? "فشلت العملية في Fazer ❌"
+              ? "فشلت العملية في السيرفر ❌"
               : "العملية لا تزال قيد التنفيذ ⏳",
         description: res.message || `حالة الطلب الآن: ${res.new_status}`,
       });
@@ -638,7 +638,7 @@ function AdminPage() {
             .join(" | ")
         : "";
       toast({
-        title: "تمت مزامنة Fazer بنجاح",
+        title: "تمت مزامنة سيرفر الشحن بنجاح",
         description: `إجمالي الباقات: ${r?.catalog?.count || 0}${bd ? ` (${bd})` : ""} • رصيد: ${r?.account?.balance ?? "—"} ${r?.account?.currency ?? "USD"}`,
       });
       await Promise.all([loadStore(), refreshStatus()]);
@@ -1072,7 +1072,7 @@ function AdminPage() {
               <Shield className="w-5 h-5 text-amber-400" /> لوحة تحكم الأدمن
             </h1>
             <p className="text-xs text-slate-300 mt-1">
-              مراقبة رصيد Fazer الحي تلقائياً، مزامنة باقات كافة الألعاب، سعر الصرف، وإدارة التجار.
+              مراقبة رصيد سيرفر الشحن الحي تلقائياً، مزامنة باقات كافة الألعاب، سعر الصرف، وإدارة التجار.
             </p>
           </div>
           {isAdmin && (
@@ -1149,7 +1149,7 @@ function AdminPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h3 className="font-bold flex items-center gap-2 text-white">
-                      <Wallet className="w-4 h-4 text-cyan-400" /> رصيد محفظة Fazer الفعلي
+                      <Wallet className="w-4 h-4 text-cyan-400" /> رصيد محفظة سيرفر الشحن الفعلي
                     </h3>
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -1299,7 +1299,7 @@ function AdminPage() {
                   ))}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  المصدر تلقائي من FazerCards لكل الألعاب الأربعة بدون تعديل يدوي.
+                  المصدر تلقائي من سيرفر الشحن المعتمد لكل الألعاب بدون تعديل يدوي.
                 </p>
               </div>
             </div>
@@ -1786,7 +1786,7 @@ function AdminPage() {
                       <span>سجل العمليات والطلبات (Operations Log)</span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      متابعة فورية لكافة عمليات الشحن، الربح المحقق، أكواد Fazer، وحسابات اللاعبين والتجار
+                      متابعة فورية لكافة عمليات الشحن، الربح المحقق، أكواد السيرفر، وحسابات اللاعبين والتجار
                     </p>
                   </div>
                   <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1858,7 +1858,7 @@ function AdminPage() {
                   {/* Wholesale Cost */}
                   <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
                     <div className="flex items-center justify-between text-slate-400 text-xs">
-                      <span>تكلفة الجملة (Fazer)</span>
+                      <span>تكلفة الجملة (السيرفر)</span>
                       <Wallet className="w-3.5 h-3.5 text-purple-400" />
                     </div>
                     <div className="mt-1.5">
@@ -1905,7 +1905,7 @@ function AdminPage() {
                     <div className="relative flex-1">
                       <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
-                        placeholder="بحث برقم الطلب (ORD)، ID اللاعب، السيرفر، الإيميل، اللعبة، أو كود Fazer..."
+                        placeholder="بحث برقم الطلب (ORD)، ID اللاعب، السيرفر، الإيميل، اللعبة، أو رقم المرجع..."
                         value={orderSearch}
                         onChange={(e) => setOrderSearch(e.target.value)}
                         className={`pr-9 pl-8 h-9 text-xs sm:text-sm ${DARK_INPUT}`}
@@ -2001,7 +2001,7 @@ function AdminPage() {
                         <th className="p-3 text-right">اللعبة / اللاعب</th>
                         <th className="p-3 text-right">الباقة المشحونة</th>
                         <th className="p-3 text-center">الماليات (بيع / تكلفة / ربح)</th>
-                        <th className="p-3 text-center">الحالة / مزود Fazer</th>
+                        <th className="p-3 text-center">الحالة / رقم مرجع السيرفر</th>
                         <th className="p-3 text-center">تفاصيل</th>
                       </tr>
                     </thead>
@@ -2173,7 +2173,7 @@ function AdminPage() {
                                     disabled={syncingOrderId === o.id}
                                     onClick={() => handleSyncFazerOrder(o.id)}
                                     className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-7 px-2 text-[11px] gap-1 shadow-sm"
-                                    title="مزامنة الحالة مع Fazer فورياً"
+                                    title="مزامنة الحالة مع السيرفر فورياً"
                                   >
                                     <RefreshCw className={`w-3 h-3 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
                                     <span>مزامنة</span>
@@ -2336,7 +2336,7 @@ function AdminPage() {
                               className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-8 text-xs gap-1.5 px-3 shrink-0"
                             >
                               <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
-                              <span>مزامنة Fazer</span>
+                              <span>مزامنة السيرفر</span>
                             </Button>
                           )}
                           <Button
@@ -3800,7 +3800,7 @@ function AdminPage() {
                         className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold h-7 px-3 text-xs gap-1.5 shadow-sm"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === selectedOrderDetails.id ? "animate-spin" : ""}`} />
-                        <span>{syncingOrderId === selectedOrderDetails.id ? "جاري المزامنة..." : "مزامنة مع Fazer ⚡"}</span>
+                        <span>{syncingOrderId === selectedOrderDetails.id ? "جاري المزامنة..." : "مزامنة مع السيرفر ⚡"}</span>
                       </Button>
                     )}
                     <span
@@ -3994,7 +3994,7 @@ function AdminPage() {
                     </div>
                   </div>
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                    <div className="text-[10px] text-slate-400">تكلفة Fazer بالجملة</div>
+                    <div className="text-[10px] text-slate-400">تكلفة الجملة بالسيرفر</div>
                     <div className="text-sm font-bold text-purple-300 mt-0.5">
                       ${Number(selectedOrderDetails.total_cost_usd || 0).toFixed(3)}
                     </div>
@@ -4055,7 +4055,7 @@ function AdminPage() {
                             <div className="border-t border-slate-800 pt-2 space-y-1">
                               <div className="text-[11px] text-amber-400 font-semibold flex items-center gap-1">
                                 <Layers className="w-3 h-3" />
-                                <span>تفكيك الشحن لمزود Fazer (أقل تكلفة سحب):</span>
+                                <span>تفكيك الشحن للسيرفر الآلي (أقل تكلفة سحب):</span>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                 {comps.map((c: any, cIdx: number) => (
@@ -4086,7 +4086,7 @@ function AdminPage() {
                 <div className="text-slate-400 font-semibold flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Server className="w-3.5 h-3.5 text-cyan-400" />
-                    <span>سجل تنفيذ مزود الخدمة (Fazer Cards API)</span>
+                    <span>سجل تنفيذ سيرفر الشحن الآلي المعتمد</span>
                   </div>
                   {selectedOrderDetails.fazer_transaction_id && (
                     <div className="flex items-center gap-1 font-mono text-[11px] text-cyan-300">
@@ -4111,7 +4111,7 @@ function AdminPage() {
                 {selectedOrderDetails.fazer_response && (
                   <details className="text-[11px] text-slate-400 bg-slate-900/60 rounded-lg p-2 border border-slate-800">
                     <summary className="cursor-pointer text-slate-300 font-semibold hover:text-white flex items-center gap-1">
-                      <span>عرض الرد الخام من Fazer (Raw API Response)</span>
+                      <span>عرض الرد التقني من السيرفر (Raw Response)</span>
                     </summary>
                     <pre className="mt-2 text-[10px] font-mono text-cyan-200 bg-black/60 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
                       {JSON.stringify(selectedOrderDetails.fazer_response, null, 2)}

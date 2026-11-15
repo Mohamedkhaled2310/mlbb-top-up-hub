@@ -332,16 +332,37 @@ export class FazerCardsService {
       };
     }
 
+    const targetCategoryId =
+      _explicitCategoryId ||
+      (normalizedGame === "mlbb"
+        ? (selectedRegion === "br" ? "mobile_legends_brazil" : "mobile_legends_global")
+        : validateConfig.categoryId);
+
     const fields: Record<string, string> = validateConfig.zoneFieldKey
       ? { player_id: trimmedId, [validateConfig.zoneFieldKey]: trimmedZone }
       : { player_id: trimmedId };
 
     try {
-      const response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
+      let response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
         method: "POST",
-        body: JSON.stringify({ category_id: validateConfig.categoryId, fields }),
-        timeoutMs: 9000,
+        body: JSON.stringify({ category_id: targetCategoryId, fields }),
+        timeoutMs: 4000,
       });
+
+      // If primary category failed or timed out for MLBB, retry once with alternate category
+      if (!response.ok && normalizedGame === "mlbb" && targetCategoryId !== "mobile_legends") {
+        try {
+          const retryRes = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
+            method: "POST",
+            body: JSON.stringify({ category_id: "mobile_legends", fields }),
+            timeoutMs: 3000,
+          });
+          if (retryRes.ok) response = retryRes;
+        } catch {
+          // ignore retry error
+        }
+      }
+
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
 
       if (!response.ok || !data) {
@@ -374,25 +395,28 @@ export class FazerCardsService {
         };
       }
 
-      if (data["valid"] === false || data["ok"] === false) {
-        const msg = String(data?.["message"] || data?.["error"] || "");
-        const isTemporary =
-          msg.toLowerCase().includes("could not validate") ||
-          msg.toLowerCase().includes("try again later") ||
-          msg.toLowerCase().includes("gateway") ||
-          msg.toLowerCase().includes("timeout") ||
-          msg.toLowerCase().includes("unavailable") ||
-          msg.toLowerCase().includes("busy");
-        if (isTemporary) {
-          return {
-            valid: true,
-            userId: trimmedId,
-            zoneId: effectiveZone,
-            username: needsZone ? `${trimmedId} (${trimmedZone})` : trimmedId,
-            accountRegion: selectedRegion || "global",
-            fallback: true,
-          };
-        }
+      const checkMsg = String(data?.["message"] || data?.["error"] || data?.["msg"] || "");
+      const isTemporaryAnywhere =
+        checkMsg.toLowerCase().includes("could not validate") ||
+        checkMsg.toLowerCase().includes("try again later") ||
+        checkMsg.toLowerCase().includes("gateway") ||
+        checkMsg.toLowerCase().includes("timeout") ||
+        checkMsg.toLowerCase().includes("unavailable") ||
+        checkMsg.toLowerCase().includes("busy");
+
+      if (isTemporaryAnywhere) {
+        return {
+          valid: true,
+          userId: trimmedId,
+          zoneId: effectiveZone,
+          username: needsZone ? `${trimmedId} (${trimmedZone})` : trimmedId,
+          accountRegion: selectedRegion || "global",
+          fallback: true,
+        };
+      }
+
+      if (data["valid"] === false || data["ok"] === false || data["success"] === false || data["status"] === "error") {
+        const msg = checkMsg;
         return {
           valid: false,
           userId: trimmedId,

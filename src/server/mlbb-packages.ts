@@ -194,7 +194,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 50,
     bonusDiamonds: 5,
-    fallbackCostUsd: 0.6777,
+    fallbackCostUsd: 0.68,
   },
   {
     offerId: "mobile_legends_global:150_15_diamonds_first_top_up_bonus",
@@ -203,7 +203,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 150,
     bonusDiamonds: 15,
-    fallbackCostUsd: 2.0301,
+    fallbackCostUsd: 2.03,
   },
   {
     offerId: "mobile_legends_global:250_25_diamonds_first_top_up_bonus",
@@ -212,7 +212,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 250,
     bonusDiamonds: 25,
-    fallbackCostUsd: 3.2642,
+    fallbackCostUsd: 3.26,
   },
   {
     offerId: "mobile_legends_global:500_65_diamonds_first_top_up_bonus",
@@ -221,7 +221,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 500,
     bonusDiamonds: 65,
-    fallbackCostUsd: 6.7023,
+    fallbackCostUsd: 6.70,
   },
   // Global Elite Packs
   {
@@ -231,7 +231,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 0,
     bonusDiamonds: 0,
-    fallbackCostUsd: 0.6895,
+    fallbackCostUsd: 0.69,
   },
   {
     offerId: "mobile_legends_global:monthly_elite_pack",
@@ -240,7 +240,7 @@ export const MLBB_REQUESTED_PACKAGES: MlbbBonusPkgInfo[] = [
     region: "global",
     diamonds: 0,
     bonusDiamonds: 0,
-    fallbackCostUsd: 3.4295,
+    fallbackCostUsd: 3.43,
   },
   // Brazil First Top-Up Bonus
   {
@@ -657,17 +657,21 @@ export async function curateMlbbPackages(sb: any) {
 
     await sb
       .from("fazer_packages")
-      .update({
-        name: r.name,
-        category: r.category,
-        regions: [r.region],
-        cost_usd: effectiveCost,
-        diamonds: r.diamonds ?? 0,
-        bonus_diamonds: r.bonusDiamonds ?? 0,
-        active: true,
-        updated_at: nowIso,
-      })
-      .eq("offer_id", r.offerId);
+      .upsert(
+        {
+          offer_id: r.offerId,
+          game_id: "mlbb",
+          name: r.name,
+          category: r.category,
+          regions: [r.region],
+          cost_usd: effectiveCost,
+          diamonds: r.diamonds ?? 0,
+          bonus_diamonds: r.bonusDiamonds ?? 0,
+          active: true,
+          updated_at: nowIso,
+        },
+        { onConflict: "offer_id" },
+      );
   }
 
   // 7. Identify all active curated MLBB offer IDs and deactivate noisy uncurated duplicates

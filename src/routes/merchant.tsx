@@ -132,7 +132,7 @@ function MerchantPage() {
       let activeTok = token;
       let d = await getMerchantDashboardApi(activeTok);
       if (d?.error === "unauthorized") {
-        const fresh = await getFreshAuthToken();
+        const fresh = await getFreshAuthToken(true);
         if (fresh && fresh !== activeTok) {
           activeTok = fresh;
           d = await getMerchantDashboardApi(activeTok);
@@ -413,8 +413,11 @@ function MerchantPage() {
     return filterPackagesForServer(gamePackages, effectivePkgRegion, pkgSearch);
   }, [gamePackages, effectivePkgRegion, pkgSearch]);
 
+  const isUsdMerchant = currencyInfo.currency === "USD";
   const cartCount = store.cart.reduce((s, i) => s + i.qty, 0);
-  const cartTotal = store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0);
+  const cartTotalEgp = round3(store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0));
+  const cartTotalConverted = round3(store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).converted, 0));
+  const cartTotal = cartTotalEgp;
 
   const gameRegions = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -948,7 +951,15 @@ function MerchantPage() {
                   )}
                 </div>
                 <div className="text-[11px] sm:text-xs text-slate-300">
-                  إجمالي السلة: <span className="text-purple-300 font-bold font-mono">{cartTotal} ج.م</span>
+                  إجمالي السلة:{" "}
+                  {isUsdMerchant ? (
+                    <>
+                      <span className="text-purple-300 font-bold font-mono">${formatDecimals3(cartTotalConverted)} USD</span>
+                      <span className="text-slate-400 font-mono text-[10px] mr-1">({formatDecimals3(cartTotalEgp)} ج.م)</span>
+                    </>
+                  ) : (
+                    <span className="text-purple-300 font-bold font-mono">{formatDecimals3(cartTotalEgp)} ج.م</span>
+                  )}
                 </div>
               </div>
             </div>

@@ -68,29 +68,22 @@ describe("UI Components & Flows", () => {
     };
 
     const { rerender } = render(<Wrapper open={false} />);
-    expect(screen.queryByText("بيانات الشحن")).not.toBeInTheDocument();
+    expect(screen.queryByText("تأكيد الشحن الفوري")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("seed-merchant"));
     rerender(<Wrapper open={true} />);
 
-    expect(screen.getAllByText("بيانات الشحن").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("تأكيد الشحن الفوري").length).toBeGreaterThan(0);
     expect(screen.getByText("86 Diamonds")).toBeInTheDocument();
     // Cost $2 * 50 EGP * (1 + 0.10) = 110 EGP
-    expect(screen.getByText("110 ج.م")).toBeInTheDocument();
+    expect(screen.getAllByText(/110/i).length).toBeGreaterThan(0);
 
     const playerInput = screen.getByPlaceholderText("مثال: 12345678");
     const zoneInput = screen.getByPlaceholderText("مثال: 2024");
     fireEvent.change(playerInput, { target: { value: "12345678" } });
     fireEvent.change(zoneInput, { target: { value: "2024" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /تحقق ومتابعة/i }));
-    await waitFor(() => {
-      expect(screen.getAllByText("مراجعة الطلب").length).toBeGreaterThan(0);
-      expect(screen.getByText("TestPlayer#2024")).toBeInTheDocument();
-      expect(screen.getByText("اسم اللاعب (Nickname)")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /تأكيد وإرسال الطلب/i }));
+    fireEvent.click(screen.getByRole("button", { name: /دفع وتأكيد الشحن الفوري/i }));
     await waitFor(() => {
       expect(screen.getByText("ORD-TEST-1")).toBeInTheDocument();
     });

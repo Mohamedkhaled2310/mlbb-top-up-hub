@@ -511,7 +511,17 @@ export async function getStoreData(gameId?: string) {
       return true;
     })
     .map((p: any) => {
-    const costUsd = Number(p.cost_usd || 0);
+    let costUsd = Number(p.cost_usd || 0);
+    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
+    if (!hasAdminCustom && p.game_id === "mlbb") {
+      const off = String(p.offer_id || "");
+      if (off === "mobile_legends_global:50_5_diamonds_first_top_up_bonus") costUsd = 0.68;
+      else if (off === "mobile_legends_global:weekly_elite_pack") costUsd = 0.69;
+      else if (off === "mobile_legends_global:150_15_diamonds_first_top_up_bonus") costUsd = 2.03;
+      else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
+      else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
+      else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
+    }
     const retail = costUsd > 0 ? calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP) : 0;
     const merchantBase = costUsd > 0 ? calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP) : 0;
     const rawCategoryId =
@@ -996,7 +1006,17 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   const merchantMargin = merchant ? Number(merchant.margin_percent || 0) : 0;
   const orderItems = items.map((it) => {
     const p = byId.get(it.offerId);
-    const costUsd = Number(p.cost_usd || 0);
+    let costUsd = Number(p.cost_usd || 0);
+    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
+    if (!hasAdminCustom && p.game_id === "mlbb") {
+      const off = String(p.offer_id || "");
+      if (off === "mobile_legends_global:50_5_diamonds_first_top_up_bonus") costUsd = 0.68;
+      else if (off === "mobile_legends_global:weekly_elite_pack") costUsd = 0.69;
+      else if (off === "mobile_legends_global:150_15_diamonds_first_top_up_bonus") costUsd = 2.03;
+      else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
+      else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
+      else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
+    }
     const merchantBase = calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP);
     const customEntry = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
     const customUsd = extractCustomPriceUsd(customEntry);
@@ -1174,7 +1194,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
             } else if (poll.failed) {
               res.success = false;
               res.status = "failed";
-              res.error = poll.failReason || "فشلت العملية لدى مزود الخدمة (Fazer)";
+              res.error = poll.failReason || "فشلت العملية لدى سيرفر الشحن المعتمد";
             } else {
               res.status = "processing";
             }
@@ -1225,7 +1245,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           } else if (poll.failed) {
             res.success = false;
             res.status = "failed";
-            res.error = poll.failReason || "فشلت العملية لدى مزود الخدمة (Fazer)";
+            res.error = poll.failReason || "فشلت العملية لدى سيرفر الشحن المعتمد";
           } else {
             res.status = "processing";
           }
@@ -1312,14 +1332,14 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       ? finalStatus === "success"
         ? "تم خصم الرصيد وتنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
         : finalStatus === "processing"
-          ? "تم خصم الرصيد وإرسال الشحن لمزود الخدمة وجاري المعالجة على سيرفر اللعبة (Fazer: Processing) ⏳."
+          ? "تم خصم الرصيد وإرسال الشحن مباشرة وجاري المعالجة على سيرفر اللعبة (قيد المعالجة) ⏳."
           : succeededCount > 0
             ? `تم تنفيذ جزء من الطلب واسترداد ${failedAmount} ج.م للباقي تلقائياً.`
             : "فشل تنفيذ الشحن وتم استرداد المبلغ بالكامل إلى محفظة التاجر تلقائياً."
       : finalStatus === "success"
         ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
         : finalStatus === "processing"
-          ? "تم إرسال الطلب بنجاح إلى مزود الخدمة وجاري المعالجة على سيرفر اللعبة (قيد المعالجة) ⏳."
+          ? "تم إرسال الطلب بنجاح وجاري المعالجة على سيرفر اللعبة (قيد المعالجة) ⏳."
           : "تعذر إكمال التنفيذ الفوري، تم حفظ الطلب للمراجعة.",
   };
 }
@@ -1349,7 +1369,7 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
 
   const txIdsRaw = order.fazer_transaction_id;
   if (!txIdsRaw) {
-    throw new Error("لا يوجد معرف عملية Fazer مسجل لهذا الطلب للمزامنة معه");
+    throw new Error("لا يوجد رقم مرجعي مسجل لهذا الطلب للمزامنة معه");
   }
 
   const txIds = txIdsRaw.split(",").map((s: string) => s.trim()).filter(Boolean);
@@ -1367,7 +1387,7 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
     } else if (fRes.status === "failed" || fRes.status === "cancelled") {
       anyFailed = true;
       allCompleted = false;
-      failMsg = fRes.failReason || "فشلت العملية لدى Fazer";
+      failMsg = fRes.failReason || "فشلت العملية في السيرفر";
     } else {
       anyProcessing = true;
       allCompleted = false;
@@ -1398,14 +1418,14 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
         order.merchant_id,
         Number(order.total_egp || 0),
         order.order_ref,
-        `استرداد تلقائي للطلب ${order.order_ref} بعد تأكيد الفشل من Fazer`,
+        `استرداد تلقائي للطلب ${order.order_ref} بعد تأكيد تعذر الشحن من السيرفر`,
       );
     }
     await sb
       .from("orders")
       .update({
         status: "failed",
-        error_message: failMsg || "فشلت العملية في Fazer",
+        error_message: failMsg || "فشلت العملية في السيرفر",
         fazer_response: fazerResults,
         updated_at: nowIso,
       })
@@ -1434,10 +1454,10 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
     fazer_results: fazerResults,
     message:
       newStatus === "success"
-        ? "تم تأكيد اكتمال الشحن من Fazer بنجاح! 🚀"
+        ? "تم تأكيد اكتمال الشحن بنجاح! 🚀"
         : newStatus === "failed"
-          ? `أكدت Fazer فشل العملية (${failMsg}). تم تحديث الحالة${order.merchant_id ? " واسترداد الرصيد للتاجر" : ""}.`
-          : "العملية لا تزال قيد المعالجة (Processing) في سيرفرات Fazer ⏳",
+          ? `أكد السيرفر تعذر تنفيذ العملية (${failMsg}). تم تحديث الحالة${order.merchant_id ? " واسترداد الرصيد للتاجر" : ""}.`
+          : "العملية لا تزال قيد المعالجة المباشرة في السيرفر ⏳",
   };
 }
 
@@ -2107,9 +2127,7 @@ export async function adminListRecentOrders(token: string, limit = 50) {
 }
 
 export async function adjustMerchantBalancesForFxRateChange(sb: any, oldRate: number, targetRate: number) {
-  if (!oldRate || oldRate <= 0 || !targetRate || targetRate <= 0 || Math.abs(oldRate - targetRate) < 0.001) {
-    return;
-  }
+  if (!targetRate || targetRate <= 0) return;
   try {
     const { data: allMerchants } = await sb.from("merchant_accounts").select("id, balance_egp, user_id");
     const userIds = (allMerchants || []).map((m: any) => m.user_id).filter(Boolean);
@@ -2118,11 +2136,18 @@ export async function adjustMerchantBalancesForFxRateChange(sb: any, oldRate: nu
 
     const nowIso = new Date().toISOString();
     for (const m of allMerchants || []) {
-      const reg = profileRegionMap.get(m.user_id);
+      const reg = String(profileRegionMap.get(m.user_id) || "").trim().toUpperCase();
       const curEgp = Number(m.balance_egp || 0);
-      // All merchants whose region is international/USD (not EG) preserve their exact USD value!
-      if (reg !== "EG" && curEgp > 0) {
-        const usdVal = curEgp / oldRate;
+      const isUsdMerchant = reg === "GLOBAL" || reg === "US" || (reg !== "EG" && reg !== "");
+
+      if (isUsdMerchant && curEgp > 0) {
+        // Recalibrate based on old vs new rate so USD value remains constant
+        let effectiveOld = oldRate > 0 ? oldRate : 55.28;
+        // Fix Moeml / 49.632 drift: if balance was frozen at 2764 EGP ($50 * 55.28), recalibrate to full $50
+        if (Math.abs(curEgp - 2764) < 1.0) {
+          effectiveOld = 55.28;
+        }
+        const usdVal = curEgp / effectiveOld;
         const newBalEgp = Math.round(usdVal * targetRate * 100) / 100;
         if (Math.abs(newBalEgp - curEgp) >= 0.01) {
           await sb

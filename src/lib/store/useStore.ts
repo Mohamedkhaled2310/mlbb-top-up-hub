@@ -260,8 +260,8 @@ export { getState as getStoreState };
 
 let inFlightTokenRefresh: Promise<string | null> | null = null;
 
-export async function getFreshAuthToken(): Promise<string | null> {
-  if (inFlightTokenRefresh) return inFlightTokenRefresh;
+export async function getFreshAuthToken(forceRefresh = false): Promise<string | null> {
+  if (inFlightTokenRefresh && !forceRefresh) return inFlightTokenRefresh;
   inFlightTokenRefresh = (async () => {
     try {
       const current = getState();
@@ -271,7 +271,7 @@ export async function getFreshAuthToken(): Promise<string | null> {
       const isExpiredOrClose = exp > 0 && exp - nowSec < 120;
       const refToken = current.refreshToken || stored?.refreshToken;
 
-      if (isExpiredOrClose && refToken) {
+      if ((forceRefresh || isExpiredOrClose) && refToken) {
         try {
           const res = await refreshSessionApi(refToken);
           if (res?.accessToken) {
@@ -287,13 +287,24 @@ export async function getFreshAuthToken(): Promise<string | null> {
         }
       }
 
-      if (current.accessToken) return current.accessToken;
-      if (stored?.accessToken && (!exp || exp > nowSec)) {
+      if (!forceRefresh && current.accessToken) return current.accessToken;
+      if (!forceRefresh && stored?.accessToken && (!exp || exp > nowSec)) {
         return stored.accessToken;
       }
 
       if (supabase) {
         try {
+          if (forceRefresh && refToken) {
+            const { data } = await supabase.auth.refreshSession({ refresh_token: refToken });
+            if (data.session?.access_token) {
+              current.setAuth(data.session.access_token, current.profile, current.merchant, {
+                refreshToken: data.session.refresh_token,
+                expiresAt: data.session.expires_at,
+                email: data.user?.email,
+              });
+              return data.session.access_token;
+            }
+          }
           const { data } = await supabase.auth.getSession();
           if (data.session?.access_token) return data.session.access_token;
         } catch {
