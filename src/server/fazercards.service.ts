@@ -66,6 +66,9 @@ export interface FazerCatalogProduct {
   raw?: Record<string, SerializablePrimitive> | null | undefined;
 }
 
+// In-memory memory cache for validated players (24 hours TTL)
+const PLAYER_VALIDATION_CACHE = new Map<string, { result: any; expiresAt: number }>();
+
 export class FazerCardsService {
   private static getApiKey(): string {
     return (process.env["FAZER_API_KEY"] || "").trim();
@@ -331,6 +334,12 @@ export class FazerCardsService {
         ? "mobile_legends"
         : (validateConfig.categoryId || "mobile_legends");
 
+    const cacheKey = `${normalizedGame}:${trimmedId}:${trimmedZone || ""}:${targetCategoryId}`;
+    const cached = PLAYER_VALIDATION_CACHE.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { ...cached.result };
+    }
+
     const fields: Record<string, string> = validateConfig.zoneFieldKey
       ? { player_id: trimmedId, [validateConfig.zoneFieldKey]: trimmedZone }
       : { player_id: trimmedId };
@@ -425,7 +434,7 @@ export class FazerCardsService {
         selectedRegion ||
         null;
 
-      return {
+      const validationResult = {
         valid: true,
         userId: trimmedId,
         zoneId: effectiveZone,
@@ -433,6 +442,14 @@ export class FazerCardsService {
         accountRegion: mappedRegion,
         ...(rawDetectedRegion ? { region: String(rawDetectedRegion) } : {}),
       };
+
+      // Cache successful validation in memory for 24 hours
+      PLAYER_VALIDATION_CACHE.set(cacheKey, {
+        result: validationResult,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      });
+
+      return validationResult;
     } catch (err: unknown) {
       // Connection failure / timeout fallback: syntax format is verified, allow customer to proceed
       return {

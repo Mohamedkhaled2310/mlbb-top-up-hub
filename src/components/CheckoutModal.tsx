@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "../hooks/use-toast";
 import { getOrderStatusApi, submitOrderApi, validatePlayerApi } from "@/lib/api-client";
 import { CopyButton } from "./CopyButton";
-import { saveRecentAccount } from "../lib/recent-players";
+import { findCachedPlayer, saveRecentAccount } from "../lib/recent-players";
 import type { CartItem } from "@/types/store";
 
 type CheckoutStep = "form" | "processing" | "success" | "failed";
@@ -165,6 +165,19 @@ export default function CheckoutModal({
     }
     if (needsZone && !rawZone) {
       toast({ title: "رقم السيرفر مطلوب", description: "يرجى كتابة معرف السيرفر (Zone ID) لفحص الحساب" });
+      return;
+    }
+
+    // Instant local cache check (0ms response)
+    const cached = findCachedPlayer(activeGameId, rawId, rawZone);
+    if (cached && cached.name) {
+      setVerifiedPlayerName(cached.name);
+      setPlayer({ ...player, name: cached.name, region: cached.region || region || "global" });
+      if (cached.region) setRegion(cached.region);
+      toast({
+        title: "تم التحقق الفوري (ذاكرة سريعة) ⚡",
+        description: `اسم اللاعب: ${cached.name}`,
+      });
       return;
     }
 
@@ -377,8 +390,14 @@ export default function CheckoutModal({
                 <Input
                   value={player.id}
                   onChange={(e) => {
-                    setPlayer({ ...player, id: e.target.value, name: undefined });
-                    setVerifiedPlayerName(null);
+                    const newId = e.target.value;
+                    const cached = findCachedPlayer(activeGameId, newId, player.zoneId);
+                    setPlayer({ ...player, id: newId, name: cached?.name });
+                    if (cached?.name) {
+                      setVerifiedPlayerName(cached.name);
+                    } else {
+                      setVerifiedPlayerName(null);
+                    }
                     setValidationError(null);
                   }}
                   placeholder="مثال: 12345678"
@@ -392,8 +411,14 @@ export default function CheckoutModal({
                   <Input
                     value={player.zoneId || ""}
                     onChange={(e) => {
-                      setPlayer({ ...player, zoneId: e.target.value, name: undefined });
-                      setVerifiedPlayerName(null);
+                      const newZone = e.target.value;
+                      const cached = findCachedPlayer(activeGameId, player.id, newZone);
+                      setPlayer({ ...player, zoneId: newZone, name: cached?.name });
+                      if (cached?.name) {
+                        setVerifiedPlayerName(cached.name);
+                      } else {
+                        setVerifiedPlayerName(null);
+                      }
                       setValidationError(null);
                     }}
                     placeholder="مثال: 2024"

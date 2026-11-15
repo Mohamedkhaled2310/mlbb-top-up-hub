@@ -24,6 +24,20 @@ export function getRecentAccounts(gameId?: string): SavedPlayerAccount[] {
   }
 }
 
+export function findCachedPlayer(gameId: string, playerId: string, zoneId?: string): SavedPlayerAccount | null {
+  const cleanId = (playerId || "").trim();
+  const cleanZone = (zoneId || "").trim();
+  if (!cleanId) return null;
+  const accounts = getRecentAccounts(gameId);
+  return (
+    accounts.find(
+      (a) =>
+        a.id.toLowerCase() === cleanId.toLowerCase() &&
+        (!cleanZone || (a.zoneId || "").trim().toLowerCase() === cleanZone.toLowerCase()),
+    ) || null
+  );
+}
+
 export function saveRecentAccount(account: {
   id: string;
   zoneId?: string | undefined;
