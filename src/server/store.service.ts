@@ -498,15 +498,14 @@ export async function getStoreData(gameId?: string) {
     "2010_diamonds",
     "2976_diamonds",
     "7502_diamonds",
-    "7740_1548_diamonds",
   ]);
 
   const packages = (pkgs || [])
     .filter((p: any) => {
       if (p.game_id === "mlbb") {
         const id = String(p.offer_id || "");
-        const rawId = id.includes(":") ? id.split(":")[1] : id;
-        if (NOISY_MLBB_TIERS.has(rawId)) return false;
+        const rawId = (id.includes(":") ? id.split(":")[1] : id) || "";
+        if (rawId && NOISY_MLBB_TIERS.has(rawId)) return false;
       }
       return true;
     })
@@ -521,6 +520,8 @@ export async function getStoreData(gameId?: string) {
       else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
       else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
       else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
+      else if (off === "mobile_legends_global:7740_1548_diamonds") costUsd = 104.67;
+      else if (off === "mobile_legends_brazil:7740_1548_diamonds") costUsd = 96.37;
     }
     const retail = costUsd > 0 ? calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP) : 0;
     const merchantBase = costUsd > 0 ? calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP) : 0;
@@ -1016,6 +1017,8 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
       else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
       else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
+      else if (off === "mobile_legends_global:7740_1548_diamonds") costUsd = 104.67;
+      else if (off === "mobile_legends_brazil:7740_1548_diamonds") costUsd = 96.37;
     }
     const merchantBase = calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP);
     const customEntry = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
@@ -1109,6 +1112,19 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   let lastRemainingFazer: number | undefined;
   const responses: any[] = [];
 
+  const topUpTasks: Array<{
+    isComposite: boolean;
+    packageId?: string | undefined;
+    offerId: string;
+    fazerCategoryId?: string | undefined;
+    diamonds?: number | undefined;
+    q: number;
+    subIndex?: number | undefined;
+    shareEgp: number;
+    gameId: string;
+    idempotencyKey: string;
+  }> = [];
+
   for (const it of orderItems) {
     if (it.is_composite && Array.isArray(it.components) && it.components.length > 0) {
       let components = it.components;
@@ -1176,68 +1192,82 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           remainingUnitEgp = Math.max(0, remainingUnitEgp - compShareEgp);
 
           const idempotencyKey = `${orderRef}-${it.package_id}-${q}-${comp.fazerOfferId}-${cIdx}`;
-          const res = await FazerCardsService.executeTopUp({
+          topUpTasks.push({
+            isComposite: true,
+            packageId: it.package_id,
             offerId: comp.fazerOfferId,
-            playerId,
-            zoneId,
-            gameId: it.game_id,
             fazerCategoryId: comp.fazerCategoryId,
-            region,
-            idempotencyKey,
-          });
-
-          responses.push({
-            parent_package: it.package_id,
-            item: comp.fazerOfferId,
             diamonds: comp.diamonds,
             q,
-            sub_index: cIdx,
-            share_egp: compShareEgp,
-            res,
+            subIndex: cIdx,
+            shareEgp: compShareEgp,
+            gameId: it.game_id,
+            idempotencyKey,
           });
-
-          if (res.success) {
-            if (res.status === "completed") {
-              succeededCount++;
-            } else {
-              processingCount++;
-            }
-            if (res.transactionId) txIds.push(res.transactionId);
-            if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
-          } else {
-            failedCount++;
-            failedAmount += compShareEgp;
-            lastErr = res.error || `فشل شحن باقة ${comp.diamonds} ماسة ضمن الباقة المتجمعة`;
-          }
         }
       }
     } else {
       for (let q = 0; q < it.qty; q++) {
-        const res = await FazerCardsService.executeTopUp({
+        topUpTasks.push({
+          isComposite: false,
           offerId: it.fazer_offer_id,
-          playerId,
-          zoneId,
-          gameId: it.game_id,
           fazerCategoryId: it.fazer_category_id,
-          region,
+          q,
+          shareEgp: it.unit_price_egp,
+          gameId: it.game_id,
           idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
         });
-
-        responses.push({ item: it.fazer_offer_id, q, res });
-        if (res.success) {
-          if (res.status === "completed") {
-            succeededCount++;
-          } else {
-            processingCount++;
-          }
-          if (res.transactionId) txIds.push(res.transactionId);
-          if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
-        } else {
-          failedCount++;
-          failedAmount += it.unit_price_egp;
-          lastErr = res.error || "فشل تنفيذ الشحن لدى المزود";
-        }
       }
+    }
+  }
+
+  // Execute all top-up tasks in parallel for blazing-fast checkout
+  const taskExecutions = await Promise.all(
+    topUpTasks.map(async (task) => {
+      const res = await FazerCardsService.executeTopUp({
+        offerId: task.offerId,
+        playerId,
+        zoneId,
+        gameId: task.gameId,
+        fazerCategoryId: task.fazerCategoryId,
+        region,
+        idempotencyKey: task.idempotencyKey,
+      });
+      return { task, res };
+    }),
+  );
+
+  for (const { task, res } of taskExecutions) {
+    if (task.isComposite) {
+      responses.push({
+        parent_package: task.packageId,
+        item: task.offerId,
+        diamonds: task.diamonds,
+        q: task.q,
+        sub_index: task.subIndex,
+        share_egp: task.shareEgp,
+        res,
+      });
+    } else {
+      responses.push({ item: task.offerId, q: task.q, res });
+    }
+
+    if (res.success) {
+      if (res.status === "completed") {
+        succeededCount++;
+      } else {
+        processingCount++;
+      }
+      if (res.transactionId) txIds.push(res.transactionId);
+      if (typeof res.balanceRemaining === "number") lastRemainingFazer = res.balanceRemaining;
+    } else {
+      failedCount++;
+      failedAmount += task.shareEgp;
+      lastErr =
+        res.error ||
+        (task.isComposite
+          ? `فشل شحن باقة ${task.diamonds} ماسة ضمن الباقة المتجمعة`
+          : "فشل تنفيذ الشحن لدى المزود");
     }
   }
 

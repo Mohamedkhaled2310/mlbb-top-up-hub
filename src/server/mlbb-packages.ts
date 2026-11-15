@@ -106,8 +106,8 @@ export const MLBB_GLOBAL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
     totalDiamonds: 9288,
     baseOfferId: "mobile_legends_global:7740_1548_diamonds",
     rawOfferId: "7740_1548_diamonds",
-    name: "9288 Diamonds",
-    fallbackCostUsd: 104.672,
+    name: "7740 + 1548 Diamonds",
+    fallbackCostUsd: 104.67,
   },
 };
 
@@ -165,7 +165,7 @@ export const MLBB_BRAZIL_BASE_PACKAGES: Record<number, MlbbBasePkgInfo> = {
     totalDiamonds: 9288,
     baseOfferId: "mobile_legends_brazil:7740_1548_diamonds",
     rawOfferId: "7740_1548_diamonds",
-    name: "9288 Diamonds",
+    name: "7740 + 1548 Diamonds",
     fallbackCostUsd: 96.37,
   },
 };
@@ -547,6 +547,8 @@ export async function curateMlbbPackages(sb: any) {
       .update({
         name: b.name,
         category: "diamonds",
+        diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
+        bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
         regions: ["global"],
         cost_usd: effectiveCost,
         active: true,
@@ -570,6 +572,8 @@ export async function curateMlbbPackages(sb: any) {
       .update({
         name: b.name,
         category: "diamonds",
+        diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
+        bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
         regions: ["br"],
         cost_usd: effectiveCost,
         active: true,
@@ -722,7 +726,6 @@ export async function curateMlbbPackages(sb: any) {
     "2010_diamonds",
     "2976_diamonds",
     "7502_diamonds",
-    "7740_1548_diamonds",
   ]);
 
   // Activate regional packages for supported canonical servers (Turkey, Indonesia, Malaysia, etc.)
@@ -737,8 +740,8 @@ export async function curateMlbbPackages(sb: any) {
     .filter((p: any) => {
       if (p.cost_usd == null || Number(p.cost_usd) <= 0) return false;
       const off = String(p.offer_id || "");
-      const rawId = off.includes(":") ? off.split(":")[1] : off;
-      if (NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return false;
+      const rawId = (off.includes(":") ? off.split(":")[1] : off) || "";
+      if (rawId && NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return false;
       return true;
     })
     .map((p: any) => p.offer_id);
@@ -754,8 +757,8 @@ export async function curateMlbbPackages(sb: any) {
   const toDeactivate = pkgs
     .filter((p: any) => {
       const off = String(p.offer_id || "");
-      const rawId = off.includes(":") ? off.split(":")[1] : off;
-      if (NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return true;
+      const rawId = (off.includes(":") ? off.split(":")[1] : off) || "";
+      if (rawId && NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return true;
 
       const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
         ? p.raw.fazer_category_id

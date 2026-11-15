@@ -332,36 +332,22 @@ export class FazerCardsService {
       };
     }
 
+    // For MLBB, FazerCards validate-id API category is ALWAYS "mobile_legends" (not regional variants)
     const targetCategoryId =
-      _explicitCategoryId ||
-      (normalizedGame === "mlbb"
-        ? (selectedRegion === "br" ? "mobile_legends_brazil" : "mobile_legends_global")
-        : validateConfig.categoryId);
+      normalizedGame === "mlbb"
+        ? "mobile_legends"
+        : (validateConfig.categoryId || "mobile_legends");
 
     const fields: Record<string, string> = validateConfig.zoneFieldKey
       ? { player_id: trimmedId, [validateConfig.zoneFieldKey]: trimmedZone }
       : { player_id: trimmedId };
 
     try {
-      let response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
+      const response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
         method: "POST",
         body: JSON.stringify({ category_id: targetCategoryId, fields }),
-        timeoutMs: 4000,
+        timeoutMs: 3000,
       });
-
-      // If primary category failed or timed out for MLBB, retry once with alternate category
-      if (!response.ok && normalizedGame === "mlbb" && targetCategoryId !== "mobile_legends") {
-        try {
-          const retryRes = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
-            method: "POST",
-            body: JSON.stringify({ category_id: "mobile_legends", fields }),
-            timeoutMs: 3000,
-          });
-          if (retryRes.ok) response = retryRes;
-        } catch {
-          // ignore retry error
-        }
-      }
 
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
 
@@ -999,7 +985,6 @@ export class FazerCardsService {
         "2010_diamonds",
         "2976_diamonds",
         "7502_diamonds",
-        "7740_1548_diamonds",
       ].includes(cleanRawOfferId);
 
     if (isNoisyOddMlbbTier) {

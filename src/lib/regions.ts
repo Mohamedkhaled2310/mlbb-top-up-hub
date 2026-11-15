@@ -139,10 +139,9 @@ export const NOISY_ODD_MLBB_TIERS = new Set([
   "2010_diamonds",
   "2976_diamonds",
   "7502_diamonds",
-  "7740_1548_diamonds",
 ]);
 
-export function isNoisyOddMlbbPackage(pkg: { gameId?: string; offerId?: string; id?: string; name?: string }): boolean {
+export function isNoisyOddMlbbPackage(pkg: { gameId?: string | undefined; offerId?: string | undefined; id?: string | undefined; name?: string | undefined }): boolean {
   if (pkg.gameId && pkg.gameId !== "mlbb") return false;
   const id = String(pkg.offerId || pkg.id || "");
   const rawId = id.includes(":") ? id.split(":")[1] : id;
