@@ -346,7 +346,7 @@ export class FazerCardsService {
       const response = await this.fetchWithTimeout(`${getFazerBaseUrl()}/topups/validate-id`, {
         method: "POST",
         body: JSON.stringify({ category_id: targetCategoryId, fields }),
-        timeoutMs: 3000,
+        timeoutMs: 1800,
       });
 
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
@@ -494,7 +494,7 @@ export class FazerCardsService {
         method: "POST",
         headers: { ...this.headers(), "Idempotency-Key": idempotency },
         body: JSON.stringify(body),
-        timeoutMs: 8000,
+        timeoutMs: 2500,
       });
       const data = (await response.json().catch(() => null)) as Record<string, any> | null;
       const nestedOrder = (data?.["order"] && typeof data["order"] === "object" ? data["order"] : data?.["data"]) as
