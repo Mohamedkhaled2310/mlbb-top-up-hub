@@ -136,7 +136,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const isMaintenanceMode = true; // Set to false when updates are finished in the morning
+  const isMaintenanceMode = false; // Maintenance mode deactivated - site is open live!
 
   return (
     <QueryClientProvider client={queryClient}>
