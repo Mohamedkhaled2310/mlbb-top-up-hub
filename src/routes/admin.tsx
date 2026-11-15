@@ -346,9 +346,11 @@ function AdminPage() {
     };
   }, [orders]);
 
-  // Initial load & restore session
+  // Initial load & restore session ONCE on mount
   useEffect(() => {
-    loadStore();
+    if (!store.packages || store.packages.length === 0) {
+      loadStore();
+    }
     refreshStatus();
 
     if (typeof window !== "undefined") {
