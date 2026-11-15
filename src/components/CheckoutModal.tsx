@@ -112,7 +112,13 @@ export default function CheckoutModal({
 
   const getItemUnitPrice = (item: CartItem): number => {
     if (isMerchant) {
-      const customUsd = (merchant as any)?.custom_prices?.[item.package.offerId];
+      const entry = (merchant as any)?.custom_prices?.[item.package.offerId];
+      const customUsd =
+        typeof entry === "object" && entry !== null && typeof entry.price_usd === "number"
+          ? entry.price_usd
+          : typeof entry === "number" && entry > 0
+            ? entry
+            : null;
       if (typeof customUsd === "number" && customUsd > 0) return round3(customUsd * settings.egp_rate);
       const base = item.package.merchantBasePriceEgp ?? item.package.retailPriceEgp;
       return calcMerchantUnitPriceEgp(base, merchantMargin, item.package.costUsd, settings.egp_rate);

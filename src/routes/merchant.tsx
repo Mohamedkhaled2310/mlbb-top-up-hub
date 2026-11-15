@@ -309,7 +309,13 @@ function MerchantPage() {
 
   const getMerchantPrices = useCallback(
     (p: TopUpPackage) => {
-      const customUsd = (store.merchant?.custom_prices as any)?.[p.offerId];
+      const entry = (store.merchant?.custom_prices as any)?.[p.offerId];
+      const customUsd =
+        typeof entry === "object" && entry !== null && typeof entry.price_usd === "number"
+          ? entry.price_usd
+          : typeof entry === "number" && entry > 0
+            ? entry
+            : null;
       const isCustom = typeof customUsd === "number" && customUsd > 0;
       const base = p.merchantBasePriceEgp ?? p.retailPriceEgp;
       const priceEgp = isCustom

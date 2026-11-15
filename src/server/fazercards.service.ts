@@ -374,12 +374,30 @@ export class FazerCardsService {
         };
       }
 
-      if (data["valid"] === false) {
+      if (data["valid"] === false || data["ok"] === false) {
+        const msg = String(data?.["message"] || data?.["error"] || "");
+        const isTemporary =
+          msg.toLowerCase().includes("could not validate") ||
+          msg.toLowerCase().includes("try again later") ||
+          msg.toLowerCase().includes("gateway") ||
+          msg.toLowerCase().includes("timeout") ||
+          msg.toLowerCase().includes("unavailable") ||
+          msg.toLowerCase().includes("busy");
+        if (isTemporary) {
+          return {
+            valid: true,
+            userId: trimmedId,
+            zoneId: effectiveZone,
+            username: needsZone ? `${trimmedId} (${trimmedZone})` : trimmedId,
+            accountRegion: selectedRegion || "global",
+            fallback: true,
+          };
+        }
         return {
           valid: false,
           userId: trimmedId,
           zoneId: effectiveZone,
-          error: "معرف اللاعب أو السيرفر غير صحيح أو غير موجود",
+          error: msg || "معرف اللاعب أو السيرفر غير صحيح أو غير موجود",
         };
       }
 
@@ -759,10 +777,20 @@ export class FazerCardsService {
       return null;
     }
 
+    const MLBB_CANONICAL_SERVERS = new Set([
+      "mobile_legends_global",
+      "mobile_legends_brazil",
+      "mobile_legends_turkey",
+      "mobile_legends_indonesia",
+      "mobile_legends_malaysia",
+      "mobile_legends_philippines",
+      "mobile_legends_ru",
+      "mobile_legends_singapore",
+      "mobile_legends_united_states",
+    ]);
+
     if (id.startsWith("mobile_legends") || label.includes("mobile legends") || label.includes("mlbb")) {
-      // Only mobile_legends_global and mobile_legends_brazil are canonical supported servers for MLBB.
-      // Exclude noisy regional catalogs (Turkey, Indonesia, Malaysia, Russia, Philippines, etc.) to prevent uncurated packages appearing.
-      if (id === "mobile_legends_global" || id === "mobile_legends_brazil") {
+      if (MLBB_CANONICAL_SERVERS.has(id)) {
         return "mlbb";
       }
       return null;

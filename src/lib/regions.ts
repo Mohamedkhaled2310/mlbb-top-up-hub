@@ -10,13 +10,14 @@ export const GAME_SERVERS: Record<string, GameServerRegion[]> = {
   mlbb: [
     { code: "global", labelAr: "عالمي (Global)", labelEn: "Global" },
     { code: "br", labelAr: "البرازيل (Brazil)", labelEn: "Brazil" },
+    { code: "tr", labelAr: "تركيا (Turkey)", labelEn: "Turkey" },
     { code: "id", labelAr: "إندونيسيا (Indonesia)", labelEn: "Indonesia" },
     { code: "my", labelAr: "ماليزيا (Malaysia)", labelEn: "Malaysia" },
     { code: "ph", labelAr: "الفلبين (Philippines)", labelEn: "Philippines" },
-    { code: "tr", labelAr: "تركيا (Turkey)", labelEn: "Turkey" },
-    { code: "mena", labelAr: "الشرق الأوسط (MENA)", labelEn: "MENA" },
-    { code: "sg", labelAr: "سنغافورة (Singapore)", labelEn: "Singapore" },
     { code: "ru", labelAr: "روسيا (Russia)", labelEn: "Russia" },
+    { code: "sg", labelAr: "سنغافورة (Singapore)", labelEn: "Singapore" },
+    { code: "us", labelAr: "الولايات المتحدة (US)", labelEn: "United States" },
+    { code: "mena", labelAr: "الشرق الأوسط (MENA)", labelEn: "MENA" },
   ],
   pubg: [
     { code: "global", labelAr: "عالمي (Global)", labelEn: "Global" },

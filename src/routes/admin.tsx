@@ -66,6 +66,7 @@ import {
 } from "../lib/api-client";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo } from "../lib/currency";
 import { calcMerchantBasePriceEgp, calcRetailPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
+import { getGameServers, getServerLabel } from "../lib/regions";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -729,7 +730,11 @@ function AdminPage() {
         await openMerchantProfile(profileMerchantId);
       }
     } catch (e: any) {
-      toast({ title: "فشل إضافة الرصيد", description: e?.message });
+      const msg =
+        e?.message === "unauthorized" || e?.message?.includes("unauthorized")
+          ? "انتهت جلسة تسجيل دخول الأدمن، يرجى تسجيل الدخول مجدداً كأدمن"
+          : e?.message || "فشلت العملية";
+      toast({ title: "فشل إضافة الرصيد", description: msg });
     }
   };
 
@@ -3315,9 +3320,10 @@ function AdminPage() {
                       <span className="text-slate-400 text-[11px] font-semibold shrink-0 ml-1">السيرفر:</span>
                       {[
                         { id: "all", label: "كل السيرفرات" },
-                        { id: "global", label: "عالمي (Global)" },
-                        { id: "br", label: "البرازيل (Brazil)" },
-                        { id: "mena", label: "الشرق الأوسط (MENA)" },
+                        ...getGameServers(profilePkgGame === "all" ? "mlbb" : profilePkgGame).map((s) => ({
+                          id: s.code.toLowerCase(),
+                          label: s.labelAr,
+                        })),
                       ].map((srv) => (
                         <button
                           key={srv.id}

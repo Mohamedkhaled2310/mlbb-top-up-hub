@@ -683,9 +683,50 @@ export async function curateMlbbPackages(sb: any) {
     "mobile_legends_brazil:twilight_pass",
   ]);
 
+  // 7. Canonical MLBB server categories
+  const MLBB_CANONICAL_CATEGORIES = new Set([
+    "mobile_legends_global",
+    "mobile_legends_brazil",
+    "mobile_legends_turkey",
+    "mobile_legends_indonesia",
+    "mobile_legends_malaysia",
+    "mobile_legends_philippines",
+    "mobile_legends_ru",
+    "mobile_legends_singapore",
+    "mobile_legends_united_states",
+  ]);
+
+  // Activate regional packages for supported canonical servers (Turkey, Indonesia, Malaysia, etc.)
+  const regionalCanonicalOffers = pkgs.filter((p: any) => {
+    const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
+      ? p.raw.fazer_category_id
+      : String(p.offer_id || "").split(":")[0];
+    return cat !== "mobile_legends_global" && cat !== "mobile_legends_brazil" && MLBB_CANONICAL_CATEGORIES.has(cat);
+  });
+
+  const regionalToActivate = regionalCanonicalOffers
+    .filter((p: any) => p.cost_usd != null && Number(p.cost_usd) > 0)
+    .map((p: any) => p.offer_id);
+
+  if (regionalToActivate.length) {
+    await sb
+      .from("fazer_packages")
+      .update({ active: true, updated_at: nowIso })
+      .in("offer_id", regionalToActivate);
+  }
+
+  // Deactivate ONLY packages that do not belong to any canonical server or are uncurated global/brazil duplicates
   const toDeactivate = pkgs
-    .map((p: any) => p.offer_id)
-    .filter((id: string) => id && !allActiveIds.has(id));
+    .filter((p: any) => {
+      const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
+        ? p.raw.fazer_category_id
+        : String(p.offer_id || "").split(":")[0];
+      if (cat !== "mobile_legends_global" && cat !== "mobile_legends_brazil" && MLBB_CANONICAL_CATEGORIES.has(cat)) {
+        return false; // keep regional server packages active!
+      }
+      return !allActiveIds.has(p.offer_id);
+    })
+    .map((p: any) => p.offer_id);
 
   if (toDeactivate.length) {
     await sb

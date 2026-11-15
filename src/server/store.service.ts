@@ -400,11 +400,12 @@ export async function getStoreData(gameId?: string) {
   ) {
     const liveEgp = Math.round(binanceEgp * 100) / 100;
     if (Math.abs(egpRate - liveEgp) > 0.05) {
+      const oldRate = egpRate;
       egpRate = liveEgp;
       sb.from("store_settings")
         .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
         .eq("id", 1)
-        .then(() => {})
+        .then(() => adjustMerchantBalancesForFxRateChange(sb, oldRate, egpRate))
         .catch(() => {});
     }
   }
@@ -423,12 +424,9 @@ export async function getStoreData(gameId?: string) {
   const distinctGames = new Set((pkgs || []).map((p: any) => p.game_id));
   const lastSyncMs = settingsRow?.packages_synced_at ? Date.parse(settingsRow.packages_synced_at) : 0;
   const syncStale = !lastSyncMs || Date.now() - lastSyncMs > 5 * 60 * 1000;
-  const hasUncuratedMlbb = (pkgs || []).some(
-    (p: any) => p.game_id === "mlbb" && (p.offer_id?.startsWith("mobile_legends_malaysia") || p.offer_id?.startsWith("mobile_legends_turkey")) && p.active,
-  );
   const missingCompositeMlbb = (pkgs || []).some((p: any) => p.game_id === "mlbb") && !(pkgs || []).some((p: any) => p.raw?.is_composite);
 
-  if (!process.env["VITEST"] && (hasUncuratedMlbb || missingCompositeMlbb)) {
+  if (!process.env["VITEST"] && missingCompositeMlbb) {
     try {
       await curateMlbbPackages(sb);
       let qRefresh = sb
@@ -2074,6 +2072,37 @@ export async function adminListRecentOrders(token: string, limit = 50) {
   return { orders: enriched };
 }
 
+export async function adjustMerchantBalancesForFxRateChange(sb: any, oldRate: number, targetRate: number) {
+  if (!oldRate || oldRate <= 0 || !targetRate || targetRate <= 0 || Math.abs(oldRate - targetRate) < 0.001) {
+    return;
+  }
+  try {
+    const { data: allMerchants } = await sb.from("merchant_accounts").select("id, balance_egp, user_id");
+    const userIds = (allMerchants || []).map((m: any) => m.user_id).filter(Boolean);
+    const { data: profiles } = await sb.from("profiles").select("id, region").in("id", userIds);
+    const profileRegionMap = new Map((profiles || []).map((p: any) => [p.id, p.region]));
+
+    const nowIso = new Date().toISOString();
+    for (const m of allMerchants || []) {
+      const reg = profileRegionMap.get(m.user_id);
+      const curEgp = Number(m.balance_egp || 0);
+      // All merchants whose region is international/USD (not EG) preserve their exact USD value!
+      if (reg !== "EG" && curEgp > 0) {
+        const usdVal = curEgp / oldRate;
+        const newBalEgp = Math.round(usdVal * targetRate * 100) / 100;
+        if (Math.abs(newBalEgp - curEgp) >= 0.01) {
+          await sb
+            .from("merchant_accounts")
+            .update({ balance_egp: newBalEgp, updated_at: nowIso })
+            .eq("id", m.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to adjust merchant balances for FX rate change:", err);
+  }
+}
+
 export async function adminUpdateEgpRate(
   token: string,
   params: number | { egpRate?: number; egp_rate?: number; mode?: "manual" | "binance_auto" },
@@ -2089,11 +2118,18 @@ export async function adminUpdateEgpRate(
   const sb = getAdminClient() as any;
   const nowIso = new Date().toISOString();
 
+  const { data: currentSettings } = await sb.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const oldRate = Number(currentSettings?.egp_rate || DEFAULT_EGP_RATE);
+
   const { error } = await sb
     .from("store_settings")
     .update({ egp_rate: targetRate, updated_at: nowIso })
     .eq("id", 1);
   if (error) throw new Error(error.message);
+
+  if (oldRate > 0 && Math.abs(oldRate - targetRate) > 0.001) {
+    await adjustMerchantBalancesForFxRateChange(sb, oldRate, targetRate);
+  }
 
   // Persist FX settings with mode: 'manual' (locks the rate from being auto-overwritten)
   const { data: existing } = await sb
@@ -2130,10 +2166,17 @@ export async function adminSyncBinanceRate(token: string) {
   }
 
   const nowIso = new Date().toISOString();
+  const { data: currentSettings } = await sb.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const oldRate = Number(currentSettings?.egp_rate || DEFAULT_EGP_RATE);
+
   await sb
     .from("store_settings")
     .update({ egp_rate: liveBinance, updated_at: nowIso })
     .eq("id", 1);
+
+  if (oldRate > 0 && Math.abs(oldRate - liveBinance) > 0.001) {
+    await adjustMerchantBalancesForFxRateChange(sb, oldRate, liveBinance);
+  }
 
   const { data: existing } = await sb
     .from("fazer_packages")
