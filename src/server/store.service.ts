@@ -1293,7 +1293,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
 }
 
 export async function syncOrderWithFazer(token: string, body: { order_id?: string; order_ref?: string }) {
-  await requireAdmin(token);
+  const { user } = await requireUser(token);
   const sb = getAdminClient() as any;
   const targetId = body.order_id || body.order_ref;
   if (!targetId) throw new Error("معرف الطلب مطلوب للمزامنة");
@@ -1305,6 +1305,15 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
     .maybeSingle();
 
   if (oErr || !order) throw new Error("الطلب غير موجود");
+
+  // Allow admin OR the merchant who owns this order
+  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role !== "admin") {
+    const { data: merchant } = await sb.from("merchant_accounts").select("id").eq("user_id", user.id).maybeSingle();
+    if (!merchant || order.merchant_id !== merchant.id) {
+      throw new Error("غير مصرح لك بمزامنة هذا الطلب");
+    }
+  }
 
   const txIdsRaw = order.fazer_transaction_id;
   if (!txIdsRaw) {

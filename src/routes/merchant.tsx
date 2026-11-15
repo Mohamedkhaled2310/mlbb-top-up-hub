@@ -3,22 +3,28 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
+  ExternalLink,
   Gamepad2,
   Globe,
   LogIn,
   LogOut,
   Package,
   Plus,
+  RefreshCw,
   Search,
+  ShieldCheck,
   ShoppingCart,
   Wallet,
+  X,
+  XCircle,
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
 import CheckoutModal from "../components/CheckoutModal";
 import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
-import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
+import { getFreshAuthToken, loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import { calcConvertedPrice, calcMerchantUnitPriceEgp, convertEgpToCurrency, formatDecimals3, round3 } from "../lib/pricing";
 import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo, getCurrencyRate } from "../lib/currency";
@@ -26,6 +32,7 @@ import {
   getMerchantDashboardApi,
   getStoreApi,
   loginWithPasswordApi,
+  merchantSyncOrderWithFazerApi,
   refreshSessionApi,
   updateMyNationalityApi,
 } from "../lib/api-client";
@@ -92,6 +99,8 @@ function MerchantPage() {
   const [selectedPkgRegion, setSelectedPkgRegion] = useState("global");
   const [pkgSearch, setPkgSearch] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -116,67 +125,54 @@ function MerchantPage() {
       sessionMeta?: { refreshToken?: string | null | undefined; expiresAt?: number | null | undefined; email?: string | null | undefined },
       remember = true,
     ) => {
-      const d = await getMerchantDashboardApi(token);
+      let activeTok = token;
+      let d = await getMerchantDashboardApi(activeTok);
+      if (d?.error === "unauthorized") {
+        const fresh = await getFreshAuthToken();
+        if (fresh && fresh !== activeTok) {
+          activeTok = fresh;
+          d = await getMerchantDashboardApi(activeTok);
+        }
+      }
       if (d?.error) throw new Error(d.error);
       setDash(d);
-      store.setAuth(token, d.profile, d.merchant, sessionMeta, remember);
+      store.setAuth(activeTok, d.profile, d.merchant, sessionMeta, remember);
       return d;
     },
     [store],
   );
 
-  // Restore stored session & initial store catalog
+  // Restore stored session & initial store catalog safely without logging out on transient errors
   useEffect(() => {
     loadStore();
     (async () => {
+      const freshToken = await getFreshAuthToken();
+      if (freshToken) {
+        try {
+          await loadDashboard(freshToken);
+          return;
+        } catch {
+          // Keep current stored session on network glitch
+        }
+      }
       const stored = loadStoredAuth();
       if (stored?.accessToken) {
         try {
           await loadDashboard(stored.accessToken);
-          return;
         } catch {
-          if (stored.refreshToken) {
-            try {
-              const refreshed = await refreshSessionApi(stored.refreshToken);
-              if (refreshed?.accessToken) {
-                await loadDashboard(refreshed.accessToken, {
-                  refreshToken: refreshed.refreshToken,
-                  expiresAt: refreshed.expiresAt,
-                  email: refreshed.user?.email,
-                });
-                return;
-              }
-            } catch {
-              store.logout();
-            }
-          }
-        }
-      }
-
-      if (supabase) {
-        try {
-          const { data } = await supabase.auth.getSession();
-          const token = data.session?.access_token;
-          if (token) {
-            await loadDashboard(token, {
-              refreshToken: data.session?.refresh_token,
-              expiresAt: data.session?.expires_at,
-              email: data.session?.user?.email,
-            });
-          }
-        } catch {
-          // Not signed in as merchant
+          // Keep existing state
         }
       }
     })();
-  }, []);
+  }, [loadDashboard, loadStore]);
 
   const refreshAll = useCallback(
     async (silent = false) => {
-      if (!store.accessToken) return;
+      const activeToken = (await getFreshAuthToken()) || store.accessToken;
+      if (!activeToken) return;
       if (!silent) setRefreshing(true);
       try {
-        await Promise.all([loadDashboard(store.accessToken), loadStore()]);
+        await Promise.all([loadDashboard(activeToken), loadStore()]);
       } catch {
         // Keep existing state on transient errors
       } finally {
@@ -185,6 +181,39 @@ function MerchantPage() {
     },
     [store.accessToken, loadDashboard, loadStore],
   );
+
+  const syncOrder = async (orderId: string) => {
+    const activeToken = (await getFreshAuthToken()) || store.accessToken;
+    if (!activeToken) {
+      toast({ title: "خطأ", description: "جلسة التاجر غير صالحة" });
+      return;
+    }
+    setSyncingOrderId(orderId);
+    try {
+      const res = await merchantSyncOrderWithFazerApi(activeToken, { order_id: orderId });
+      if (res?.error) {
+        toast({ title: "فشل المزامنة مع Fazer", description: res.error, variant: "destructive" });
+        return;
+      }
+      toast({
+        title:
+          res.new_status === "success"
+            ? "اكتملت العملية بنجاح! 🚀"
+            : res.new_status === "failed"
+              ? "فشلت العملية في Fazer وتم استرداد الرصيد ❌"
+              : "العملية لا تزال قيد التنفيذ في Fazer ⏳",
+        description: res.message || `حالة الطلب الآن: ${res.new_status}`,
+      });
+      if (selectedOrder && (selectedOrder.id === orderId || selectedOrder.order_ref === orderId)) {
+        setSelectedOrder(res.order || { ...selectedOrder, status: res.new_status });
+      }
+      await refreshAll(true);
+    } catch (e: any) {
+      toast({ title: "خطأ في المزامنة", description: e?.message });
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
 
   // Automatic real-time wallet/orders/packages refresh every 15s and on window focus
   useEffect(() => {
@@ -741,14 +770,21 @@ function MerchantPage() {
             <ScrollReveal delayMs={80}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
-                  <h3 className="font-bold mb-3 text-sm sm:text-base">آخر الطلبات</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-sm sm:text-base">آخر الطلبات</h3>
+                    <span className="text-[11px] text-slate-400">انقر على أي طلب لعرض التفاصيل وتحديث حالته</span>
+                  </div>
                   <div className="space-y-2 max-h-80 overflow-auto text-xs">
                     {(dash?.orders || []).slice(0, 30).map((o: any) => (
-                      <div key={o.id} className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2">
+                      <div
+                        key={o.id}
+                        onClick={() => setSelectedOrder(o)}
+                        className="flex items-center justify-between gap-2 border-b border-slate-800/70 pb-2 p-1.5 rounded-lg hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      >
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 font-mono text-cyan-300">
                             <span>{o.order_ref}</span>
-                            <CopyButton text={o.order_ref} />
+                            <span className="text-[10px] text-slate-400">🔍</span>
                           </div>
                           <div className="text-slate-400 truncate">
                             {o.player_id} • {o.game_id} • {o.total_egp} ج.م
@@ -756,10 +792,10 @@ function MerchantPage() {
                         </div>
                         <span
                           className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${o.status === "success"
-                            ? "bg-emerald-500/20 text-emerald-300"
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                             : o.status === "failed"
-                              ? "bg-rose-500/20 text-rose-300"
-                              : "bg-amber-500/20 text-amber-300"
+                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse"
                             }`}
                         >
                           {ORDER_STATUS_LABEL[o.status] || o.status}
@@ -856,6 +892,169 @@ function MerchantPage() {
         onClear={store.clearCart}
         onOrderSuccess={() => refreshAll(true)}
       />
+
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0d1226] p-4 sm:p-5 shadow-2xl text-slate-100 max-h-[92vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedOrder(null)}
+              className="absolute top-4 left-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <Package className="w-5 h-5 text-purple-400" />
+              <h3 className="font-bold text-base sm:text-lg">تفاصيل الطلب</h3>
+            </div>
+
+            {/* Reference + Status Badge */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-3 mb-4 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">رقم الطلب (Order Ref):</span>
+                <div className="flex items-center gap-1.5 font-mono text-cyan-300 font-bold text-sm">
+                  <span>{selectedOrder.order_ref}</span>
+                  <CopyButton text={selectedOrder.order_ref} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800/60">
+                <span className="text-xs text-slate-400">حالة الطلب:</span>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                    selectedOrder.status === "success"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : selectedOrder.status === "failed"
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                        : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                  }`}
+                >
+                  {selectedOrder.status === "success" && <CheckCircle2 className="w-3.5 h-3.5" />}
+                  {selectedOrder.status === "failed" && <XCircle className="w-3.5 h-3.5" />}
+                  {selectedOrder.status === "processing" && <Clock className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{ORDER_STATUS_LABEL[selectedOrder.status] || selectedOrder.status}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Timeline Progress */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 mb-4 space-y-2.5">
+              <div className="text-xs font-bold text-purple-300">مراحل تنفيذ العملية:</div>
+              <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400 flex items-center justify-center font-bold">✓</div>
+                  <span className="text-slate-300">تم الطلب</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400 flex items-center justify-center font-bold">✓</div>
+                  <span className="text-slate-300">ربط Fazer</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold border ${
+                    selectedOrder.status === "success"
+                      ? "bg-emerald-500/30 text-emerald-300 border-emerald-400"
+                      : selectedOrder.status === "failed"
+                        ? "bg-rose-500/30 text-rose-300 border-rose-400"
+                        : "bg-amber-500/30 text-amber-300 border-amber-400 animate-pulse"
+                  }`}>
+                    {selectedOrder.status === "success" ? "✓" : selectedOrder.status === "failed" ? "✗" : "⏳"}
+                  </div>
+                  <span className="text-slate-300">معالجة السيرفر</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold border ${
+                    selectedOrder.status === "success"
+                      ? "bg-emerald-500/30 text-emerald-300 border-emerald-400"
+                      : selectedOrder.status === "failed"
+                        ? "bg-rose-500/30 text-rose-300 border-rose-400"
+                        : "bg-slate-800 text-slate-500 border-slate-700"
+                  }`}>
+                    {selectedOrder.status === "success" ? "✓" : selectedOrder.status === "failed" ? "✗" : "4"}
+                  </div>
+                  <span className="text-slate-300">تسليم الشحن</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Order Details Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
+                <span className="text-slate-400 text-[11px] block">معرف اللاعب:</span>
+                <span className="font-mono font-bold text-white text-xs">{selectedOrder.player_id}</span>
+                {selectedOrder.zone_id && (
+                  <span className="text-slate-400 text-[10px] block font-mono">سيرفر: ({selectedOrder.zone_id})</span>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
+                <span className="text-slate-400 text-[11px] block">اللعبة والسيرفر:</span>
+                <span className="font-semibold text-white uppercase text-xs">
+                  {selectedOrder.game_id || "mlbb"} • {selectedOrder.region || "global"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
+                <span className="text-slate-400 text-[11px] block">المبلغ المخصوم:</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm">
+                  {selectedOrder.total_egp} ج.م
+                </span>
+                {selectedOrder.total_usd && (
+                  <span className="text-slate-400 text-[10px] block font-mono">
+                    (${selectedOrder.total_usd} USD)
+                  </span>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-2.5">
+                <span className="text-slate-400 text-[11px] block">تاريخ الطلب:</span>
+                <span className="text-slate-300 text-[11px] block">
+                  {new Date(selectedOrder.created_at).toLocaleDateString("ar-EG", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            </div>
+
+            {/* Fazer Transaction ID */}
+            {selectedOrder.fazer_transaction_id && (
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-2.5 mb-4 text-xs">
+                <span className="text-cyan-300 text-[11px] block mb-1">معرف عملية Fazer Cards:</span>
+                <div className="flex items-center justify-between gap-1 font-mono text-cyan-200">
+                  <span className="truncate">{selectedOrder.fazer_transaction_id}</span>
+                  <CopyButton text={selectedOrder.fazer_transaction_id} />
+                </div>
+              </div>
+            )}
+
+            {/* Fail Reason if any */}
+            {selectedOrder.status === "failed" && selectedOrder.fail_reason && (
+              <div className="rounded-lg border border-rose-500/30 bg-rose-950/30 p-2.5 mb-4 text-xs text-rose-300">
+                <span className="font-bold block mb-0.5">سبب الفشل:</span>
+                <span>{selectedOrder.fail_reason}</span>
+                <span className="block text-[10px] text-rose-400 mt-1">تم استرداد المبلغ بالكامل إلى محفظتك تلقائياً.</span>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+              <Button
+                variant="outline"
+                className="flex-1 border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs"
+                onClick={() => setSelectedOrder(null)}
+              >
+                إغلاق
+              </Button>
+              <Button
+                disabled={syncingOrderId === (selectedOrder.id || selectedOrder.order_ref)}
+                className="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+                onClick={() => syncOrder(selectedOrder.id || selectedOrder.order_ref)}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === (selectedOrder.id || selectedOrder.order_ref) ? "animate-spin" : ""}`} />
+                <span>تحديث الحالة من Fazer</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

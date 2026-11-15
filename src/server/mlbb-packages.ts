@@ -652,11 +652,8 @@ export async function curateMlbbPackages(sb: any) {
   for (const r of MLBB_REQUESTED_PACKAGES) {
     const existing = pkgs.find((p: any) => p.offer_id === r.offerId);
     const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
-    const effectiveCost = hasAdminCustom
-      ? existing.raw.custom_cost_usd
-      : Number.isFinite(Number(existing?.cost_usd)) && Number(existing.cost_usd) > 0
-        ? Number(existing.cost_usd)
-        : r.fallbackCostUsd;
+    // Always apply verified wholesale cost from Fazer catalog unless admin explicitly customized it
+    const effectiveCost = hasAdminCustom ? existing.raw.custom_cost_usd : r.fallbackCostUsd;
 
     await sb
       .from("fazer_packages")

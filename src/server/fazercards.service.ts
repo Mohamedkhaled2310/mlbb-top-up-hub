@@ -760,7 +760,12 @@ export class FazerCardsService {
     }
 
     if (id.startsWith("mobile_legends") || label.includes("mobile legends") || label.includes("mlbb")) {
-      return "mlbb";
+      // Only mobile_legends_global and mobile_legends_brazil are canonical supported servers for MLBB.
+      // Exclude noisy regional catalogs (Turkey, Indonesia, Malaysia, Russia, Philippines, etc.) to prevent uncurated packages appearing.
+      if (id === "mobile_legends_global" || id === "mobile_legends_brazil") {
+        return "mlbb";
+      }
+      return null;
     }
     if (id.startsWith("pubg_mobile") || label.includes("pubg mobile")) {
       return "pubg";

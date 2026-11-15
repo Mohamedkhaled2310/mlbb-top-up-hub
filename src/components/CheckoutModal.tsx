@@ -17,7 +17,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { useStore, getFreshAuthToken } from "@/lib/store/useStore";
 import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "@/lib/pricing";
 import { getServerLabel } from "@/lib/regions";
 import { Button } from "@/components/ui/button";
@@ -188,19 +188,9 @@ export default function CheckoutModal({
       let effectiveToken = accessToken;
       if (isMerchant) {
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          if (sessionData?.session?.access_token) {
-            effectiveToken = sessionData.session.access_token;
-            if (effectiveToken !== accessToken) {
-              setAuth(effectiveToken, profile, merchant);
-            }
-          }
-          if (sessionData?.session?.expires_at && sessionData.session.expires_at * 1000 < Date.now() + 60000) {
-            const { data: refreshed } = await supabase.auth.refreshSession();
-            if (refreshed?.session?.access_token) {
-              effectiveToken = refreshed.session.access_token;
-              setAuth(effectiveToken, profile, merchant);
-            }
+          const fresh = await getFreshAuthToken();
+          if (fresh) {
+            effectiveToken = fresh;
           }
         } catch {
           // ignore session refresh error

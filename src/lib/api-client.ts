@@ -167,6 +167,18 @@ export async function adminSyncOrderWithFazerApi(
   return await res.json();
 }
 
+export async function merchantSyncOrderWithFazerApi(
+  token: string,
+  body: { order_id?: string; order_ref?: string },
+): Promise<any> {
+  const res = await fetch("/api/merchant/orders/sync-fazer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
 export async function adminCreditMerchantApi(
   token: string,
   body: { merchant_id: string; amount?: number; amount_usd?: number; note?: string | undefined },

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import type { AuthSessionPayload, CartItem, PlayerInfo, TopUpPackage } from "@/types/store";
+import { refreshSessionApi } from "../api-client";
 
 const env: Record<string, string | undefined> = ((import.meta as any).env || {}) as Record<string, string | undefined>;
 const pEnv: Record<string, string | undefined> | undefined =
@@ -149,18 +150,20 @@ export function loadStoredAuth(): (Partial<AuthSessionPayload> & {
   }
 }
 
+const initialAuth = loadStoredAuth();
+
 state = {
   packages: [],
   settings: { egp_rate: 50 },
   player: { id: "", zoneId: "", region: "" },
   cart: [],
-  isMerchant: false,
-  accessToken: null,
-  refreshToken: null,
-  expiresAt: null,
-  userEmail: null,
-  merchant: null,
-  profile: null,
+  isMerchant: Boolean(initialAuth?.merchant && initialAuth?.accessToken),
+  accessToken: initialAuth?.accessToken || null,
+  refreshToken: initialAuth?.refreshToken || null,
+  expiresAt: initialAuth?.expiresAt || null,
+  userEmail: initialAuth?.userEmail || null,
+  merchant: (initialAuth?.merchant as any) || null,
+  profile: (initialAuth?.profile as any) || null,
   setPackages: (packages) => setState({ packages }),
   setSettings: (s) => setState({ settings: { ...getState().settings, ...s } }),
   setPlayer: (player) => setState({ player }),
@@ -254,3 +257,54 @@ export function useStore<T = StoreState>(selector?: (s: StoreState) => T): T {
 
 useStore.getState = getState;
 export { getState as getStoreState };
+
+let inFlightTokenRefresh: Promise<string | null> | null = null;
+
+export async function getFreshAuthToken(): Promise<string | null> {
+  if (inFlightTokenRefresh) return inFlightTokenRefresh;
+  inFlightTokenRefresh = (async () => {
+    try {
+      const current = getState();
+      const stored = loadStoredAuth();
+      const exp = current.expiresAt || stored?.expiresAt || 0;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const isExpiredOrClose = exp > 0 && exp - nowSec < 120;
+      const refToken = current.refreshToken || stored?.refreshToken;
+
+      if (isExpiredOrClose && refToken) {
+        try {
+          const res = await refreshSessionApi(refToken);
+          if (res?.accessToken) {
+            current.setAuth(res.accessToken, res.profile, res.merchant, {
+              refreshToken: res.refreshToken,
+              expiresAt: res.expiresAt,
+              email: res.user?.email,
+            });
+            return res.accessToken;
+          }
+        } catch {
+          // Keep current token on network fail
+        }
+      }
+
+      if (current.accessToken) return current.accessToken;
+      if (stored?.accessToken && (!exp || exp > nowSec)) {
+        return stored.accessToken;
+      }
+
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.access_token) return data.session.access_token;
+        } catch {
+          // ignore
+        }
+      }
+
+      return current.accessToken || stored?.accessToken || null;
+    } finally {
+      inFlightTokenRefresh = null;
+    }
+  })();
+  return inFlightTokenRefresh;
+}

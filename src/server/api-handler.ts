@@ -146,7 +146,13 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       );
       const reqRegion = String(body["region"] || "").trim().toLowerCase();
       const accRegion = String(result.accountRegion || "").trim().toLowerCase();
-      if (reqRegion && reqRegion !== "global" && accRegion && reqRegion !== accRegion) {
+      const gameId = String(body["gameId"] || body["game_id"] || "mlbb").toLowerCase();
+      const isMlbbCross =
+        gameId === "mlbb" &&
+        (accRegion === "global" || accRegion === "br" || !accRegion) &&
+        (reqRegion === "global" || reqRegion === "br" || !reqRegion);
+
+      if (!isMlbbCross && reqRegion && reqRegion !== "global" && accRegion && reqRegion !== accRegion) {
         return json({
           ...result,
           valid: false,
@@ -364,7 +370,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
-  if (path === "/api/admin/orders/sync-fazer" && request.method === "POST") {
+  if ((path === "/api/admin/orders/sync-fazer" || path === "/api/merchant/orders/sync-fazer") && request.method === "POST") {
     try {
       const token = getAuthToken(request);
       if (!token) return json({ error: "unauthorized" }, 401);
