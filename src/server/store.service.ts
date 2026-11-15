@@ -1186,20 +1186,6 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
             idempotencyKey,
           });
 
-          // Live Fazer synchronization: if accepted, poll Fazer status up to 3.6s
-          if (res.success && res.orderId && res.status !== "completed") {
-            const poll = await FazerCardsService.pollOrderStatus(res.orderId, 3, 1200);
-            if (poll.completed) {
-              res.status = "completed";
-            } else if (poll.failed) {
-              res.success = false;
-              res.status = "failed";
-              res.error = poll.failReason || "فشلت العملية لدى سيرفر الشحن المعتمد";
-            } else {
-              res.status = "processing";
-            }
-          }
-
           responses.push({
             parent_package: it.package_id,
             item: comp.fazerOfferId,
@@ -1236,20 +1222,6 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           region,
           idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
         });
-
-        // Live Fazer synchronization: if accepted, poll Fazer status up to 3.6s
-        if (res.success && res.orderId && res.status !== "completed") {
-          const poll = await FazerCardsService.pollOrderStatus(res.orderId, 3, 1200);
-          if (poll.completed) {
-            res.status = "completed";
-          } else if (poll.failed) {
-            res.success = false;
-            res.status = "failed";
-            res.error = poll.failReason || "فشلت العملية لدى سيرفر الشحن المعتمد";
-          } else {
-            res.status = "processing";
-          }
-        }
 
         responses.push({ item: it.fazer_offer_id, q, res });
         if (res.success) {
@@ -1315,6 +1287,21 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     })
     .eq("id", order.id);
 
+  // Trigger rapid non-blocking background auto-sync so the order flips to completed in real-time
+  if (finalStatus === "processing" || processingCount > 0) {
+    if (!process.env["VITEST"]) {
+      setTimeout(() => {
+        autoSyncPendingOrders(order.id).catch(() => {});
+      }, 1500);
+      setTimeout(() => {
+        autoSyncPendingOrders(order.id).catch(() => {});
+      }, 4500);
+      setTimeout(() => {
+        autoSyncPendingOrders(order.id).catch(() => {});
+      }, 9000);
+    }
+  }
+
   return {
     success: finalStatus === "success" || finalStatus === "processing" || finalStatus === "incomplete",
     order_ref: orderRef,
@@ -1344,35 +1331,23 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   };
 }
 
-export async function syncOrderWithFazer(token: string, body: { order_id?: string; order_ref?: string }) {
-  const { user } = await requireUser(token);
-  const sb = getAdminClient() as any;
-  const targetId = body.order_id || body.order_ref;
-  if (!targetId) throw new Error("معرف الطلب مطلوب للمزامنة");
+let lastAutoSyncTime = 0;
+let autoSyncInFlight = false;
 
-  const { data: order, error: oErr } = await sb
-    .from("orders")
-    .select("*")
-    .or(`id.eq.${targetId},order_ref.eq.${targetId}`)
-    .maybeSingle();
-
-  if (oErr || !order) throw new Error("الطلب غير موجود");
-
-  // Allow admin OR the merchant who owns this order
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") {
-    const { data: merchant } = await sb.from("merchant_accounts").select("id").eq("user_id", user.id).maybeSingle();
-    if (!merchant || order.merchant_id !== merchant.id) {
-      throw new Error("غير مصرح لك بمزامنة هذا الطلب");
-    }
-  }
-
+export async function syncSingleOrderInternal(
+  sb: any,
+  order: any,
+): Promise<{ status: string; updated: boolean; fazerResults: any[]; failMsg: string }> {
   const txIdsRaw = order.fazer_transaction_id;
   if (!txIdsRaw) {
-    throw new Error("لا يوجد رقم مرجعي مسجل لهذا الطلب للمزامنة معه");
+    return { status: order.status, updated: false, fazerResults: [], failMsg: "" };
   }
 
   const txIds = txIdsRaw.split(",").map((s: string) => s.trim()).filter(Boolean);
+  if (txIds.length === 0) {
+    return { status: order.status, updated: false, fazerResults: [], failMsg: "" };
+  }
+
   const fazerResults: any[] = [];
   let allCompleted = true;
   let anyFailed = false;
@@ -1409,9 +1384,9 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
         updated_at: nowIso,
       })
       .eq("id", order.id);
+    return { status: newStatus, updated: newStatus !== order.status, fazerResults, failMsg };
   } else if (anyFailed) {
     newStatus = "failed";
-    // Refund merchant if it wasn't refunded already
     if (order.merchant_id && order.status !== "failed") {
       await issueMerchantRefund(
         sb,
@@ -1430,6 +1405,7 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
         updated_at: nowIso,
       })
       .eq("id", order.id);
+    return { status: newStatus, updated: newStatus !== order.status, fazerResults, failMsg };
   } else if (anyProcessing) {
     newStatus = "processing";
     await sb
@@ -1440,8 +1416,86 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
         updated_at: nowIso,
       })
       .eq("id", order.id);
+    return { status: newStatus, updated: newStatus !== order.status, fazerResults, failMsg };
   }
 
+  return { status: newStatus, updated: false, fazerResults, failMsg };
+}
+
+export async function autoSyncPendingOrders(specificOrderId?: string): Promise<{ synced: number; updated: number }> {
+  if (autoSyncInFlight) return { synced: 0, updated: 0 };
+  const now = Date.now();
+  if (!specificOrderId && now - lastAutoSyncTime < 2000) {
+    return { synced: 0, updated: 0 };
+  }
+
+  autoSyncInFlight = true;
+  lastAutoSyncTime = now;
+
+  try {
+    const sb = getAdminClient() as any;
+    let query = sb
+      .from("orders")
+      .select("*")
+      .in("status", ["processing", "pending"])
+      .not("fazer_transaction_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (specificOrderId) {
+      query = sb
+        .from("orders")
+        .select("*")
+        .or(`id.eq.${specificOrderId},order_ref.eq.${specificOrderId}`);
+    }
+
+    const { data: pendingOrders } = await query;
+    if (!pendingOrders || pendingOrders.length === 0) {
+      return { synced: 0, updated: 0 };
+    }
+
+    let updatedCount = 0;
+    for (const ord of pendingOrders) {
+      try {
+        const res = await syncSingleOrderInternal(sb, ord);
+        if (res.updated) updatedCount++;
+      } catch (err) {
+        console.error(`autoSyncPendingOrders error on ${ord.id}:`, err);
+      }
+    }
+    return { synced: pendingOrders.length, updated: updatedCount };
+  } catch (err) {
+    console.error("autoSyncPendingOrders unexpected error:", err);
+    return { synced: 0, updated: 0 };
+  } finally {
+    autoSyncInFlight = false;
+  }
+}
+
+export async function syncOrderWithFazer(token: string, body: { order_id?: string; order_ref?: string }) {
+  const { user } = await requireUser(token);
+  const sb = getAdminClient() as any;
+  const targetId = body.order_id || body.order_ref;
+  if (!targetId) throw new Error("معرف الطلب مطلوب للمزامنة");
+
+  const { data: order, error: oErr } = await sb
+    .from("orders")
+    .select("*")
+    .or(`id.eq.${targetId},order_ref.eq.${targetId}`)
+    .maybeSingle();
+
+  if (oErr || !order) throw new Error("الطلب غير موجود");
+
+  // Allow admin OR the merchant who owns this order
+  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role !== "admin") {
+    const { data: merchant } = await sb.from("merchant_accounts").select("id").eq("user_id", user.id).maybeSingle();
+    if (!merchant || order.merchant_id !== merchant.id) {
+      throw new Error("غير مصرح لك بمزامنة هذا الطلب");
+    }
+  }
+
+  const syncRes = await syncSingleOrderInternal(sb, order);
   const { data: updatedOrder } = await sb.from("orders").select("*").eq("id", order.id).maybeSingle();
 
   return {
@@ -1450,13 +1504,13 @@ export async function syncOrderWithFazer(token: string, body: { order_id?: strin
     order_id: order.id,
     order_ref: order.order_ref,
     previous_status: order.status,
-    new_status: newStatus,
-    fazer_results: fazerResults,
+    new_status: syncRes.status,
+    fazer_results: syncRes.fazerResults,
     message:
-      newStatus === "success"
+      syncRes.status === "success"
         ? "تم تأكيد اكتمال الشحن بنجاح! 🚀"
-        : newStatus === "failed"
-          ? `أكد السيرفر تعذر تنفيذ العملية (${failMsg}). تم تحديث الحالة${order.merchant_id ? " واسترداد الرصيد للتاجر" : ""}.`
+        : syncRes.status === "failed"
+          ? `أكد السيرفر تعذر تنفيذ العملية (${syncRes.failMsg}). تم تحديث الحالة${order.merchant_id ? " واسترداد الرصيد للتاجر" : ""}.`
           : "العملية لا تزال قيد المعالجة المباشرة في السيرفر ⏳",
   };
 }
@@ -1472,12 +1526,29 @@ export async function getMerchantDashboard(token: string) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayIso = todayStart.toISOString();
-  const { data: orders } = await sb
+  let { data: orders } = await sb
     .from("orders")
     .select("*")
     .eq("merchant_id", merchant.id)
     .order("created_at", { ascending: false })
     .limit(100);
+
+  // Auto-sync any in-flight pending/processing orders live with the game server
+  const hasProcessing = (orders || []).some((o: any) => ["pending", "processing"].includes(o.status));
+  if (hasProcessing && !process.env["VITEST"]) {
+    try {
+      const syncRes = await autoSyncPendingOrders();
+      if (syncRes.updated > 0) {
+        const [{ data: freshOrders }, { data: freshMerchant }] = await Promise.all([
+          sb.from("orders").select("*").eq("merchant_id", merchant.id).order("created_at", { ascending: false }).limit(100),
+          sb.from("merchant_accounts").select("*").eq("user_id", user.id).maybeSingle(),
+        ]);
+        if (freshOrders) orders = freshOrders;
+        if (freshMerchant) Object.assign(merchant, freshMerchant);
+      }
+    } catch {}
+  }
+
   const { data: ledger } = await sb
     .from("wallet_ledger")
     .select("*")
@@ -2037,12 +2108,28 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
 export async function adminListRecentOrders(token: string, limit = 50) {
   await requireAdmin(token);
   const sba = getAdminClient() as any;
-  const { data: orders, error } = await sba
+  let { data: orders, error } = await sba
     .from("orders")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(Math.min(100, Math.max(1, limit)));
   if (error) throw new Error(error.message);
+
+  // Auto-sync in-flight pending/processing orders live with the game server
+  const hasProcessing = (orders || []).some((o: any) => ["pending", "processing"].includes(o.status));
+  if (hasProcessing && !process.env["VITEST"]) {
+    try {
+      const syncRes = await autoSyncPendingOrders();
+      if (syncRes.updated > 0) {
+        const { data: freshOrders } = await sba
+          .from("orders")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(Math.min(100, Math.max(1, limit)));
+        if (freshOrders) orders = freshOrders;
+      }
+    } catch {}
+  }
 
   const { data: settings } = await sba.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
   const egpRate = Number(settings?.egp_rate || 55);

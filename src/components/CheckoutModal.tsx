@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ClipboardList,
   Clock,
   Globe,
   Loader2,
@@ -421,22 +422,21 @@ export default function CheckoutModal({
             <div>
               <div
                 className={`font-extrabold text-xl ${
-                  result?.status === "processing" || result?.status === "pending" ? "text-amber-300" : "text-white"
+                  result?.status === "processing" || result?.status === "pending" ? "text-amber-300" : "text-emerald-300"
                 }`}
               >
                 {result?.status === "processing" || result?.status === "pending"
-                  ? "الطلب قيد المعالجة المباشرة ⏳"
+                  ? "تم الدفع وتأكيد الطلب بنجاح! ⚡"
                   : "تم تنفيذ الشحن بنجاح! 🎉"}
               </div>
               <div
-                className={`text-xs sm:text-sm mt-1 ${
+                className={`text-xs sm:text-sm mt-1 leading-relaxed ${
                   result?.status === "processing" || result?.status === "pending" ? "text-slate-300" : "text-emerald-300"
                 }`}
               >
-                {result?.message ||
-                  (result?.status === "processing" || result?.status === "pending"
-                    ? "تم إرسال الطلب بنجاح وهو قيد التنفيذ الآن على سيرفر اللعبة وسيتم تسليم الشحنة فورياً."
-                    : "تم تنفيذ الطلب وتسليم الباقات فورياً إلى حساب اللاعب.")}
+                {result?.status === "processing" || result?.status === "pending"
+                  ? "تم خصم الرصيد وتمرير الشحن للسيرفر، برجاء انتظار إضافة الجواهر في اللعبة خلال ثوانٍ ⏳"
+                  : (result?.message || "تم تنفيذ الطلب وتسليم الباقات فورياً إلى حساب اللاعب.")}
               </div>
             </div>
 
@@ -529,41 +529,64 @@ export default function CheckoutModal({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+            <div className="flex flex-col gap-2 pt-2">
               <Button
                 type="button"
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold h-11 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 rounded-xl transition-all"
                 onClick={() => {
-                  const finalPaidEgp = formatDecimals3(
-                    typeof result?.total_egp === "number" && result.total_egp > 0
-                      ? result.total_egp
-                      : paidTotal || totalEgp,
-                  );
-                  const finalPaidStr = isUsdMerchant
-                    ? `$${formatDecimals3(totalUsd)} USD (${finalPaidEgp} ج.م)`
-                    : `${finalPaidEgp} ج.م`;
-                  const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
-                  const statusText =
-                    result?.status === "processing" || result?.status === "pending"
-                      ? "قيد المعالجة ⏳"
-                      : "تم الشحن بنجاح ✅";
-                  const totalDia = cart.reduce(
-                    (s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty,
-                    0,
-                  );
-                  const pkgSummary =
-                    cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن";
-                  const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
-                  const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
-                  window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
+                  onClose();
+                  if (typeof window !== "undefined") {
+                    if (window.location.pathname.includes("/merchant")) {
+                      const board = document.getElementById("merchant-orders-board");
+                      if (board) {
+                        board.scrollIntoView({ behavior: "smooth" });
+                      }
+                    } else if (isMerchant) {
+                      window.location.href = "/merchant#merchant-orders-board";
+                    }
+                  }
                 }}
               >
-                <Share2 className="w-4 h-4" />
-                <span>مشاركة الإيصال عبر واتساب</span>
+                <ClipboardList className="w-4 h-4" />
+                <span>الانتقال إلى لوحة الطلبات (Dashboard) 📋</span>
               </Button>
-              <Button className={`sm:w-32 ${outlineBtn}`} onClick={onClose}>
-                إغلاق
-              </Button>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  type="button"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2 rounded-xl"
+                  onClick={() => {
+                    const finalPaidEgp = formatDecimals3(
+                      typeof result?.total_egp === "number" && result.total_egp > 0
+                        ? result.total_egp
+                        : paidTotal || totalEgp,
+                    );
+                    const finalPaidStr = isUsdMerchant
+                      ? `$${formatDecimals3(totalUsd)} USD (${finalPaidEgp} ج.م)`
+                      : `${finalPaidEgp} ج.م`;
+                    const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
+                    const statusText =
+                      result?.status === "processing" || result?.status === "pending"
+                        ? "قيد المعالجة ⏳"
+                        : "تم الشحن بنجاح ✅";
+                    const totalDia = cart.reduce(
+                      (s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty,
+                      0,
+                    );
+                    const pkgSummary =
+                      cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن";
+                    const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
+                    const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${player.name || player.id} (${player.id})\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
+                    window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
+                  }}
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>مشاركة الإيصال عبر واتساب</span>
+                </Button>
+                <Button className={`sm:w-28 rounded-xl ${outlineBtn}`} onClick={onClose}>
+                  إغلاق
+                </Button>
+              </div>
             </div>
           </div>
         )}

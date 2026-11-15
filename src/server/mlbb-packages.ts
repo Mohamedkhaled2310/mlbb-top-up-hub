@@ -700,6 +700,31 @@ export async function curateMlbbPackages(sb: any) {
     "mobile_legends_united_states",
   ]);
 
+  const NOISY_ODD_MLBB_TIERS_SET = new Set([
+    "10_1_diamonds",
+    "12_diamonds",
+    "14_diamonds",
+    "19_diamonds",
+    "20_2_diamonds",
+    "28_diamonds",
+    "42_diamonds",
+    "70_diamonds",
+    "140_diamonds",
+    "170_diamonds",
+    "240_diamonds",
+    "284_diamonds",
+    "296_diamonds",
+    "355_diamonds",
+    "429_diamonds",
+    "716_diamonds",
+    "1084_diamonds",
+    "1446_diamonds",
+    "2010_diamonds",
+    "2976_diamonds",
+    "7502_diamonds",
+    "7740_1548_diamonds",
+  ]);
+
   // Activate regional packages for supported canonical servers (Turkey, Indonesia, Malaysia, etc.)
   const regionalCanonicalOffers = pkgs.filter((p: any) => {
     const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
@@ -709,7 +734,13 @@ export async function curateMlbbPackages(sb: any) {
   });
 
   const regionalToActivate = regionalCanonicalOffers
-    .filter((p: any) => p.cost_usd != null && Number(p.cost_usd) > 0)
+    .filter((p: any) => {
+      if (p.cost_usd == null || Number(p.cost_usd) <= 0) return false;
+      const off = String(p.offer_id || "");
+      const rawId = off.includes(":") ? off.split(":")[1] : off;
+      if (NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return false;
+      return true;
+    })
     .map((p: any) => p.offer_id);
 
   if (regionalToActivate.length) {
@@ -719,14 +750,18 @@ export async function curateMlbbPackages(sb: any) {
       .in("offer_id", regionalToActivate);
   }
 
-  // Deactivate ONLY packages that do not belong to any canonical server or are uncurated global/brazil duplicates
+  // Deactivate uncurated, non-canonical, or noisy odd tiers across all servers
   const toDeactivate = pkgs
     .filter((p: any) => {
+      const off = String(p.offer_id || "");
+      const rawId = off.includes(":") ? off.split(":")[1] : off;
+      if (NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return true;
+
       const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
         ? p.raw.fazer_category_id
-        : String(p.offer_id || "").split(":")[0];
+        : off.split(":")[0];
       if (cat !== "mobile_legends_global" && cat !== "mobile_legends_brazil" && MLBB_CANONICAL_CATEGORIES.has(cat)) {
-        return false; // keep regional server packages active!
+        return false; // keep clean regional server packages active!
       }
       return !allActiveIds.has(p.offer_id);
     })

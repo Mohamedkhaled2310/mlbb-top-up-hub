@@ -219,13 +219,13 @@ function MerchantPage() {
     }
   };
 
-  // Automatic real-time live wallet/orders refresh (faster 4s polling if there are pending/processing orders)
+  // Automatic real-time live wallet/orders refresh (faster 2.5s polling if there are pending/processing orders)
   useEffect(() => {
     if (!store.accessToken || !store.merchant) return;
     const hasProcessing = (dash?.orders || []).some((o: any) =>
       ["processing", "pending", "incomplete"].includes(o.status),
     );
-    const pollInterval = hasProcessing ? 4000 : 15000;
+    const pollInterval = hasProcessing ? 2500 : 15000;
     const interval = setInterval(async () => {
       // If modal is open on an in-progress order, sync it directly
       if (selectedOrder && ["processing", "pending"].includes(selectedOrder.status)) {
@@ -803,14 +803,14 @@ function MerchantPage() {
 
             <ScrollReveal delayMs={80}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4">
+                <div id="merchant-orders-board" className="rounded-2xl border border-slate-800 bg-[#0a0f20] p-4 scroll-mt-20">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-sm sm:text-base">آخر الطلبات</h3>
                       {(dash?.orders || []).some((o: any) => ["processing", "pending"].includes(o.status)) && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
-                          <Clock className="w-3 h-3 animate-spin" />
-                          <span>تحديث لحظي</span>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>مزامنة تلقائية لحظية ⚡</span>
                         </span>
                       )}
                     </div>
@@ -1256,18 +1256,19 @@ function MerchantPage() {
                 <span>مشاركة الفاتورة</span>
               </Button>
 
-              <Button
-                disabled={syncingOrderId === (selectedOrder.id || selectedOrder.order_ref)}
-                className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 flex-1"
-                onClick={() => syncOrder(selectedOrder.id || selectedOrder.order_ref)}
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${
-                    syncingOrderId === (selectedOrder.id || selectedOrder.order_ref) ? "animate-spin" : ""
-                  }`}
-                />
-                <span>تحديث لحظي</span>
-              </Button>
+              {["processing", "pending"].includes(selectedOrder.status) ? (
+                <div className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs font-semibold animate-pulse">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>مزامنة تلقائية لحظية مع السيرفر ⚡</span>
+                </div>
+              ) : (
+                <Button
+                  className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 flex-1"
+                  onClick={() => setSelectedOrder(null)}
+                >
+                  <span>إغلاق</span>
+                </Button>
+              )}
             </div>
           </div>
         </div>

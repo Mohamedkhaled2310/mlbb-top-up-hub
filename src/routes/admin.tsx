@@ -422,17 +422,21 @@ function AdminPage() {
     })();
   }, []);
 
-  // Live auto-refresh of Fazer wallet balance, store packages, merchants, and orders
+  // Live auto-refresh of store packages, merchants, and orders (fast 3s polling for orders when pending)
   useEffect(() => {
+    const hasPendingOrders = (orders || []).some((o: any) => ["processing", "pending"].includes(o.status));
+    const intervalMs = hasPendingOrders ? 3000 : 15000;
     const refreshLive = () => {
-      refreshStatus();
-      loadStore();
       if (isAdmin && store.accessToken) {
-        loadMerchants(store.accessToken, mPage, mQuery).catch(() => {});
         loadOrders(store.accessToken).catch(() => {});
+        if (!hasPendingOrders) {
+          refreshStatus();
+          loadStore();
+          loadMerchants(store.accessToken, mPage, mQuery).catch(() => {});
+        }
       }
     };
-    const interval = setInterval(refreshLive, 15000);
+    const interval = setInterval(refreshLive, intervalMs);
     const onFocus = () => refreshLive();
     const onVis = () => {
       if (document.visibilityState === "visible") refreshLive();
@@ -444,7 +448,7 @@ function AdminPage() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isAdmin, store.accessToken, mPage, mQuery, refreshStatus, loadStore, loadMerchants, loadOrders]);
+  }, [isAdmin, store.accessToken, orders, mPage, mQuery, refreshStatus, loadStore, loadMerchants, loadOrders]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;
@@ -2168,16 +2172,13 @@ function AdminPage() {
                             <td className="p-3 text-center">
                               <div className="flex items-center justify-center gap-1.5">
                                 {(o.status === "processing" || o.status === "pending") && (
-                                  <Button
-                                    size="sm"
-                                    disabled={syncingOrderId === o.id}
-                                    onClick={() => handleSyncFazerOrder(o.id)}
-                                    className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-7 px-2 text-[11px] gap-1 shadow-sm"
-                                    title="مزامنة الحالة مع السيرفر فورياً"
+                                  <span
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse"
+                                    title="يتم تحديث ومزامنة الحالة تلقائياً"
                                   >
-                                    <RefreshCw className={`w-3 h-3 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
-                                    <span>مزامنة</span>
-                                  </Button>
+                                    <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                                    <span>مزامنة تلقائية</span>
+                                  </span>
                                 )}
                                 <Button
                                   size="sm"
@@ -2329,15 +2330,10 @@ function AdminPage() {
                         {/* Action buttons: Sync & Details */}
                         <div className="flex items-center gap-2">
                           {(o.status === "processing" || o.status === "pending") && (
-                            <Button
-                              size="sm"
-                              disabled={syncingOrderId === o.id}
-                              onClick={() => handleSyncFazerOrder(o.id)}
-                              className="bg-amber-600/80 hover:bg-amber-500 text-white font-bold h-8 text-xs gap-1.5 px-3 shrink-0"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === o.id ? "animate-spin" : ""}`} />
-                              <span>مزامنة السيرفر</span>
-                            </Button>
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse shrink-0">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>مزامنة تلقائية ⚡</span>
+                            </span>
                           )}
                           <Button
                             size="sm"
@@ -3792,16 +3788,11 @@ function AdminPage() {
                     <span>تفاصيل العملية ({selectedOrderDetails.order_ref})</span>
                   </span>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {selectedOrderDetails.fazer_transaction_id && (
-                      <Button
-                        size="sm"
-                        disabled={syncingOrderId === selectedOrderDetails.id}
-                        onClick={() => handleSyncFazerOrder(selectedOrderDetails.id)}
-                        className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold h-7 px-3 text-xs gap-1.5 shadow-sm"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${syncingOrderId === selectedOrderDetails.id ? "animate-spin" : ""}`} />
-                        <span>{syncingOrderId === selectedOrderDetails.id ? "جاري المزامنة..." : "مزامنة مع السيرفر ⚡"}</span>
-                      </Button>
+                    {(selectedOrderDetails.status === "processing" || selectedOrderDetails.status === "pending") && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>مزامنة تلقائية لحظية ⚡</span>
+                      </span>
                     )}
                     <span
                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
