@@ -854,7 +854,33 @@ export function extractCustomPriceUsd(entry: any): number | null {
   return null;
 }
 
+export function enrichOrderWithUsd(o: any, egpRate: number) {
+  if (!o) return o;
+  const items = Array.isArray(o.items) ? o.items : [];
+  let totalUsd = 0;
+  for (const it of items) {
+    const q = Number(it.qty || 1);
+    const uUsd = it.unit_price_usd ?? (it.unit_price_egp ? it.unit_price_egp / egpRate : it.unit_cost_usd || 0);
+    totalUsd += Number(uUsd || 0) * q;
+  }
+  if (!totalUsd && o.total_egp > 0) {
+    totalUsd = o.total_egp / egpRate;
+  }
+  return {
+    ...o,
+    total_usd: round3(totalUsd),
+  };
+}
+
+let cachedCustomPrices: { data: Record<string, Record<string, any>>; expiresAt: number } | null = null;
+export function invalidateCustomPricesCache() {
+  cachedCustomPrices = null;
+}
+
 export async function getMerchantCustomPrices(merchantId?: string): Promise<Record<string, Record<string, any>>> {
+  if (cachedCustomPrices && cachedCustomPrices.expiresAt > Date.now()) {
+    return cachedCustomPrices.data;
+  }
   const sb = getAdminClient() as any;
   const { data } = await sb
     .from("fazer_packages")
@@ -865,7 +891,44 @@ export async function getMerchantCustomPrices(merchantId?: string): Promise<Reco
   const allMap: Record<string, Record<string, any>> =
     data?.raw && typeof data.raw === "object" && !Array.isArray(data.raw) ? data.raw : {};
 
+  cachedCustomPrices = { data: allMap, expiresAt: Date.now() + 30_000 };
   return allMap;
+}
+
+let cachedStoreSettings: { data: any; expiresAt: number } | null = null;
+export function invalidateStoreSettingsCache() {
+  cachedStoreSettings = null;
+}
+export async function getCachedStoreSettings(sb: any) {
+  if (cachedStoreSettings && cachedStoreSettings.expiresAt > Date.now()) {
+    return cachedStoreSettings.data;
+  }
+  const { data } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
+  if (data) {
+    cachedStoreSettings = { data, expiresAt: Date.now() + 15_000 };
+  }
+  return data;
+}
+
+let cachedUserEmails: { map: Map<string, string>; expiresAt: number } | null = null;
+async function getUserEmailsMap(sba: any): Promise<Map<string, string>> {
+  if (cachedUserEmails && cachedUserEmails.expiresAt > Date.now()) {
+    return cachedUserEmails.map;
+  }
+  const emailMap = new Map<string, string>();
+  try {
+    const authAdmin = (sba as any).auth?.admin;
+    if (authAdmin && typeof authAdmin.listUsers === "function") {
+      const { data: usersRes } = await authAdmin.listUsers({ page: 1, perPage: 200 });
+      for (const u of usersRes?.users || []) {
+        if (u?.id && u?.email) emailMap.set(u.id, u.email);
+      }
+    }
+  } catch (err: any) {
+    console.warn("Auth admin listUsers failed:", err?.message);
+  }
+  cachedUserEmails = { map: emailMap, expiresAt: Date.now() + 60_000 };
+  return emailMap;
 }
 
 export async function adminSetMerchantPackagePrice(
@@ -932,6 +995,7 @@ export async function adminSetMerchantPackagePrice(
     if (error) throw new Error(error.message);
   }
 
+  invalidateCustomPricesCache();
   return { success: true, merchantId, offerId, priceUsd: rawPriceUsd ? round3(rawPriceUsd) : null };
 }
 
@@ -1142,6 +1206,10 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const isComposite = Boolean(
       p?.raw && typeof p.raw === "object" && p.raw.is_composite && Array.isArray(p.raw.components) && p.raw.components.length > 0,
     );
+    const unitPriceUsd =
+      customUsd !== null && customUsd > 0
+        ? customUsd
+        : round3(unitPrice / egpRate);
     return {
       package_id: p.offer_id,
       fazer_offer_id: rawFazerOfferId,
@@ -1149,7 +1217,9 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       name: p.name,
       qty: it.qty,
       unit_price_egp: unitPrice,
+      unit_price_usd: unitPriceUsd,
       unit_cost_usd: costUsd,
+      total_usd: round3(unitPriceUsd * it.qty),
       diamonds: Number(p.diamonds || 0),
       bonus_diamonds: Number(p.bonus_diamonds || 0),
       game_id: p.game_id || effectiveGameId,
@@ -1708,9 +1778,21 @@ export async function getMerchantDashboard(token: string) {
     .eq("merchant_id", merchant.id)
     .order("created_at", { ascending: false })
     .limit(100);
-  const list = orders || [];
+
+  const settings = await getCachedStoreSettings(sb);
+  const egpRate = Number(settings?.egp_rate || DEFAULT_EGP_RATE);
+
+  const list = (orders || []).map((o: any) => enrichOrderWithUsd(o, egpRate));
+  const successfulOrProcessingOrders = list.filter((o: any) => !["failed", "cancelled"].includes(o.status));
+  const totalSpentUsd = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (o.total_usd || 0), 0));
+  const totalSpentEgp = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (Number(o.total_egp) || 0), 0));
+  const balanceUsd = round3(Number(merchant.balance_egp || 0) / egpRate);
+
   const stats = {
     balance_egp: Number(merchant.balance_egp || 0),
+    balance_usd: balanceUsd,
+    total_spent_usd: totalSpentUsd,
+    total_spent_egp: totalSpentEgp,
     margin_percent: Number(merchant.margin_percent || 0),
     orders_today: list.filter((o: any) => o.created_at >= todayIso).length,
     delivered_today: list.filter(
@@ -1718,6 +1800,15 @@ export async function getMerchantDashboard(token: string) {
     ).length,
     incomplete_orders: list.filter((o: any) => ["pending", "processing", "incomplete", "failed"].includes(o.status)).length,
   };
+
+  const formattedLedger = (ledger || []).map((t: any) => ({
+    ...t,
+    amount_egp: Number(t.amount || 0),
+    amount_usd: round3(Number(t.amount || 0) / egpRate),
+    balance_after_egp: Number(t.balance_after || 0),
+    balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+  }));
+
   const customPricesMap = await getMerchantCustomPrices();
   const merchantCustomMap = customPricesMap[merchant.id] || {};
   const formattedCustomPrices: Record<string, number> = {};
@@ -1727,15 +1818,20 @@ export async function getMerchantDashboard(token: string) {
       formattedCustomPrices[offId] = usd;
     }
   }
+
+  const isUsd = profile?.region === "GLOBAL" || profile?.region === "US" || profile?.currency === "USD";
   return {
     profile,
     merchant: {
       ...merchant,
+      balance_usd: balanceUsd,
+      is_usd: isUsd,
       custom_prices: formattedCustomPrices,
     },
     stats,
     orders: list,
-    transactions: ledger || [],
+    transactions: formattedLedger,
+    egp_rate: egpRate,
   };
 }
 
@@ -1747,36 +1843,28 @@ export async function adminListMerchants(token: string, opts: { page: number; li
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
-  const { data: merchants, count } = await sb
-    .from("merchant_accounts")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  const [{ data: merchants, count }, settings, emailMap] = await Promise.all([
+    sb
+      .from("merchant_accounts")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to),
+    getCachedStoreSettings(sb),
+    getUserEmailsMap(sb),
+  ]);
 
+  const egpRate = Number(settings?.egp_rate || DEFAULT_EGP_RATE);
   const userIds = (merchants || []).map((m: any) => m.user_id);
   const { data: profiles } = userIds.length
     ? await sb.from("profiles").select("id,full_name,phone,region,role").in("id", userIds)
     : { data: [] };
   const pmap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
-  // Attach emails via auth admin API if available
-  const emailMap = new Map<string, string>();
-  try {
-    const authAdmin = (sb as SupabaseClient<Database>).auth?.admin;
-    if (authAdmin && typeof authAdmin.listUsers === "function") {
-      const { data: usersRes } = await authAdmin.listUsers({ page: 1, perPage: 200 });
-      for (const u of usersRes?.users || []) {
-        if (u.email) emailMap.set(u.id, u.email);
-      }
-    }
-  } catch {
-    // Non-fatal if listUsers isn't permitted
-  }
-
   const q = (opts.q || "").trim().toLowerCase();
   let rows = (merchants || []).map((m: any) => ({
     ...m,
     balance_egp: Number(m.balance_egp || 0),
+    balance_usd: round3(Number(m.balance_egp || 0) / egpRate),
     margin_percent: Number(m.margin_percent || 0),
     profile: pmap.get(m.user_id) || null,
     email: emailMap.get(m.user_id) || null,
@@ -2242,17 +2330,37 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
     };
   });
 
+  const enrichedOrders = (ordersRes.data || []).map((o: any) => enrichOrderWithUsd(o, egpRate));
+  const successfulOrProcessingOrders = enrichedOrders.filter((o: any) => !["failed", "cancelled"].includes(o.status));
+  const totalSpentUsd = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (o.total_usd || 0), 0));
+  const totalSpentEgp = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (Number(o.total_egp) || 0), 0));
+  const balanceUsd = round3(Number(merchant.balance_egp || 0) / egpRate);
+  const initialCreditUsd = round3(balanceUsd + totalSpentUsd);
+  const initialCreditEgp = round3(Number(merchant.balance_egp || 0) + totalSpentEgp);
+
+  const formattedLedger = (ledgerRes.data || []).map((t: any) => ({
+    ...t,
+    amount_egp: Number(t.amount || 0),
+    amount_usd: round3(Number(t.amount || 0) / egpRate),
+    balance_after_egp: Number(t.balance_after || 0),
+    balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+  }));
+
   return {
     merchant: {
       ...merchant,
       balance_egp: Number(merchant.balance_egp || 0),
-      balance_usd: round3(Number(merchant.balance_egp || 0) / egpRate),
+      balance_usd: balanceUsd,
+      total_spent_usd: totalSpentUsd,
+      total_spent_egp: totalSpentEgp,
+      initial_credit_usd: initialCreditUsd,
+      initial_credit_egp: initialCreditEgp,
       margin_percent: marginPercent,
       profile,
       email,
     },
-    orders: ordersRes.data || [],
-    transactions: ledgerRes.data || [],
+    orders: enrichedOrders,
+    transactions: formattedLedger,
     packagesPreview,
     egpRate,
   };
@@ -2284,7 +2392,7 @@ export async function adminListRecentOrders(token: string, limit = 50) {
     } catch {}
   }
 
-  const { data: settings } = await sba.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
+  const settings = await getCachedStoreSettings(sba);
   const egpRate = Number(settings?.egp_rate || 55);
 
   const merchantIds = [...new Set((orders || []).map((o: any) => o.merchant_id).filter(Boolean))];
@@ -2314,18 +2422,7 @@ export async function adminListRecentOrders(token: string, limit = 50) {
     }
   }
 
-  const emailMap = new Map<string, string>();
-  try {
-    const authAdmin = (sba as any).auth?.admin;
-    if (authAdmin && typeof authAdmin.listUsers === "function") {
-      const { data: usersRes } = await authAdmin.listUsers({ page: 1, perPage: 200 });
-      for (const u of usersRes?.users || []) {
-        if (u?.id && u?.email) emailMap.set(u.id, u.email);
-      }
-    }
-  } catch (err: any) {
-    console.warn("Auth admin listUsers failed in adminListRecentOrders:", err?.message);
-  }
+  const emailMap = await getUserEmailsMap(sba);
 
   const enriched = (orders || []).map((o: any) => {
     const isMerchant = Boolean(o.merchant_id);
@@ -2339,14 +2436,20 @@ export async function adminListRecentOrders(token: string, limit = 50) {
 
     const items = Array.isArray(o.items) ? o.items : [];
     let totalCostUsd = 0;
+    let totalUsd = 0;
     for (const it of items) {
       const q = Number(it.qty || 1);
       const uCost = Number(it.unit_cost_usd || it.cost_usd || 0);
+      const uPriceUsd = it.unit_price_usd ?? (it.unit_price_egp ? it.unit_price_egp / egpRate : uCost);
       totalCostUsd += uCost * q;
+      totalUsd += Number(uPriceUsd || 0) * q;
     }
     const costEgp = totalCostUsd * egpRate;
     const totalEgp = Number(o.total_egp || 0);
     const profitEgp = totalEgp - costEgp;
+    if (!totalUsd && totalEgp > 0) {
+      totalUsd = totalEgp / egpRate;
+    }
 
     return {
       ...o,
@@ -2357,6 +2460,7 @@ export async function adminListRecentOrders(token: string, limit = 50) {
       customer_name: uProfile?.full_name || null,
       customer_phone: uProfile?.phone || null,
       total_cost_usd: Number(totalCostUsd.toFixed(3)),
+      total_usd: Number(totalUsd.toFixed(3)),
       cost_egp: Number(costEgp.toFixed(2)),
       profit_egp: Number(profitEgp.toFixed(2)),
       egp_rate_used: egpRate,
@@ -2421,6 +2525,8 @@ export async function adminUpdateEgpRate(
       updated_by: "admin",
     },
   });
+
+  invalidateStoreSettingsCache();
 
   return { success: true, egp_rate: targetRate, mode };
 }

@@ -2142,6 +2142,11 @@ function AdminPage() {
                               <div className="font-mono font-bold text-white">
                                 {Number(o.total_egp || 0).toLocaleString()} <span className="text-[10px] text-slate-400">ج.م</span>
                               </div>
+                              {o.total_usd ? (
+                                <div className="text-[10px] text-cyan-300 font-mono font-semibold">
+                                  ${formatDecimals3(o.total_usd)} USD
+                                </div>
+                              ) : null}
                               <div className="text-[10px] text-slate-400 font-mono">
                                 تكلفة: ${Number(o.total_cost_usd || 0).toFixed(3)}
                               </div>
@@ -2345,7 +2350,12 @@ function AdminPage() {
                         <div className="grid grid-cols-3 gap-1.5 bg-slate-900/60 p-2 rounded-lg text-center font-mono text-xs">
                           <div>
                             <div className="text-[10px] text-slate-400">سعر البيع</div>
-                            <div className="font-bold text-white mt-0.5">{Number(o.total_egp || 0)} ج.م</div>
+                            <div className="font-bold text-white mt-0.5">
+                              {o.total_usd ? `$${formatDecimals3(o.total_usd)}` : `${Number(o.total_egp || 0)} ج.م`}
+                            </div>
+                            {o.total_usd && (
+                              <div className="text-[9px] text-slate-400">{Number(o.total_egp || 0)} ج.م</div>
+                            )}
                           </div>
                           <div>
                             <div className="text-[10px] text-slate-400">التكلفة</div>
@@ -3214,10 +3224,10 @@ function AdminPage() {
               </div>
 
               {/* Quick Metrics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-2.5 sm:p-3">
                   <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>الرصيد المتاح</span>
+                    <span>الرصيد المتبقي</span>
                     <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                   <div className="text-base sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
@@ -3225,6 +3235,32 @@ function AdminPage() {
                   </div>
                   <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono mt-0.5">
                     {formatDecimals3(profileData.merchant.balance_egp)} ج.م
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>إجمالي المشتريات (المنفذة)</span>
+                    <Package className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div className="text-base sm:text-xl font-extrabold text-cyan-300 font-mono mt-1">
+                    ${formatDecimals3(profileData.merchant.total_spent_usd ?? 0)} USD
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono mt-0.5">
+                    {formatDecimals3(profileData.merchant.total_spent_egp ?? 0)} ج.م ({profileData.orders?.length ?? 0} طلب)
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-2.5 sm:p-3">
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
+                    <span>إجمالي الإيداعات الأصلية</span>
+                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                  </div>
+                  <div className="text-base sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
+                    ${formatDecimals3(profileData.merchant.initial_credit_usd ?? (profileData.merchant.balance_usd + (profileData.merchant.total_spent_usd ?? 0)))} USD
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                    الرصيد + الطلبات المنفذة
                   </div>
                 </div>
 
@@ -3237,33 +3273,7 @@ function AdminPage() {
                     +{profileData.merchant.margin_percent}%
                   </div>
                   <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
-                    فوق سعر التكلفة
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-2.5 sm:p-3">
-                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>إجمالي الطلبات</span>
-                    <Package className="w-3.5 h-3.5 text-cyan-400" />
-                  </div>
-                  <div className="text-base sm:text-xl font-extrabold text-white font-mono mt-1">
-                    {profileData.orders?.length ?? 0}
-                  </div>
-                  <div className="text-[10px] sm:text-[11px] text-emerald-400 font-mono mt-0.5">
-                    {profileData.orders?.filter((o: any) => o.status === "success").length ?? 0} ناجح
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-[#0e1428] p-2.5 sm:p-3">
-                  <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between">
-                    <span>سعر الدولار</span>
-                    <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-                  </div>
-                  <div className="text-base sm:text-xl font-extrabold text-amber-300 font-mono mt-1">
-                    {formatDecimals3(profileData.egpRate)} ج.م / $
-                  </div>
-                  <div className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
-                    سعر المتجر الحالي
+                    فوق التكلفة ({formatDecimals3(profileData.egpRate)} ج.م/$)
                   </div>
                 </div>
               </div>
@@ -3607,12 +3617,20 @@ function AdminPage() {
                                 </span>
                               </td>
                               <td className="p-2.5 text-center font-mono font-bold">
-                                <span className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
+                                <div className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
+                                  {amt >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (amt / (profileData.egpRate || 50))))} USD
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-normal">
                                   {amt >= 0 ? `+${amt}` : amt} ج.م
-                                </span>
+                                </div>
                               </td>
                               <td className="p-2.5 text-center font-mono text-slate-300">
-                                {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
+                                <div className="font-bold text-white">
+                                  ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after_egp || 0) / (profileData.egpRate || 50)))} USD
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
+                                </div>
                               </td>
                               <td className="p-2.5 text-right text-slate-300 font-mono text-[11px]">
                                 {t.note || t.order_id || "—"}
@@ -3665,9 +3683,14 @@ function AdminPage() {
                                 : "تسوية رصيد"}
                             </span>
 
-                            <span className={`font-mono font-bold text-sm ${isCredit ? "text-emerald-300" : "text-rose-400"}`}>
-                              {isCredit ? `+${amt}` : amt} ج.م
-                            </span>
+                            <div className="text-left font-mono">
+                              <div className={`font-bold text-xs ${isCredit ? "text-emerald-300" : "text-rose-400"}`}>
+                                {isCredit ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (amt / (profileData.egpRate || 50))))} USD
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {isCredit ? `+${amt}` : amt} ج.م
+                              </div>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
@@ -3681,7 +3704,9 @@ function AdminPage() {
 
                           <div className="text-[10px] text-slate-500 font-mono border-t border-slate-800/80 pt-1 flex justify-between">
                             <span>الرصيد بعد الحركة:</span>
-                            <span className="text-slate-300 font-bold">{Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م</span>
+                            <span className="text-slate-200 font-bold">
+                              ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after_egp || 0) / (profileData.egpRate || 50)))} USD ({Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م)
+                            </span>
                           </div>
                         </div>
                       );
@@ -3719,8 +3744,13 @@ function AdminPage() {
                             <td className="p-2.5 text-right">
                               <span className="uppercase font-bold text-slate-300">{o.game_id}</span> • {o.player_id}
                             </td>
-                            <td className="p-2.5 text-center font-mono font-bold text-white">
-                              {o.total_egp} ج.م
+                            <td className="p-2.5 text-center font-mono">
+                              <div className="font-bold text-white text-xs">
+                                ${formatDecimals3(o.total_usd ?? (Number(o.total_egp) / (profileData.egpRate || 50)))} USD
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {o.total_egp} ج.م
+                              </div>
                             </td>
                             <td className="p-2.5 text-center">
                               <span
@@ -3788,7 +3818,14 @@ function AdminPage() {
                         </div>
 
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
-                          <span className="font-mono font-bold text-white">{o.total_egp} ج.م</span>
+                          <div>
+                            <span className="font-mono font-bold text-white">
+                              ${formatDecimals3(o.total_usd ?? (Number(o.total_egp) / (profileData.egpRate || 50)))} USD
+                            </span>
+                            <span className="text-[10px] text-slate-400 mr-1.5 font-mono">
+                              ({o.total_egp} ج.م)
+                            </span>
+                          </div>
                           <span className="font-mono text-[10px] text-slate-500">
                             {new Date(o.created_at).toLocaleDateString("ar-EG")}
                           </span>

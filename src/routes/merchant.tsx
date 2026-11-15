@@ -897,8 +897,17 @@ function MerchantPage() {
 
                         <div className="text-left shrink-0">
                           <div className="font-mono font-bold text-emerald-400 text-xs">
-                            {o.total_egp} ج.م
+                            {isUsdMerchant ? (
+                              <span>${formatDecimals3(o.total_usd ?? (Number(o.total_egp) / (store.settings.egp_rate || 50)))} USD</span>
+                            ) : (
+                              <span>{o.total_egp} ج.م</span>
+                            )}
                           </div>
+                          {isUsdMerchant && (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {o.total_egp} ج.م
+                            </div>
+                          )}
                           <div className="text-[10px] text-slate-500 font-mono">
                             {new Date(o.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
                           </div>
@@ -939,11 +948,23 @@ function MerchantPage() {
                           <div
                             className={`font-mono font-bold text-xs ${Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"}`}
                           >
-                            {Number(t.amount) >= 0 ? "+" : ""}
-                            {t.amount} ج.م
+                            {isUsdMerchant ? (
+                              <span>
+                                {Number(t.amount) >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (Number(t.amount) / (store.settings.egp_rate || 50))))} USD
+                              </span>
+                            ) : (
+                              <span>
+                                {Number(t.amount) >= 0 ? "+" : ""}
+                                {t.amount} ج.م
+                              </span>
+                            )}
                           </div>
                           <div className="text-slate-500 text-[10px] font-mono">
-                            بعدها: {t.balance_after}
+                            {isUsdMerchant ? (
+                              <span>بعدها: ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after) / (store.settings.egp_rate || 50)))} USD</span>
+                            ) : (
+                              <span>بعدها: {t.balance_after}</span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1109,13 +1130,26 @@ function MerchantPage() {
                 </div>
               </div>
               <div className="text-right">
-                <span className="font-mono text-xs font-extrabold text-white">
-                  {selectedOrder.total_egp} ج.م
-                </span>
-                {selectedOrder.total_usd && (
-                  <span className="block text-[10px] text-slate-400 font-mono">
-                    (${selectedOrder.total_usd})
-                  </span>
+                {isUsdMerchant ? (
+                  <>
+                    <span className="font-mono text-xs font-extrabold text-white">
+                      ${formatDecimals3(selectedOrder.total_usd ?? (Number(selectedOrder.total_egp) / (store.settings.egp_rate || 50)))} USD
+                    </span>
+                    <span className="block text-[10px] text-slate-400 font-mono">
+                      ({selectedOrder.total_egp} ج.م)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono text-xs font-extrabold text-white">
+                      {selectedOrder.total_egp} ج.م
+                    </span>
+                    {selectedOrder.total_usd && (
+                      <span className="block text-[10px] text-slate-400 font-mono">
+                        (${selectedOrder.total_usd})
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1166,7 +1200,11 @@ function MerchantPage() {
 
                         <div className="text-left shrink-0 font-mono">
                           <span className="font-bold text-emerald-300 text-xs">
-                            {(Number(it.unit_price_egp) * (it.qty || 1)).toFixed(3)} ج.م
+                            {isUsdMerchant ? (
+                              <span>${formatDecimals3(Number(it.unit_price_usd ?? (Number(it.unit_price_egp) / (store.settings.egp_rate || 50))) * (it.qty || 1))} USD</span>
+                            ) : (
+                              <span>{(Number(it.unit_price_egp) * (it.qty || 1)).toFixed(3)} ج.م</span>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1273,7 +1311,10 @@ function MerchantPage() {
                           })
                           .join(" + ")
                       : "شحن رصيد";
-                  const text = `🧾 فاتورة شحن METO STORE\nرقم الطلب: ${selectedOrder.order_ref}\nاللاعب: ${selectedOrder.player_id}${selectedOrder.zone_id ? ` (${selectedOrder.zone_id})` : ""}\nاللعبة: ${(selectedOrder.game_id || "MLBB").toUpperCase()}\nالباقة المشحونة: ${itemsSummary}\nالمبلغ: ${selectedOrder.total_egp} ج.م\nالحالة: ${statusDesc}\nhttps://meto-three.vercel.app`;
+                  const orderTotalFormatted = isUsdMerchant
+                    ? `$${formatDecimals3(selectedOrder.total_usd ?? (Number(selectedOrder.total_egp) / (store.settings.egp_rate || 50)))} USD`
+                    : `${selectedOrder.total_egp} ج.م`;
+                  const text = `🧾 فاتورة شحن METO STORE\nرقم الطلب: ${selectedOrder.order_ref}\nاللاعب: ${selectedOrder.player_id}${selectedOrder.zone_id ? ` (${selectedOrder.zone_id})` : ""}\nاللعبة: ${(selectedOrder.game_id || "MLBB").toUpperCase()}\nالباقة المشحونة: ${itemsSummary}\nالمبلغ: ${orderTotalFormatted}\nالحالة: ${statusDesc}\nhttps://meto-three.vercel.app`;
                   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                 }}
               >
