@@ -32,7 +32,7 @@ import { GamePackageIcon } from "../components/GamePackageIcon";
 import { ScrollReveal } from "../components/ScrollReveal";
 import { OfflineIndicator } from "../components/OfflineIndicator";
 import { PackageCardSkeleton } from "../components/PackageCardSkeleton";
-import { getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
+import { findCachedPlayer, getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
 import { useStore } from "../lib/store/useStore";
 import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
 import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
@@ -269,12 +269,27 @@ function CustomerStorePage() {
     [player, activeGame.needsZone, selectedGameId, region, cart, setPlayer],
   );
 
+  // Auto-detect player region with local cache check first to avoid unnecessary API requests
   useEffect(() => {
     if (!player.id) return;
     if (activeGame.needsZone && !player.zoneId) return;
+
+    // If already in local cache, apply immediately without any API call
+    const cached = findCachedPlayer(selectedGameId, player.id, player.zoneId);
+    if (cached && cached.name) {
+      setDetectedPlayer(cached.name);
+      if (cached.region) {
+        setRegion(cached.region);
+        setSelectedPkgRegion(cached.region);
+        setRegionLocked(true);
+        setNeedsManualRegion(false);
+      }
+      return;
+    }
+
     const t = setTimeout(() => {
       detectRegion(true);
-    }, 650);
+    }, 1500); // Relaxed debounce to 1.5s so it only fires when the user stops typing
     return () => clearTimeout(t);
   }, [player.id, player.zoneId, selectedGameId, activeGame.needsZone]);
 
