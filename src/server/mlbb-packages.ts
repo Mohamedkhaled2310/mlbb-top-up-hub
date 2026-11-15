@@ -15,17 +15,17 @@
  *  - 9288 Diamonds (7740 + 1548)
  *
  * Composite Packages (الباقات المتجمعة من الباقات الأساسية):
- *  - 344 Diamonds: 2 x 172
+ *  - 344 Diamonds: 1 x 257 + 1 x 86 (343 Diamonds - optimized cost)
  *  - 429 Diamonds: 1 x 172 + 1 x 257
  *  - 514 Diamonds: 2 x 257
  *  - 600 Diamonds: 1 x 86 + 2 x 257
  *  - 878 Diamonds: 1 x 706 + 1 x 172
  *  - 963 Diamonds: 1 x 706 + 1 x 257
- *  - 1050 Diamonds: 1 x 706 + 2 x 172
+ *  - 1050 Diamonds: 1 x 706 + 1 x 257 + 1 x 86 (1049 Diamonds - optimized cost)
  *  - 1220 Diamonds: 1 x 706 + 2 x 257
  *  - 1412 Diamonds: 2 x 706
  *  - 1669 Diamonds: 2 x 706 + 1 x 257
- *  - 2539 Diamonds: 1 x 2195 + 2 x 172
+ *  - 2539 Diamonds: 1 x 2195 + 1 x 257 + 1 x 86 (2538 Diamonds - optimized cost)
  *  - 2901 Diamonds: 1 x 2195 + 1 x 706
  *  - 4394 Diamonds: 1 x 3688 + 1 x 706
  *  - 6238 Diamonds: 1 x 5532 + 1 x 706
@@ -286,7 +286,10 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     offerId: "mlbb_composite_344",
     name: "344 Diamonds",
     totalDiamonds: 344,
-    components: [{ baseTotal: 172, qty: 2 }],
+    components: [
+      { baseTotal: 257, qty: 1 },
+      { baseTotal: 86, qty: 1 },
+    ],
   },
   {
     offerId: "mlbb_composite_429",
@@ -336,7 +339,8 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 1050,
     components: [
       { baseTotal: 706, qty: 1 },
-      { baseTotal: 172, qty: 2 },
+      { baseTotal: 257, qty: 1 },
+      { baseTotal: 86, qty: 1 },
     ],
   },
   {
@@ -369,7 +373,8 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 2539,
     components: [
       { baseTotal: 2195, qty: 1 },
-      { baseTotal: 172, qty: 2 },
+      { baseTotal: 257, qty: 1 },
+      { baseTotal: 86, qty: 1 },
     ],
   },
   {
