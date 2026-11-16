@@ -858,17 +858,27 @@ export function enrichOrderWithUsd(o: any, egpRate: number) {
   if (!o) return o;
   const items = Array.isArray(o.items) ? o.items : [];
   let totalUsd = 0;
+  let totalCostUsd = 0;
   for (const it of items) {
     const q = Number(it.qty || 1);
-    const uUsd = it.unit_price_usd ?? (it.unit_price_egp ? it.unit_price_egp / egpRate : it.unit_cost_usd || 0);
+    const uCost = Number(it.unit_cost_usd ?? it.cost_usd ?? 0);
+    const uUsd = it.unit_price_usd ?? (it.unit_price_egp ? it.unit_price_egp / egpRate : uCost);
+    totalCostUsd += uCost * q;
     totalUsd += Number(uUsd || 0) * q;
   }
   if (!totalUsd && o.total_egp > 0) {
     totalUsd = o.total_egp / egpRate;
   }
+  const profitUsd = round3(totalUsd - totalCostUsd);
+  const profitEgp = round3(profitUsd * egpRate);
+  const extractedPlayerName = o.player_name || items[0]?.player_name || null;
   return {
     ...o,
+    player_name: extractedPlayerName,
+    total_cost_usd: round3(totalCostUsd),
     total_usd: round3(totalUsd),
+    profit_usd: profitUsd,
+    profit_egp: profitEgp,
   };
 }
 
@@ -1215,6 +1225,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       fazer_offer_id: rawFazerOfferId,
       fazer_category_id: catId,
       name: p.name,
+      player_name: playerName || body?.playerName || null,
       qty: it.qty,
       unit_price_egp: unitPrice,
       unit_price_usd: unitPriceUsd,
@@ -1847,6 +1858,7 @@ export async function adminListMerchants(token: string, opts: { page: number; li
     sb
       .from("merchant_accounts")
       .select("*", { count: "exact" })
+      .neq("id", "665c7a8e-0749-44d1-95b6-3f20dd56509c")
       .order("created_at", { ascending: false })
       .range(from, to),
     getCachedStoreSettings(sb),
@@ -1855,20 +1867,57 @@ export async function adminListMerchants(token: string, opts: { page: number; li
 
   const egpRate = Number(settings?.egp_rate || DEFAULT_EGP_RATE);
   const userIds = (merchants || []).map((m: any) => m.user_id);
+  const merchantIds = (merchants || []).map((m: any) => m.id);
+
   const { data: profiles } = userIds.length
     ? await sb.from("profiles").select("id,full_name,phone,region,role").in("id", userIds)
     : { data: [] };
   const pmap = new Map((profiles || []).map((p: any) => [p.id, p]));
 
+  // Calculate real realized profit in USD for each merchant from successful orders
+  const merchantProfitMap = new Map<string, number>();
+  if (merchantIds.length > 0) {
+    const { data: merchantOrders } = await sb
+      .from("orders")
+      .select("merchant_id, items, total_egp, status")
+      .in("merchant_id", merchantIds)
+      .eq("status", "success");
+
+    for (const ord of merchantOrders || []) {
+      const items = Array.isArray(ord.items) ? ord.items : [];
+      let totalCostUsd = 0;
+      let totalUsd = 0;
+      for (const it of items) {
+        const q = Number(it.qty || 1);
+        const uCost = Number(it.unit_cost_usd ?? it.cost_usd ?? 0);
+        const uPriceUsd = it.unit_price_usd ?? (it.unit_price_egp ? it.unit_price_egp / egpRate : uCost);
+        totalCostUsd += uCost * q;
+        totalUsd += Number(uPriceUsd || 0) * q;
+      }
+      if (!totalUsd && Number(ord.total_egp) > 0) {
+        totalUsd = Number(ord.total_egp) / egpRate;
+      }
+      const profitUsd = round3(totalUsd - totalCostUsd);
+      const curr = merchantProfitMap.get(ord.merchant_id) || 0;
+      merchantProfitMap.set(ord.merchant_id, round3(curr + profitUsd));
+    }
+  }
+
   const q = (opts.q || "").trim().toLowerCase();
-  let rows = (merchants || []).map((m: any) => ({
-    ...m,
-    balance_egp: Number(m.balance_egp || 0),
-    balance_usd: round3(Number(m.balance_egp || 0) / egpRate),
-    margin_percent: Number(m.margin_percent || 0),
-    profile: pmap.get(m.user_id) || null,
-    email: emailMap.get(m.user_id) || null,
-  }));
+  let rows = (merchants || [])
+    .filter((m: any) => {
+      const prof = pmap.get(m.user_id) as any;
+      return !prof?.full_name?.startsWith("[DELETED]");
+    })
+    .map((m: any) => ({
+      ...m,
+      balance_egp: Number(m.balance_egp || 0),
+      balance_usd: round3(Number(m.balance_egp || 0) / egpRate),
+      profit_usd: round3(merchantProfitMap.get(m.id) || 0),
+      margin_percent: Number(m.margin_percent || 0),
+      profile: pmap.get(m.user_id) || null,
+      email: emailMap.get(m.user_id) || null,
+    }));
   if (q) {
     rows = rows.filter(
       (r: any) =>
@@ -2171,8 +2220,8 @@ export async function adminSetMerchantBalance(token: string, body: any) {
   if (diff !== 0) {
     await sbAdmin.from("wallet_ledger").insert({
       merchant_id: merchantId,
-      amount_egp: diff,
-      balance_after_egp: newBalanceEgp,
+      amount: diff,
+      balance_after: newBalanceEgp,
       entry_type: "adjustment",
       note: note || `تعديل رصيد التاجر من ${currentBalanceEgp} إلى ${newBalanceEgp} ج.م`,
       created_at: nowIso,
@@ -2201,18 +2250,25 @@ export async function adminDeleteMerchant(token: string, body: any) {
     .maybeSingle();
   if (!merchant) throw new Error("حساب التاجر غير موجود أو تم حذفه مسبقاً");
 
-  // 1. Delete transactions ledger
-  await sbAdmin.from("wallet_ledger").delete().eq("merchant_id", merchantId);
+  // 1. Safely deactivate merchant account and zero out balance
+  await sbAdmin
+    .from("merchant_accounts")
+    .update({ is_active: false, balance_egp: 0, updated_at: new Date().toISOString() })
+    .eq("id", merchantId);
 
-  // 2. Clear merchant_id on orders (preserve orders for auditing)
-  await sbAdmin.from("orders").update({ merchant_id: null }).eq("merchant_id", merchantId);
+  // 2. Clear merchant_id on orders if requested, or leave audit trail
+  // 3. Update profile role to 'customer' and prefix name to hide from listings
+  const { data: prof } = await sbAdmin.from("profiles").select("full_name").eq("id", merchant.user_id).maybeSingle();
+  const currentName = prof?.full_name || "تاجر";
+  const markedName = currentName.startsWith("[DELETED]") ? currentName : `[DELETED] ${currentName}`;
+  await sbAdmin.from("profiles").update({ role: "customer", full_name: markedName }).eq("id", merchant.user_id);
 
-  // 3. Delete merchant_accounts row
-  const { error: delErr } = await sbAdmin.from("merchant_accounts").delete().eq("id", merchantId);
-  if (delErr) throw new Error(delErr.message);
-
-  // 4. Update profile role to 'customer'
-  await sbAdmin.from("profiles").update({ role: "customer" }).eq("id", merchant.user_id);
+  // 4. Try removing merchant_accounts row if no FK constraint blocks it
+  try {
+    await sbAdmin.from("merchant_accounts").delete().eq("id", merchantId);
+  } catch {
+    // Soft-deactivated above if FK prevents hard delete
+  }
 
   // 5. Delete auth user if allowed
   try {
@@ -2444,28 +2500,32 @@ export async function adminListRecentOrders(token: string, limit = 50) {
       totalCostUsd += uCost * q;
       totalUsd += Number(uPriceUsd || 0) * q;
     }
-    const costEgp = totalCostUsd * egpRate;
     const totalEgp = Number(o.total_egp || 0);
-    const profitEgp = totalEgp - costEgp;
     if (!totalUsd && totalEgp > 0) {
       totalUsd = totalEgp / egpRate;
     }
+    const profitUsd = round3(totalUsd - totalCostUsd);
+    const costEgp = round3(totalCostUsd * egpRate);
+    const profitEgp = round3(profitUsd * egpRate);
+    const extractedPlayerName = o.player_name || items[0]?.player_name || null;
 
     return {
       ...o,
+      player_name: extractedPlayerName,
       is_merchant: isMerchant,
       merchant_email: mEmail || null,
       merchant_name: mProfile?.full_name || null,
       customer_email: uEmail || null,
       customer_name: uProfile?.full_name || null,
       customer_phone: uProfile?.phone || null,
-      total_cost_usd: Number(totalCostUsd.toFixed(3)),
-      total_usd: Number(totalUsd.toFixed(3)),
-      cost_egp: Number(costEgp.toFixed(2)),
-      profit_egp: Number(profitEgp.toFixed(2)),
+      total_cost_usd: round3(totalCostUsd),
+      total_usd: round3(totalUsd),
+      profit_usd: profitUsd,
+      cost_egp: costEgp,
+      profit_egp: profitEgp,
       egp_rate_used: egpRate,
     };
-  });
+  }).filter((o: any) => o.merchant_id !== "665c7a8e-0749-44d1-95b6-3f20dd56509c");
 
   return { orders: enriched };
 }
@@ -2712,6 +2772,9 @@ export async function getOrderStatus(targetRefOrId: string) {
 
   if (!order) return { found: false };
 
+  const items = Array.isArray(order.items) ? order.items : [];
+  const playerName = order.player_name || items[0]?.player_name || null;
+
   return {
     found: true,
     id: order.id,
@@ -2720,10 +2783,80 @@ export async function getOrderStatus(targetRefOrId: string) {
     total_egp: Number(order.total_egp || 0),
     game_id: order.game_id,
     player_id: order.player_id,
+    player_name: playerName,
+    items,
     region: order.region,
     account_region: order.account_region,
     error_message: order.error_message,
     created_at: order.created_at,
     delivered_at: order.delivered_at,
+  };
+}
+
+export async function adminCancelAndRefundOrder(token: string, opts: { orderId: string; reason?: string | undefined }) {
+  await requireAdmin(token);
+  const sb = getAdminClient() as any;
+  const orderId = opts.orderId?.trim();
+  if (!orderId) throw new Error("معرف الطلب مطلوب");
+
+  const { data: order, error: oerr } = await sb
+    .from("orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (oerr || !order) throw new Error("الطلب غير موجود");
+
+  // Check if already refunded in wallet_ledger
+  let alreadyRefunded = false;
+  if (order.merchant_id) {
+    const { data: existingRefund } = await sb
+      .from("wallet_ledger")
+      .select("id")
+      .eq("merchant_id", order.merchant_id)
+      .eq("entry_type", "refund")
+      .eq("reference_id", order.order_ref)
+      .maybeSingle();
+    if (existingRefund) {
+      alreadyRefunded = true;
+    }
+  }
+
+  if (alreadyRefunded && (order.status === "failed" || order.status === "cancelled")) {
+    throw new Error("تم استرداد هذا الطلب مسبقاً بالفعل في محفظة التاجر");
+  }
+
+  const reason = opts.reason?.trim() || "تم الإلغاء والاسترداد اليدوي بواسطة الإدارة";
+  const nowIso = new Date().toISOString();
+
+  // Refund merchant if not yet refunded and total_egp > 0
+  if (!alreadyRefunded && order.merchant_id && Number(order.total_egp || 0) > 0) {
+    await issueMerchantRefund(
+      sb,
+      order.merchant_id,
+      Number(order.total_egp),
+      order.order_ref,
+      `استرداد يدوي بواسطة الإدارة للطلب ${order.order_ref}: ${reason}`,
+    );
+  }
+
+  // Update order status to failed
+  const { error: updErr } = await sb
+    .from("orders")
+    .update({
+      status: "failed",
+      error_message: reason,
+      updated_at: nowIso,
+    })
+    .eq("id", order.id);
+
+  if (updErr) throw new Error(updErr.message);
+
+  return {
+    success: true,
+    orderId: order.id,
+    orderRef: order.order_ref,
+    status: "failed",
+    message: `تم إلغاء الطلب ${order.order_ref} واسترداد الرصيد للتاجر بنجاح ✅`,
   };
 }

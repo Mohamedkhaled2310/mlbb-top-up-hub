@@ -83,6 +83,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "theme-color", content: "#070914" },
+      { name: "color-scheme", content: "dark" },
       { title: "METO STORE | متجر شحن الألعاب الرسمي — شحن فوري وآمن" },
       {
         name: "description",
@@ -122,11 +124,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" className="dark h-full bg-[#070914]">
+    <html
+      lang="ar"
+      dir="rtl"
+      className="dark h-full bg-[#070914]"
+      style={{ backgroundColor: "#070914", colorScheme: "dark" }}
+    >
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-full min-h-dvh flex flex-col bg-[#070914] text-slate-100 antialiased selection:bg-rose-500/30 selection:text-rose-200">
+      <body
+        className="min-h-full min-h-dvh flex flex-col bg-[#070914] text-slate-100 antialiased selection:bg-rose-500/30 selection:text-rose-200"
+        style={{ backgroundColor: "#070914", colorScheme: "dark" }}
+      >
         {children}
         <Scripts />
       </body>

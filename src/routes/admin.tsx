@@ -25,6 +25,7 @@ import {
   Pencil,
   Power,
   RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Shield,
@@ -43,6 +44,7 @@ import { ScrollReveal } from "../components/ScrollReveal";
 import { CopyButton } from "../components/CopyButton";
 import { loadStoredAuth, supabase, useStore } from "../lib/store/useStore";
 import {
+  adminCancelAndRefundOrderApi,
   adminCreateMerchantApi,
   adminCreditMerchantApi,
   adminDeleteMerchantApi,
@@ -144,6 +146,7 @@ function AdminPage() {
   const [orderTypeFilter, setOrderTypeFilter] = useState<string>("all");
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+  const [refundingOrderId, setRefundingOrderId] = useState<string | null>(null);
   const [refreshingOrders, setRefreshingOrders] = useState(false);
   const [pkgGameFilter, setPkgGameFilter] = useState<string>("all");
   const [pkgSearch, setPkgSearch] = useState<string>("");
@@ -281,6 +284,44 @@ function AdminPage() {
     }
   };
 
+  const handleForceCancelAndRefund = async (order: any) => {
+    if (!order?.id) return;
+    const confirmMsg = `هل أنت متأكد من إلغاء الطلب ${order.order_ref} واسترداد الرصيد (${order.total_egp} ج.م) فوراً إلى محفظة التاجر؟`;
+    if (typeof window !== "undefined" && !window.confirm(confirmMsg)) return;
+
+    setRefundingOrderId(order.id);
+    try {
+      const activeToken = token || (typeof window !== "undefined" ? localStorage.getItem("meto_auth_token") : null);
+      if (!activeToken) throw new Error("يرجى تسجيل الدخول كأدمن");
+
+      const res = await adminCancelAndRefundOrderApi(activeToken, {
+        orderId: order.id,
+        reason: "إلغاء واسترداد يدوي بواسطة الإدارة (طلب معلق/فاشل)",
+      });
+
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: "تم الاسترداد والإلغاء بنجاح ✅",
+        description: res.message || `تم استرداد المبلغ للطلب ${order.order_ref} وتحويل حالته إلى فاشل ومسترد.`,
+      });
+
+      setSelectedOrderDetails((prev: any) =>
+        prev && prev.id === order.id
+          ? { ...prev, status: "failed", error_message: "تم الإلغاء والاسترداد بواسطة الأدمن" }
+          : prev,
+      );
+      await Promise.all([loadOrders(activeToken), loadMerchants(activeToken, 1)]);
+    } catch (err: any) {
+      toast({
+        title: "فشل الاسترداد",
+        description: err.message || "تعذر إكمال الاسترداد",
+        variant: "destructive",
+      });
+    } finally {
+      setRefundingOrderId(null);
+    }
+  };
+
   const filteredOrders = useMemo(() => {
     return orders.filter((o: any) => {
       if (orderStatusFilter !== "all" && o.status !== orderStatusFilter) return false;
@@ -326,12 +367,34 @@ function AdminPage() {
     const totalVolumeEgp = orders
       .filter((o: any) => o.status === "success")
       .reduce((sum: number, o: any) => sum + Number(o.total_egp || 0), 0);
+    const totalVolumeUsd = orders
+      .filter((o: any) => o.status === "success")
+      .reduce((sum: number, o: any) => sum + Number(o.total_usd || 0), 0);
     const totalCostUsd = orders
       .filter((o: any) => o.status === "success")
       .reduce((sum: number, o: any) => sum + Number(o.total_cost_usd || 0), 0);
+    const totalProfitUsd = orders
+      .filter((o: any) => o.status === "success")
+      .reduce(
+        (sum: number, o: any) =>
+          sum +
+          Number(
+            o.profit_usd ??
+              (Number(o.total_usd || 0) - Number(o.total_cost_usd || 0)),
+          ),
+        0,
+      );
     const totalProfitEgp = orders
       .filter((o: any) => o.status === "success")
-      .reduce((sum: number, o: any) => sum + Number(o.profit_egp || 0), 0);
+      .reduce(
+        (sum: number, o: any) =>
+          sum +
+          Number(
+            o.profit_egp ??
+              (Number(o.profit_usd || 0) * (egpRate || 55)),
+          ),
+        0,
+      );
     const successRate = total > 0 ? Math.round((success / total) * 100) : 100;
 
     return {
@@ -340,7 +403,9 @@ function AdminPage() {
       failed,
       processing,
       totalVolumeEgp: round3(totalVolumeEgp),
+      totalVolumeUsd: round3(totalVolumeUsd),
       totalCostUsd: round3(totalCostUsd),
+      totalProfitUsd: round3(totalProfitUsd),
       totalProfitEgp: round3(totalProfitEgp),
       successRate,
     };
@@ -1449,6 +1514,7 @@ function AdminPage() {
                         <th className="p-3 text-right">التاجر</th>
                         <th className="p-3">الجنسية / العملة</th>
                         <th className="p-3">الرصيد ($ USD / ج.م)</th>
+                        <th className="p-3">أرباحي من التاجر ($)</th>
                         <th className="p-3">هامش ربح الأدمن %</th>
                         <th className="p-3">الحالة</th>
                         <th className="p-3">إجراءات</th>
@@ -1493,6 +1559,14 @@ function AdminPage() {
                             </div>
                             <div className="text-[11px] text-slate-400">
                               {formatDecimals3(m.balance_egp)} ج.م
+                            </div>
+                          </td>
+                          <td className="p-3 text-center font-mono">
+                            <div className={`font-bold text-sm ${Number(m.profit_usd || 0) > 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                              {Number(m.profit_usd || 0) > 0 ? `+$${formatDecimals3(m.profit_usd)}` : "$0.000"}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              ≈ {formatDecimals3(Number(m.profit_usd || 0) * (egpRate || 55))} ج.م
                             </div>
                           </td>
                           <td className="p-3 text-center font-mono font-bold text-purple-300">+{m.margin_percent}%</td>
@@ -1633,11 +1707,11 @@ function AdminPage() {
                         </div>
 
                         {/* Card Key Metrics */}
-                        <div className="grid grid-cols-3 gap-2 bg-[#080c1b] border border-slate-800/80 rounded-xl p-2.5 text-center">
+                        <div className="grid grid-cols-4 gap-1.5 bg-[#080c1b] border border-slate-800/80 rounded-xl p-2.5 text-center">
                           {/* Balance */}
                           <div className="space-y-0.5">
                             <div className="text-[10px] text-slate-400">الرصيد</div>
-                            <div className="font-extrabold text-emerald-300 font-mono text-sm leading-tight">
+                            <div className="font-extrabold text-emerald-300 font-mono text-xs leading-tight">
                               ${balanceUsd}
                             </div>
                             <div className="text-[9px] text-slate-500 font-mono leading-tight">
@@ -1645,10 +1719,21 @@ function AdminPage() {
                             </div>
                           </div>
 
+                          {/* Profit from Merchant */}
+                          <div className="space-y-0.5 border-x border-slate-800 px-0.5">
+                            <div className="text-[10px] text-slate-400">أرباحي منه</div>
+                            <div className={`font-extrabold font-mono text-xs leading-tight ${Number(m.profit_usd || 0) > 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                              {Number(m.profit_usd || 0) > 0 ? `+$${formatDecimals3(m.profit_usd)}` : "$0.00"}
+                            </div>
+                            <div className="text-[9px] text-slate-500 font-mono leading-tight">
+                              USD
+                            </div>
+                          </div>
+
                           {/* Admin Margin */}
-                          <div className="space-y-0.5 border-x border-slate-800 px-1">
-                            <div className="text-[10px] text-slate-400">هامش الأدمن</div>
-                            <div className="font-extrabold text-purple-300 font-mono text-sm leading-tight">
+                          <div className="space-y-0.5 border-l border-slate-800 px-0.5">
+                            <div className="text-[10px] text-slate-400">الهامش</div>
+                            <div className="font-extrabold text-purple-300 font-mono text-xs leading-tight">
                               +{m.margin_percent || 0}%
                             </div>
                             <button
@@ -1666,7 +1751,7 @@ function AdminPage() {
                             <select
                               value={m.profile?.region || "EG"}
                               onChange={(e) => handleChangeMerchantRegion(m.id, e.target.value)}
-                              className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[10px] text-white outline-none focus:border-purple-400 w-full text-center cursor-pointer"
+                              className="rounded border border-slate-700 bg-slate-900 px-1 py-0.5 text-[9px] text-white outline-none focus:border-purple-400 w-full text-center cursor-pointer"
                               title="تغيير جنسية التاجر والعملة"
                             >
                               {MERCHANT_COUNTRIES.map((c) => (
@@ -1911,24 +1996,23 @@ function AdminPage() {
                   {/* Net Realized Profit */}
                   <div className="rounded-xl border border-slate-800/90 bg-[#0e1428]/80 p-3 flex flex-col justify-between">
                     <div className="flex items-center justify-between text-slate-400 text-xs">
-                      <span>صافي الأرباح المحققة</span>
+                      <span>صافي الأرباح المحققة ($ USD)</span>
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     </div>
                     <div className="mt-1.5">
                       <div
                         className={`text-lg sm:text-xl font-extrabold font-mono ${
-                          orderStats.totalProfitEgp >= 0 ? "text-amber-400" : "text-rose-400"
+                          orderStats.totalProfitUsd >= 0 ? "text-amber-400" : "text-rose-400"
                         }`}
                       >
-                        {orderStats.totalProfitEgp >= 0 ? "+" : ""}
-                        {orderStats.totalProfitEgp.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}{" "}
-                        <span className="text-xs font-normal text-slate-300">ج.م</span>
+                        {orderStats.totalProfitUsd >= 0 ? "+" : ""}
+                        ${orderStats.totalProfitUsd.toFixed(3)}{" "}
+                        <span className="text-xs font-normal text-slate-300">USD</span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {orderStats.processing > 0 ? (
-                          <span className="text-amber-300">{orderStats.processing} قيد التنفيذ</span>
-                        ) : (
-                          <span className="text-slate-400">من الطلبات الناجحة فقط</span>
+                        ≈ {(orderStats.totalProfitUsd * (egpRate || 55)).toFixed(2)} ج.م ربح محقق
+                        {orderStats.processing > 0 && (
+                          <span className="text-amber-300 mr-1.5">• {orderStats.processing} قيد التنفيذ</span>
                         )}
                       </div>
                     </div>
@@ -2051,6 +2135,7 @@ function AdminPage() {
                           (Array.isArray(firstItem?.components) && firstItem?.components.length > 0)
                         );
                         const profit = Number(o.profit_egp ?? (Number(o.total_egp || 0) - Number(o.cost_egp || 0)));
+                        const profitUsd = Number(o.profit_usd ?? (Number(o.total_usd || 0) - Number(o.total_cost_usd || 0)));
 
                         return (
                           <tr key={o.id} className="hover:bg-slate-900/50 transition-colors">
@@ -2140,11 +2225,11 @@ function AdminPage() {
                             {/* Financials */}
                             <td className="p-3 text-center">
                               <div className="font-mono font-bold text-white">
-                                {Number(o.total_egp || 0).toLocaleString()} <span className="text-[10px] text-slate-400">ج.م</span>
+                                {o.total_usd ? `$${formatDecimals3(o.total_usd)}` : `${Number(o.total_egp || 0).toLocaleString()} ج.م`}
                               </div>
                               {o.total_usd ? (
-                                <div className="text-[10px] text-cyan-300 font-mono font-semibold">
-                                  ${formatDecimals3(o.total_usd)} USD
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  {Number(o.total_egp || 0).toLocaleString()} ج.م
                                 </div>
                               ) : null}
                               <div className="text-[10px] text-slate-400 font-mono">
@@ -2152,14 +2237,18 @@ function AdminPage() {
                               </div>
                               <div
                                 className={`text-[10px] font-mono font-bold mt-0.5 ${
-                                  profit > 0
+                                  profitUsd > 0
                                     ? "text-emerald-400"
-                                    : profit < 0
+                                    : profitUsd < 0
                                       ? "text-rose-400"
                                       : "text-slate-400"
                                 }`}
                               >
-                                {profit > 0 ? `+${profit.toFixed(2)} ج.م ربح` : profit < 0 ? `${profit.toFixed(2)} ج.م` : "0 ج.م ربح"}
+                                {profitUsd > 0
+                                  ? `+$${profitUsd.toFixed(3)} USD`
+                                  : profitUsd < 0
+                                    ? `-$${Math.abs(profitUsd).toFixed(3)} USD`
+                                    : "$0.000 ربح"}
                               </div>
                             </td>
 
@@ -2253,6 +2342,7 @@ function AdminPage() {
                       (Array.isArray(firstItem?.components) && firstItem?.components.length > 0)
                     );
                     const profit = Number(o.profit_egp ?? (Number(o.total_egp || 0) - Number(o.cost_egp || 0)));
+                    const profitUsd = Number(o.profit_usd ?? (Number(o.total_usd || 0) - Number(o.total_cost_usd || 0)));
 
                     return (
                       <div
@@ -2363,8 +2453,8 @@ function AdminPage() {
                           </div>
                           <div>
                             <div className="text-[10px] text-slate-400">صافي الربح</div>
-                            <div className={`font-bold mt-0.5 ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-400"}`}>
-                              {profit > 0 ? `+${profit.toFixed(1)}` : profit.toFixed(1)} ج.م
+                            <div className={`font-bold mt-0.5 ${profitUsd > 0 ? "text-emerald-400" : profitUsd < 0 ? "text-rose-400" : "text-slate-400"}`}>
+                              {profitUsd > 0 ? `+$${profitUsd.toFixed(3)}` : profitUsd < 0 ? `-$${Math.abs(profitUsd).toFixed(3)}` : "$0.00"}
                             </div>
                           </div>
                         </div>
@@ -4050,24 +4140,35 @@ function AdminPage() {
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                     <div className="text-[10px] text-slate-400">المدفوع من العميل</div>
                     <div className="text-sm font-bold text-white mt-0.5">
-                      {Number(selectedOrderDetails.total_egp || 0)} ج.م
+                      {selectedOrderDetails.total_usd ? `$${formatDecimals3(selectedOrderDetails.total_usd)}` : `${Number(selectedOrderDetails.total_egp || 0)} ج.م`}
                     </div>
+                    {selectedOrderDetails.total_usd && (
+                      <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                        {Number(selectedOrderDetails.total_egp || 0)} ج.م
+                      </div>
+                    )}
                   </div>
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
                     <div className="text-[10px] text-slate-400">تكلفة الجملة بالسيرفر</div>
                     <div className="text-sm font-bold text-purple-300 mt-0.5">
                       ${Number(selectedOrderDetails.total_cost_usd || 0).toFixed(3)}
                     </div>
+                    <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                      USD
+                    </div>
                   </div>
                   <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                    <div className="text-[10px] text-slate-400">صافي ربح المتجر</div>
+                    <div className="text-[10px] text-slate-400">صافي ربح المتجر ($)</div>
                     <div
                       className={`text-sm font-bold mt-0.5 ${
-                        (selectedOrderDetails.profit_egp ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"
+                        (selectedOrderDetails.profit_usd ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"
                       }`}
                     >
-                      {Number(selectedOrderDetails.profit_egp ?? 0) >= 0 ? "+" : ""}
-                      {Number(selectedOrderDetails.profit_egp ?? 0).toFixed(2)} ج.م
+                      {(selectedOrderDetails.profit_usd ?? 0) >= 0 ? "+" : ""}
+                      ${Number(selectedOrderDetails.profit_usd ?? 0).toFixed(3)} USD
+                    </div>
+                    <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                      ≈ {Number(selectedOrderDetails.profit_egp ?? 0).toFixed(2)} ج.م
                     </div>
                   </div>
                 </div>
@@ -4181,20 +4282,44 @@ function AdminPage() {
               </div>
 
               {/* Footer Controls */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const text = JSON.stringify(selectedOrderDetails, null, 2);
-                    navigator.clipboard.writeText(text);
-                    toast({ title: "تم النسخ", description: "تم نسخ كافة بيانات العملية إلى الحافظة" });
-                  }}
-                  className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs gap-1.5"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>نسخ بيانات العملية بالكامل (JSON)</span>
-                </Button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const text = JSON.stringify(selectedOrderDetails, null, 2);
+                      navigator.clipboard.writeText(text);
+                      toast({ title: "تم النسخ", description: "تم نسخ كافة بيانات العملية إلى الحافظة" });
+                    }}
+                    className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ بيانات (JSON)</span>
+                  </Button>
+
+                  {selectedOrderDetails.status !== "success" && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={refundingOrderId === selectedOrderDetails.id}
+                      onClick={() => handleForceCancelAndRefund(selectedOrderDetails)}
+                      className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5 font-bold"
+                    >
+                      {refundingOrderId === selectedOrderDetails.id ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>جارٍ الاسترداد...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>إلغاء واسترداد الرصيد للتاجر فوراً ↩️</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
 
                 <Button
                   size="sm"

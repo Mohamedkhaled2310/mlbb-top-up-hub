@@ -313,6 +313,18 @@ export async function getMyProfileApi(token: string): Promise<any> {
   return await res.json();
 }
 
+export async function adminCancelAndRefundOrderApi(
+  token: string,
+  body: { orderId: string; reason?: string },
+): Promise<any> {
+  const res = await fetch("/api/admin/orders/cancel-refund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  return await res.json();
+}
+
 export async function checkSystemStatusApi(): Promise<any> {
   const res = await fetch("/api/status", { method: "GET", cache: "no-store" });
   return await res.json();

@@ -1,6 +1,7 @@
 import { FazerCardsService } from "./fazercards.service";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "./rate-limit";
 import {
+  adminCancelAndRefundOrder,
   adminCreateMerchant,
   adminCreditMerchant,
   adminDeleteMerchant,
@@ -389,6 +390,22 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       if (!token) return json({ error: "unauthorized" }, 401);
       const body = (await request.json().catch(() => ({}))) as { order_id?: string; order_ref?: string };
       const data = await syncOrderWithFazer(token, body);
+      return json(data);
+    } catch (e: any) {
+      const msg = e?.message || "failed";
+      return json({ error: msg }, msg.includes("forbidden") ? 403 : 400);
+    }
+  }
+
+  if (path === "/api/admin/orders/cancel-refund" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = (await request.json().catch(() => ({}))) as { orderId?: string; order_id?: string; reason?: string };
+      const data = await adminCancelAndRefundOrder(token, {
+        orderId: body.orderId || body.order_id || "",
+        reason: body.reason,
+      });
       return json(data);
     } catch (e: any) {
       const msg = e?.message || "failed";

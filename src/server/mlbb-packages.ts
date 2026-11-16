@@ -286,10 +286,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     offerId: "mlbb_composite_344",
     name: "344 Diamonds",
     totalDiamonds: 344,
-    components: [
-      { baseTotal: 257, qty: 1 },
-      { baseTotal: 86, qty: 1 },
-    ],
+    components: [{ baseTotal: 172, qty: 2 }],
   },
   {
     offerId: "mlbb_composite_429",
@@ -339,8 +336,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 1050,
     components: [
       { baseTotal: 706, qty: 1 },
-      { baseTotal: 257, qty: 1 },
-      { baseTotal: 86, qty: 1 },
+      { baseTotal: 172, qty: 2 },
     ],
   },
   {
@@ -373,8 +369,7 @@ export const MLBB_COMPOSITE_DEFINITIONS: MlbbCompositeDef[] = [
     totalDiamonds: 2539,
     components: [
       { baseTotal: 2195, qty: 1 },
-      { baseTotal: 257, qty: 1 },
-      { baseTotal: 86, qty: 1 },
+      { baseTotal: 172, qty: 2 },
     ],
   },
   {
