@@ -30,7 +30,7 @@ export async function validatePlayerApi(
   gameId?: string,
   region?: string,
   fazerCategoryId?: string,
-): Promise<PlayerValidationResult & { accountRegion?: string | null }> {
+): Promise<PlayerValidationResult & { accountRegion?: string | null; region?: string | null }> {
   const res = await fetch("/api/fzr/validate-id", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

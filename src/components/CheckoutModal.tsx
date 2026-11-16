@@ -51,6 +51,7 @@ interface CompletedSnapshot {
   totalUsd: number;
   gameId: string;
   region: string;
+  accountRegion?: string | undefined;
   playerName: string;
   playerId: string;
   zoneId?: string | undefined;
@@ -74,6 +75,7 @@ export default function CheckoutModal({
   const [summaryRegion, setSummaryRegion] = useState<string>("global");
   const [validating, setValidating] = useState(false);
   const [verifiedPlayerName, setVerifiedPlayerName] = useState<string | null>(player.name || null);
+  const [verifiedAccountRegion, setVerifiedAccountRegion] = useState<string | null>(player.region || null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [completedSnapshot, setCompletedSnapshot] = useState<CompletedSnapshot | null>(null);
   const submitted = useRef(false);
@@ -87,6 +89,7 @@ export default function CheckoutModal({
       setCompletedSnapshot(null);
       setPaidTotal(0);
       setVerifiedPlayerName(player.name || null);
+      setVerifiedAccountRegion(player.region || null);
       setValidationError(null);
       setValidating(false);
       const pkgServer =
@@ -183,8 +186,9 @@ export default function CheckoutModal({
 
       if (res.valid) {
         const username = res.username || "لاعب معتمد";
-        const accRegion = res.accountRegion || region || "global";
+        const accRegion = res.accountRegion || (res as any).region || region || "global";
         setVerifiedPlayerName(username);
+        setVerifiedAccountRegion(accRegion);
         setPlayer({ ...player, name: username, region: accRegion });
         if (res.accountRegion) {
           setRegion(res.accountRegion);
@@ -198,10 +202,11 @@ export default function CheckoutModal({
         });
         toast({
           title: "تم التحقق من الحساب بنجاح ✅",
-          description: `اسم اللاعب: ${username}${res.accountRegion ? ` • سيرفر: ${getServerLabel(res.accountRegion, activeGameId)}` : ""}`,
+          description: `اسم اللاعب: ${username} • سيرفر: ${getServerLabel(accRegion, activeGameId)}`,
         });
       } else {
         setVerifiedPlayerName(null);
+        setVerifiedAccountRegion(null);
         setValidationError(res.error || "تعذر التحقق من صحة المعرف، يرجى مراجعة الـ ID والسيرفر.");
         toast({
           title: "تعذر التحقق من الحساب ❌",
@@ -263,6 +268,7 @@ export default function CheckoutModal({
       totalUsd,
       gameId: currentGame,
       region: currentRegion,
+      accountRegion: verifiedAccountRegion || player.region || currentRegion || "global",
       playerName: verifiedPlayerName || player.name || player.id.trim(),
       playerId: player.id.trim(),
       zoneId: (player.zoneId || "").trim() || undefined,
@@ -479,22 +485,26 @@ export default function CheckoutModal({
 
             {/* Verified Player Info Card */}
             {verifiedPlayerName && (
-              <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
                     <UserCheck className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
                     <div className="text-[10px] text-emerald-400/80 font-medium">اسم اللاعب المسجل في اللعبة:</div>
-                    <div className="text-sm font-extrabold text-white truncate flex items-center gap-1.5">
+                    <div className="text-sm font-extrabold text-white truncate flex items-center gap-1.5 flex-wrap">
                       <span>{verifiedPlayerName}</span>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                     </div>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
-                    حساب مؤكد ومطابق ✓
+                <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-auto">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold">
+                    <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>المنطقة: {getServerLabel(verifiedAccountRegion || player.region || region || "global", activeGameId)}</span>
+                  </span>
+                  <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                    حساب مؤكد ✓
                   </span>
                 </div>
               </div>
@@ -690,7 +700,7 @@ export default function CheckoutModal({
               </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">حساب اللاعب:</span>
-                <div className="flex items-center gap-1.5 font-mono text-white">
+                <div className="flex items-center gap-1.5 font-mono text-white flex-wrap justify-end">
                   <span>
                     {completedSnapshot?.playerName || verifiedPlayerName || player.name
                       ? `${completedSnapshot?.playerName || verifiedPlayerName || player.name} (${completedSnapshot?.playerId || player.id})`
@@ -699,6 +709,10 @@ export default function CheckoutModal({
                   {(completedSnapshot?.zoneId || player.zoneId) && (
                     <span className="text-slate-400">({completedSnapshot?.zoneId || player.zoneId})</span>
                   )}
+                  <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 text-[10px] font-sans font-bold flex items-center gap-1">
+                    <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span>{getServerLabel(completedSnapshot?.accountRegion || verifiedAccountRegion || player.region || result?.account_region || region || "global", completedSnapshot?.gameId || activeGameId)}</span>
+                  </span>
                   <CopyButton text={completedSnapshot?.playerId || player.id} />
                 </div>
               </div>
@@ -820,10 +834,14 @@ export default function CheckoutModal({
                       completedSnapshot?.items?.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.name}`).join(" + ") ||
                       "باقة شحن";
                     const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
+                    const receiptRegion = getServerLabel(
+                      completedSnapshot?.accountRegion || verifiedAccountRegion || player.region || result?.account_region || region || "global",
+                      finalGame.toLowerCase(),
+                    );
                     const receiptPlayer =
                       completedSnapshot?.playerName || (verifiedPlayerName || player.name)
-                        ? `${completedSnapshot?.playerName || verifiedPlayerName || player.name} (${completedSnapshot?.playerId || player.id})`
-                        : (completedSnapshot?.playerId || player.id);
+                        ? `${completedSnapshot?.playerName || verifiedPlayerName || player.name} (${completedSnapshot?.playerId || player.id}) [${receiptRegion}]`
+                        : `${completedSnapshot?.playerId || player.id} [${receiptRegion}]`;
                     const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${receiptPlayer}\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                     window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                   }}
