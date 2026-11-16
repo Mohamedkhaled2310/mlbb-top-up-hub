@@ -38,6 +38,24 @@ interface Props {
   onOrderSuccess?: ((result: any) => void | Promise<void>) | undefined;
 }
 
+interface CompletedSnapshot {
+  items: Array<{
+    name: string;
+    qty: number;
+    diamonds: number;
+    unitPriceEgp: number;
+    unitPriceUsd: number;
+  }>;
+  totalDiamonds: number;
+  totalEgp: number;
+  totalUsd: number;
+  gameId: string;
+  region: string;
+  playerName: string;
+  playerId: string;
+  zoneId?: string | undefined;
+}
+
 export default function CheckoutModal({
   open,
   onClose,
@@ -57,6 +75,7 @@ export default function CheckoutModal({
   const [validating, setValidating] = useState(false);
   const [verifiedPlayerName, setVerifiedPlayerName] = useState<string | null>(player.name || null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [completedSnapshot, setCompletedSnapshot] = useState<CompletedSnapshot | null>(null);
   const submitted = useRef(false);
   const latestRegionRef = useRef(player.region || "");
   latestRegionRef.current = player.region || "";
@@ -65,6 +84,7 @@ export default function CheckoutModal({
     if (open) {
       setStep("form");
       setResult(null);
+      setCompletedSnapshot(null);
       setPaidTotal(0);
       setVerifiedPlayerName(player.name || null);
       setValidationError(null);
@@ -77,39 +97,7 @@ export default function CheckoutModal({
       setRegion(pkgServer.toLowerCase());
       submitted.current = false;
     }
-  }, [open, cart, player.region, player.name]);
-
-  // Real-time automatic polling when order is placed and in processing/pending state (ultra-fast every 300ms)
-  useEffect(() => {
-    if (!open || step !== "success" || !result?.order_ref) return;
-    if (result.status !== "processing" && result.status !== "pending") return;
-
-    let inFlight = false;
-    const interval = setInterval(async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try {
-        const check = await getOrderStatusApi(result.order_ref, accessToken);
-        if (check?.found && check.status && check.status !== result.status) {
-          setResult((prev: any) => ({
-            ...prev,
-            status: check.status,
-            message:
-              check.status === "success"
-                ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
-                : check.status === "failed"
-                  ? "تعذر تنفيذ الشحن وتم استرداد الرصيد إلى محفظتك"
-                  : prev?.message,
-          }));
-        }
-      } catch {
-      } finally {
-        inFlight = false;
-      }
-    }, 300);
-
-    return () => clearInterval(interval);
-  }, [open, step, result?.order_ref, result?.status, accessToken]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -253,6 +241,34 @@ export default function CheckoutModal({
     setSummaryRegion(currentRegion);
     setStep("processing");
 
+    // Take complete snapshot of cart and order info before clearing cart
+    const snapshotItems = cart.map((c) => {
+      const uEgp = getItemUnitPrice(c);
+      const uUsd = getItemUnitPriceUsd(c);
+      const dia = (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty;
+      return {
+        name: c.package.name,
+        qty: c.qty,
+        diamonds: dia,
+        unitPriceEgp: uEgp,
+        unitPriceUsd: uUsd,
+      };
+    });
+    const snapshotTotalDiamonds = snapshotItems.reduce((s, it) => s + it.diamonds, 0);
+
+    const snapshotData: CompletedSnapshot = {
+      items: snapshotItems,
+      totalDiamonds: snapshotTotalDiamonds,
+      totalEgp: currentTotal,
+      totalUsd,
+      gameId: currentGame,
+      region: currentRegion,
+      playerName: verifiedPlayerName || player.name || player.id.trim(),
+      playerId: player.id.trim(),
+      zoneId: (player.zoneId || "").trim() || undefined,
+    };
+    setCompletedSnapshot(snapshotData);
+
     // Save recent account immediately for fast, seamless re-use
     saveRecentAccount({
       id: player.id.trim(),
@@ -327,6 +343,10 @@ export default function CheckoutModal({
 
       if (res?.success) {
         setStep("success");
+        toast({
+          title: "تم الدفع وتأكيد الشحن بنجاح! ⚡",
+          description: `رقم الطلب: ${res.order_ref || clientOrderId}`,
+        });
         onClear();
         if (onOrderSuccess) {
           await onOrderSuccess(res);
@@ -637,38 +657,17 @@ export default function CheckoutModal({
 
         {/* Success / Result State (Invoice / Receipt) */}
         {step === "success" && (
-          <div className="py-5 text-center space-y-4">
-            <div
-              className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto border ${
-                result?.status === "processing" || result?.status === "pending"
-                  ? "bg-amber-500/20 border-amber-500/40 text-amber-400"
-                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
-              }`}
-            >
-              {result?.status === "processing" || result?.status === "pending" ? (
-                <Clock className="w-8 h-8 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-8 h-8" />
-              )}
+          <div className="py-5 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto border bg-emerald-500/20 border-emerald-500/40 text-emerald-400 shadow-lg shadow-emerald-500/20">
+              <CheckCircle2 className="w-9 h-9" />
             </div>
+
             <div>
-              <div
-                className={`font-extrabold text-xl ${
-                  result?.status === "processing" || result?.status === "pending" ? "text-amber-300" : "text-emerald-300"
-                }`}
-              >
-                {result?.status === "processing" || result?.status === "pending"
-                  ? "تم الدفع وتأكيد الطلب بنجاح! ⚡"
-                  : "تم تنفيذ الشحن بنجاح! 🎉"}
+              <div className="font-extrabold text-xl sm:text-2xl text-emerald-300">
+                تم الدفع وتأكيد الشحن بنجاح! 🎉
               </div>
-              <div
-                className={`text-xs sm:text-sm mt-1 leading-relaxed ${
-                  result?.status === "processing" || result?.status === "pending" ? "text-slate-300" : "text-emerald-300"
-                }`}
-              >
-                {result?.status === "processing" || result?.status === "pending"
-                  ? "تم خصم الرصيد وتمرير الشحن للسيرفر، برجاء انتظار إضافة الجواهر في اللعبة خلال ثوانٍ ⏳"
-                  : (result?.message || "تم تنفيذ الطلب وتسليم الباقات فورياً إلى حساب اللاعب.")}
+              <div className="text-xs sm:text-sm mt-1 leading-relaxed text-slate-300 max-w-md mx-auto">
+                {result?.message || "تم تسجيل وتأكيد الطلب بنجاح وتسليم الباقة إلى حساب اللاعب في اللعبة."}
               </div>
             </div>
 
@@ -685,64 +684,70 @@ export default function CheckoutModal({
               )}
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">حالة الشحن:</span>
-                <span
-                  className={`font-semibold text-xs px-2.5 py-0.5 rounded-full border ${
-                    result?.status === "processing" || result?.status === "pending"
-                      ? "bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse"
-                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                  }`}
-                >
-                  {result?.status === "processing" || result?.status === "pending"
-                    ? "قيد المعالجة ⏳"
-                    : "مكتمل بنجاح ✅"}
+                <span className="font-semibold text-xs px-2.5 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                  {result?.status === "success" ? "تم الشحن والتسليم بنجاح ✅" : "تم الدفع وتأكيد الطلب ⚡"}
                 </span>
               </div>
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">حساب اللاعب:</span>
                 <div className="flex items-center gap-1.5 font-mono text-white">
-                  <span>{(verifiedPlayerName || player.name) ? `${verifiedPlayerName || player.name} (${player.id})` : player.id}</span>
-                  {player.zoneId && <span className="text-slate-400">({player.zoneId})</span>}
-                  <CopyButton text={player.id} />
+                  <span>
+                    {completedSnapshot?.playerName || verifiedPlayerName || player.name
+                      ? `${completedSnapshot?.playerName || verifiedPlayerName || player.name} (${completedSnapshot?.playerId || player.id})`
+                      : (completedSnapshot?.playerId || player.id)}
+                  </span>
+                  {(completedSnapshot?.zoneId || player.zoneId) && (
+                    <span className="text-slate-400">({completedSnapshot?.zoneId || player.zoneId})</span>
+                  )}
+                  <CopyButton text={completedSnapshot?.playerId || player.id} />
                 </div>
               </div>
+
               {/* Package and Diamonds Details */}
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">الباقة المشحونة:</span>
                 <div className="text-right">
                   <div className="font-semibold text-purple-300">
-                    {cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن"}
+                    {completedSnapshot?.items?.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.name}`).join(" + ") ||
+                      cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") ||
+                      "باقة شحن"}
                   </div>
-                  {cart.some((c) => Number(c.package.diamonds) > 0) && (
+                  {((completedSnapshot?.totalDiamonds ?? 0) > 0 ||
+                    cart.some((c) => Number(c.package.diamonds) > 0)) && (
                     <div className="text-emerald-400 font-mono text-[11px] font-bold">
                       💎{" "}
-                      {cart.reduce(
-                        (s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty,
-                        0,
-                      )}{" "}
+                      {completedSnapshot?.totalDiamonds ??
+                        cart.reduce(
+                          (s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty,
+                          0,
+                        )}{" "}
                       جوهرة
                     </div>
                   )}
                 </div>
               </div>
+
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
                 <span className="text-slate-400">اللعبة والمنطقة:</span>
                 <span className="font-semibold text-slate-200">
-                  {(result?.game_id || summaryGameId || activeGameId).toUpperCase()} •{" "}
-                  {result?.region || summaryRegion || region || "Global"}
+                  {(completedSnapshot?.gameId || result?.game_id || summaryGameId || activeGameId).toUpperCase()} •{" "}
+                  {completedSnapshot?.region || result?.region || summaryRegion || region || "Global"}
                 </span>
               </div>
+
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">المبلغ الإجمالي:</span>
+                <span className="text-slate-400">المبلغ الإجمالي المدفوع:</span>
                 <span className="font-bold text-base text-rose-400 font-mono">
                   {isUsdMerchant ? (
                     <>
-                      ${formatDecimals3(totalUsd)} USD{" "}
+                      ${formatDecimals3(completedSnapshot?.totalUsd ?? totalUsd)} USD{" "}
                       <span className="text-xs font-normal text-slate-400">
                         (
                         {formatDecimals3(
-                          typeof result?.total_egp === "number" && result.total_egp > 0
-                            ? result.total_egp
-                            : paidTotal || totalEgp,
+                          completedSnapshot?.totalEgp ??
+                            (typeof result?.total_egp === "number" && result.total_egp > 0
+                              ? result.total_egp
+                              : paidTotal || totalEgp),
                         )}{" "}
                         ج.م)
                       </span>
@@ -750,9 +755,10 @@ export default function CheckoutModal({
                   ) : (
                     <>
                       {formatDecimals3(
-                        typeof result?.total_egp === "number" && result.total_egp > 0
-                          ? result.total_egp
-                          : paidTotal || totalEgp,
+                        completedSnapshot?.totalEgp ??
+                          (typeof result?.total_egp === "number" && result.total_egp > 0
+                            ? result.total_egp
+                            : paidTotal || totalEgp),
                       )}{" "}
                       ج.م
                     </>
@@ -762,26 +768,28 @@ export default function CheckoutModal({
             </div>
 
             <div className="flex flex-col gap-2 pt-2">
-              <Button
-                type="button"
-                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold h-11 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 rounded-xl transition-all"
-                onClick={() => {
-                  onClose();
-                  if (typeof window !== "undefined") {
-                    if (window.location.pathname.includes("/merchant")) {
-                      const board = document.getElementById("merchant-orders-board");
-                      if (board) {
-                        board.scrollIntoView({ behavior: "smooth" });
+              {isMerchant && (
+                <Button
+                  type="button"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold h-11 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 rounded-xl transition-all"
+                  onClick={() => {
+                    onClose();
+                    if (typeof window !== "undefined") {
+                      if (window.location.pathname.includes("/merchant")) {
+                        const board = document.getElementById("merchant-orders-board");
+                        if (board) {
+                          board.scrollIntoView({ behavior: "smooth" });
+                        }
+                      } else {
+                        window.location.href = "/merchant#merchant-orders-board";
                       }
-                    } else if (isMerchant) {
-                      window.location.href = "/merchant#merchant-orders-board";
                     }
-                  }
-                }}
-              >
-                <ClipboardList className="w-4 h-4" />
-                <span>الانتقال إلى لوحة الطلبات (Dashboard) 📋</span>
-              </Button>
+                  }}
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  <span>الانتقال إلى لوحة الطلبات (Dashboard) 📋</span>
+                </Button>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
@@ -789,28 +797,33 @@ export default function CheckoutModal({
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-10 flex items-center justify-center gap-2 rounded-xl"
                   onClick={() => {
                     const finalPaidEgp = formatDecimals3(
-                      typeof result?.total_egp === "number" && result.total_egp > 0
-                        ? result.total_egp
-                        : paidTotal || totalEgp,
+                      completedSnapshot?.totalEgp ??
+                        (typeof result?.total_egp === "number" && result.total_egp > 0
+                          ? result.total_egp
+                          : paidTotal || totalEgp),
                     );
                     const finalPaidStr = isUsdMerchant
-                      ? `$${formatDecimals3(totalUsd)} USD (${finalPaidEgp} ج.م)`
+                      ? `$${formatDecimals3(completedSnapshot?.totalUsd ?? totalUsd)} USD (${finalPaidEgp} ج.م)`
                       : `${finalPaidEgp} ج.م`;
-                    const finalGame = (result?.game_id || summaryGameId || activeGameId).toUpperCase();
+                    const finalGame = (
+                      completedSnapshot?.gameId ||
+                      result?.game_id ||
+                      summaryGameId ||
+                      activeGameId
+                    ).toUpperCase();
                     const statusText =
-                      result?.status === "processing" || result?.status === "pending"
-                        ? "قيد المعالجة ⏳"
-                        : "تم الشحن بنجاح ✅";
-                    const totalDia = cart.reduce(
-                      (s, c) => s + (Number(c.package.diamonds || 0) + Number(c.package.bonusDiamonds || 0)) * c.qty,
-                      0,
-                    );
+                      result?.status === "success"
+                        ? "تم الشحن بنجاح ✅"
+                        : "تم الدفع وتأكيد الطلب ⚡";
+                    const totalDia = completedSnapshot?.totalDiamonds ?? 0;
                     const pkgSummary =
-                      cart.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.package.name}`).join(" + ") || "باقة شحن";
+                      completedSnapshot?.items?.map((c) => `${c.qty > 1 ? `${c.qty}x ` : ""}${c.name}`).join(" + ") ||
+                      "باقة شحن";
                     const pkgWithDia = totalDia > 0 ? `${pkgSummary} (${totalDia} جوهرة 💎)` : pkgSummary;
-                    const receiptPlayer = (verifiedPlayerName || player.name)
-                      ? `${verifiedPlayerName || player.name} (${player.id})`
-                      : player.id;
+                    const receiptPlayer =
+                      completedSnapshot?.playerName || (verifiedPlayerName || player.name)
+                        ? `${completedSnapshot?.playerName || verifiedPlayerName || player.name} (${completedSnapshot?.playerId || player.id})`
+                        : (completedSnapshot?.playerId || player.id);
                     const receiptText = `🧾 إيصال شحن METO STORE\nرقم الطلب: ${result?.order_ref || "—"}\nاللاعب: ${receiptPlayer}\nاللعبة: ${finalGame}\nالباقة المشحونة: ${pkgWithDia}\nالإجمالي: ${finalPaidStr}\nالحالة: ${statusText}\nhttps://meto-three.vercel.app`;
                     window.open(`https://wa.me/?text=${encodeURIComponent(receiptText)}`, "_blank");
                   }}
@@ -818,7 +831,17 @@ export default function CheckoutModal({
                   <Share2 className="w-4 h-4" />
                   <span>مشاركة الإيصال عبر واتساب</span>
                 </Button>
-                <Button className={`sm:w-28 rounded-xl ${outlineBtn}`} onClick={onClose}>
+
+                <Button
+                  type="button"
+                  className={`sm:w-28 rounded-xl ${outlineBtn}`}
+                  onClick={() => {
+                    setStep("form");
+                    setResult(null);
+                    setCompletedSnapshot(null);
+                    onClose();
+                  }}
+                >
                   إغلاق
                 </Button>
               </div>
