@@ -261,6 +261,35 @@ export async function refreshSessionServer(refreshToken: string) {
 
 let inFlightSync: Promise<any> | null = null;
 
+const NOISY_MLBB_TIERS = new Set([
+  "10_1_diamonds",
+  "12_diamonds",
+  "14_diamonds",
+  "19_diamonds",
+  "20_2_diamonds",
+  "28_diamonds",
+  "42_diamonds",
+  "51_5_diamonds",
+  "70_diamonds",
+  "102_10_diamonds",
+  "140_diamonds",
+  "170_diamonds",
+  "240_diamonds",
+  "284_diamonds",
+  "296_diamonds",
+  "355_diamonds",
+  "429_diamonds",
+  "504_66_diamonds",
+  "716_diamonds",
+  "1007_156_diamonds",
+  "1084_diamonds",
+  "1446_diamonds",
+  "2010_diamonds",
+  "2015_383_diamonds",
+  "2976_diamonds",
+  "7502_diamonds",
+]);
+
 async function syncFazerInternal() {
   if (inFlightSync) return inFlightSync;
   inFlightSync = (async () => {
@@ -289,6 +318,9 @@ async function syncFazerInternal() {
 
       const rows = catalog.products.map((p) => {
         const override = customOverrides.get(p.offer_id);
+        const off = String(p.offer_id || "");
+        const rawId = (off.includes(":") ? off.split(":")[1] : off) || "";
+        const isOddMlbb = p.game_id === "mlbb" && rawId && NOISY_MLBB_TIERS.has(rawId);
         return {
           offer_id: p.offer_id,
           game_id: p.game_id || "mlbb",
@@ -299,7 +331,7 @@ async function syncFazerInternal() {
           currency_name: p.currency_name || null,
           cost_usd: override ? override.cost_usd : p.cost_usd ?? null,
           regions: p.regions ?? null,
-          active: p.active !== false,
+          active: isOddMlbb ? false : p.active !== false,
           raw: override ? { ...(p.raw ?? {}), ...override.raw } : p.raw ?? null,
           updated_at: nowIso,
         };
