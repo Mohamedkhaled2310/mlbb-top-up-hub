@@ -455,26 +455,8 @@ export async function getStoreData(gameId?: string) {
     }
   }
 
-  // ONLY auto-update egp_rate if mode is 'binance_auto'!
-  // If mode is 'manual', NEVER overwrite the admin's manual rate!
-  if (
-    !process.env["VITEST"] &&
-    rateMode === "binance_auto" &&
-    typeof binanceEgp === "number" &&
-    Number.isFinite(binanceEgp) &&
-    binanceEgp > 0
-  ) {
-    const liveEgp = Math.round(binanceEgp * 100) / 100;
-    if (Math.abs(egpRate - liveEgp) > 0.05) {
-      const oldRate = egpRate;
-      egpRate = liveEgp;
-      sb.from("store_settings")
-        .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
-        .eq("id", 1)
-        .then(() => adjustMerchantBalancesForFxRateChange(sb, oldRate, egpRate))
-        .catch(() => {});
-    }
-  }
+  // Exchange rate is strictly locked to prevent automatic balance or price drift
+  // Background processes and Binance P2P will NEVER overwrite store_settings.egp_rate
 
   let q = sb
     .from("fazer_packages")
@@ -1844,13 +1826,23 @@ export async function getMerchantDashboard(token: string) {
     incomplete_orders: list.filter((o: any) => ["pending", "processing", "incomplete", "failed"].includes(o.status)).length,
   };
 
-  const formattedLedger = (ledger || []).map((t: any) => ({
-    ...t,
-    amount_egp: Number(t.amount || 0),
-    amount_usd: round3(Number(t.amount || 0) / egpRate),
-    balance_after_egp: Number(t.balance_after || 0),
-    balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
-  }));
+  const formattedLedger = (ledger || []).map((t: any) => {
+    let amountUsd = round3(Number(t.amount || 0) / egpRate);
+    const noteMatch = (t.note || "").match(/\$([0-9.]+)/);
+    if (noteMatch && noteMatch[1]) {
+      const explicitUsd = parseFloat(noteMatch[1]);
+      if (Number.isFinite(explicitUsd) && explicitUsd > 0) {
+        amountUsd = Number(t.amount) < 0 ? -explicitUsd : explicitUsd;
+      }
+    }
+    return {
+      ...t,
+      amount_egp: Number(t.amount || 0),
+      amount_usd: amountUsd,
+      balance_after_egp: Number(t.balance_after || 0),
+      balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+    };
+  });
 
   const customPricesMap = await getMerchantCustomPrices();
   const merchantCustomMap = customPricesMap[merchant.id] || {};
@@ -2426,13 +2418,23 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
   const initialCreditUsd = round3(balanceUsd + totalSpentUsd);
   const initialCreditEgp = round3(Number(merchant.balance_egp || 0) + totalSpentEgp);
 
-  const formattedLedger = (ledgerRes.data || []).map((t: any) => ({
-    ...t,
-    amount_egp: Number(t.amount || 0),
-    amount_usd: round3(Number(t.amount || 0) / egpRate),
-    balance_after_egp: Number(t.balance_after || 0),
-    balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
-  }));
+  const formattedLedger = (ledgerRes.data || []).map((t: any) => {
+    let amountUsd = round3(Number(t.amount || 0) / egpRate);
+    const noteMatch = (t.note || "").match(/\$([0-9.]+)/);
+    if (noteMatch && noteMatch[1]) {
+      const explicitUsd = parseFloat(noteMatch[1]);
+      if (Number.isFinite(explicitUsd) && explicitUsd > 0) {
+        amountUsd = Number(t.amount) < 0 ? -explicitUsd : explicitUsd;
+      }
+    }
+    return {
+      ...t,
+      amount_egp: Number(t.amount || 0),
+      amount_usd: amountUsd,
+      balance_after_egp: Number(t.balance_after || 0),
+      balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+    };
+  });
 
   return {
     merchant: {
@@ -2634,16 +2636,7 @@ export async function adminSyncBinanceRate(token: string) {
 
   const nowIso = new Date().toISOString();
   const { data: currentSettings } = await sb.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
-  const oldRate = Number(currentSettings?.egp_rate || DEFAULT_EGP_RATE);
-
-  await sb
-    .from("store_settings")
-    .update({ egp_rate: liveBinance, updated_at: nowIso })
-    .eq("id", 1);
-
-  if (oldRate > 0 && Math.abs(oldRate - liveBinance) > 0.001) {
-    await adjustMerchantBalancesForFxRateChange(sb, oldRate, liveBinance);
-  }
+  const currentRate = Number(currentSettings?.egp_rate || DEFAULT_EGP_RATE);
 
   const { data: existing } = await sb
     .from("fazer_packages")
@@ -2659,14 +2652,14 @@ export async function adminSyncBinanceRate(token: string) {
     active: false,
     raw: {
       ...prevRaw,
-      mode: "binance_auto",
+      mode: "manual",
       binance_rate: liveBinance,
       binance_updated_at: nowIso,
       updated_by: "admin",
     },
   });
 
-  return { success: true, egp_rate: liveBinance, binance_rate: liveBinance, mode: "binance_auto" };
+  return { success: true, egp_rate: currentRate, binance_rate: liveBinance, mode: "manual" };
 }
 
 export async function getMyProfile(token: string) {
