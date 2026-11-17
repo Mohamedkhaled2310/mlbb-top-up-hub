@@ -438,20 +438,22 @@ export async function getStoreData(gameId?: string) {
   // Persist latest live binance rate in config if available
   if (binanceEgp && typeof binanceEgp === "number" && binanceEgp > 0) {
     if (Math.abs((fxConfig.binance_rate || 0) - binanceEgp) > 0.05) {
-      sb.from("fazer_packages")
-        .upsert({
-          offer_id: "config:fx_settings",
-          game_id: "system",
-          name: "FX Settings",
-          active: false,
-          raw: {
-            ...fxConfig,
-            binance_rate: binanceEgp,
-            binance_updated_at: new Date().toISOString(),
-          },
-        })
-        .then(() => {})
-        .catch(() => {});
+      try {
+        await sb.from("fazer_packages")
+          .upsert({
+            offer_id: "config:fx_settings",
+            game_id: "system",
+            name: "FX Settings",
+            active: false,
+            raw: {
+              ...fxConfig,
+              binance_rate: binanceEgp,
+              binance_updated_at: new Date().toISOString(),
+            },
+          });
+      } catch {
+        // Ignore background persistence error
+      }
     }
   }
 
@@ -466,10 +468,13 @@ export async function getStoreData(gameId?: string) {
     const liveEgp = Math.round(binanceEgp * 100) / 100;
     if (Math.abs(egpRate - liveEgp) > 0.05) {
       egpRate = liveEgp;
-      sb.from("store_settings")
-        .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
-        .eq("id", 1)
-        .catch(() => {});
+      try {
+        await sb.from("store_settings")
+          .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
+          .eq("id", 1);
+      } catch {
+        // Ignore settings update error
+      }
     }
   }
 
@@ -547,7 +552,9 @@ export async function getStoreData(gameId?: string) {
     "20_2_diamonds",
     "28_diamonds",
     "42_diamonds",
+    "51_5_diamonds",
     "70_diamonds",
+    "102_10_diamonds",
     "140_diamonds",
     "170_diamonds",
     "240_diamonds",
@@ -555,10 +562,13 @@ export async function getStoreData(gameId?: string) {
     "296_diamonds",
     "355_diamonds",
     "429_diamonds",
+    "504_66_diamonds",
     "716_diamonds",
+    "1007_156_diamonds",
     "1084_diamonds",
     "1446_diamonds",
     "2010_diamonds",
+    "2015_383_diamonds",
     "2976_diamonds",
     "7502_diamonds",
   ]);
@@ -568,7 +578,7 @@ export async function getStoreData(gameId?: string) {
       if (p.game_id === "mlbb") {
         const id = String(p.offer_id || "");
         const rawId = (id.includes(":") ? id.split(":")[1] : id) || "";
-        if (rawId && NOISY_MLBB_TIERS.has(rawId)) return false;
+        if (rawId && NOISY_MLBB_TIERS.has(rawId.toLowerCase())) return false;
       }
       return true;
     })

@@ -146,12 +146,9 @@ function MerchantPage() {
     [store],
   );
 
-  // Restore stored session safely ONCE on initial mount (no duplicate calls)
+  // Restore stored session and load packages safely on mount
   useEffect(() => {
-    // Only fetch store packages once if empty
-    if (!store.packages || store.packages.length === 0) {
-      loadStore();
-    }
+    loadStore();
     (async () => {
       const freshToken = await getFreshAuthToken();
       if (freshToken) {
