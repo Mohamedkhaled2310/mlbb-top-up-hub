@@ -384,7 +384,8 @@ function MerchantPage() {
     [store.merchant?.custom_prices, marginPercent, store.settings.egp_rate, currencyRate, currencyInfo.decimals],
   );
 
-  const rawBalanceEgp = dash?.stats?.balance_egp ?? store.merchant?.balance_egp ?? 0;
+  const rawBalanceUsd = dash?.stats?.balance_usd ?? store.merchant?.balance_usd ?? Number(store.merchant?.balance_egp || 0);
+  const rawBalanceEgp = rawBalanceUsd;
   const convertedBalance = useMemo(
     () => convertEgpToCurrency(rawBalanceEgp, store.settings.egp_rate, currencyRate, currencyInfo.decimals),
     [rawBalanceEgp, store.settings.egp_rate, currencyRate, currencyInfo.decimals],
@@ -438,7 +439,8 @@ function MerchantPage() {
     return filterPackagesForServer(gamePackages, effectivePkgRegion, pkgSearch);
   }, [gamePackages, effectivePkgRegion, pkgSearch]);
 
-  const isUsdMerchant = currencyInfo.currency === "USD";
+  // All merchants operate in 100% Native USD
+  const isUsdMerchant = true;
   const cartCount = store.cart.reduce((s, i) => s + i.qty, 0);
   const cartTotalEgp = round3(store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).priceEgp, 0));
   const cartTotalConverted = round3(store.cart.reduce((s, i) => s + i.qty * getMerchantPrices(i.package).converted, 0));
@@ -595,27 +597,10 @@ function MerchantPage() {
                     <span className="text-[10px] text-emerald-400 font-mono">تلقائي</span>
                   </div>
                   <div className="text-lg sm:text-2xl font-extrabold text-emerald-300 font-mono mt-1">
-                    {currencyInfo.currency === "EGP" ? (
-                      <>
-                        {formatDecimals3(rawBalanceEgp)} <span className="text-xs font-sans">ج.م</span>
-                      </>
-                    ) : (
-                      <>
-                        {convertedBalance.toLocaleString("en-US", {
-                          minimumFractionDigits: Math.min(currencyInfo.decimals, 3),
-                          maximumFractionDigits: Math.min(currencyInfo.decimals, 3),
-                        })}{" "}
-                        <span className="text-xs font-sans">{currencyInfo.symbolAr}</span>
-                      </>
-                    )}
+                    ${formatDecimals3(rawBalanceUsd)} <span className="text-xs font-sans">USD</span>
                   </div>
                   <div className="text-[11px] text-emerald-400/90 font-mono mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <span>≈ ${formatDecimals3(rawBalanceEgp / (store.settings.egp_rate || 50))} USD</span>
-                    {currencyInfo.currency !== "EGP" && (
-                      <span className="text-slate-400 font-sans text-[10px]">
-                        (رصيد التسوية: {formatDecimals3(rawBalanceEgp)} ج.م)
-                      </span>
-                    )}
+                    <span>محفظة بالدولار الصافي 💵</span>
                   </div>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-[#0a0f20] p-3.5 sm:p-4 hover:-translate-y-0.5 transition-transform duration-200">
@@ -897,17 +882,8 @@ function MerchantPage() {
 
                         <div className="text-left shrink-0">
                           <div className="font-mono font-bold text-emerald-400 text-xs">
-                            {isUsdMerchant ? (
-                              <span>${formatDecimals3(o.total_usd ?? (Number(o.total_egp) / (store.settings.egp_rate || 50)))} USD</span>
-                            ) : (
-                              <span>{o.total_egp} ج.م</span>
-                            )}
+                            <span>${formatDecimals3(o.total_usd ?? (Number(o.total_egp) / (store.settings.egp_rate || 50)))} USD</span>
                           </div>
-                          {isUsdMerchant && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {o.total_egp} ج.م
-                            </div>
-                          )}
                           <div className="text-[10px] text-slate-500 font-mono">
                             {new Date(o.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
                           </div>
@@ -946,25 +922,14 @@ function MerchantPage() {
                         </div>
                         <div className="text-left shrink-0">
                           <div
-                            className={`font-mono font-bold text-xs ${Number(t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"}`}
+                            className={`font-mono font-bold text-xs ${Number(t.amount_usd ?? t.amount) >= 0 ? "text-emerald-300" : "text-rose-300"}`}
                           >
-                            {isUsdMerchant ? (
-                              <span>
-                                {Number(t.amount) >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (Number(t.amount) / (store.settings.egp_rate || 50))))} USD
-                              </span>
-                            ) : (
-                              <span>
-                                {Number(t.amount) >= 0 ? "+" : ""}
-                                {t.amount} ج.م
-                              </span>
-                            )}
+                            <span>
+                              {Number(t.amount_usd ?? t.amount) >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? t.amount))} USD
+                            </span>
                           </div>
                           <div className="text-slate-500 text-[10px] font-mono">
-                            {isUsdMerchant ? (
-                              <span>بعدها: ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after) / (store.settings.egp_rate || 50)))} USD</span>
-                            ) : (
-                              <span>بعدها: {t.balance_after}</span>
-                            )}
+                            <span>بعدها: ${formatDecimals3(t.balance_after_usd ?? t.balance_after)} USD</span>
                           </div>
                         </div>
                       </div>

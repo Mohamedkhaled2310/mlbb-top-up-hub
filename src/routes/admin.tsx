@@ -818,10 +818,9 @@ function AdminPage() {
         }
         throw new Error(r.error);
       }
-      const addedEgp = r?.amount_egp || Math.round(usd * (egpRate || 50) * 100) / 100;
       toast({
         title: "تمت إضافة الرصيد لمحفظة التاجر بنجاح 💵",
-        description: `المبلغ: $${usd} USD (يعادل ${addedEgp} ج.م بسعر ${egpRate} ج.م/$)`,
+        description: `المبلغ: $${usd} USD تم إيداعه بنجاح في محفظة التاجر`,
       });
       const targetId = credit.id;
       setCredit(null);
@@ -948,12 +947,11 @@ function AdminPage() {
   };
 
   const openAdjustBalance = (m: any) => {
-    const curEgp = Number(m.balance_egp || 0);
-    const curUsd = (curEgp / (egpRate || 50)).toFixed(2);
+    const curUsd = formatDecimals3(m.balance_usd ?? m.balance_egp);
     setAdjustBalance({
       merchant: m,
       amountUsd: curUsd,
-      amountEgp: String(curEgp),
+      amountEgp: curUsd,
       mode: "usd",
       note: "",
     });
@@ -978,7 +976,7 @@ function AdminPage() {
       if (res?.error) throw new Error(res.error);
       toast({
         title: "تم تعديل رصيد التاجر بنجاح",
-        description: `الرصيد الجديد: $${res.balance_usd} (${Number(res.balance_egp).toLocaleString("en-US")} ج.م)`,
+        description: `الرصيد الجديد: $${formatDecimals3(res.balance_usd ?? res.balance_egp)} USD`,
       });
       const targetId = adjustBalance.merchant.id;
       setAdjustBalance(null);
@@ -1555,10 +1553,7 @@ function AdminPage() {
                           </td>
                           <td className="p-3 text-center font-mono">
                             <div className="font-bold text-emerald-300 text-sm">
-                              ${formatDecimals3(Number(m.balance_egp || 0) / (egpRate || 50))}
-                            </div>
-                            <div className="text-[11px] text-slate-400">
-                              {formatDecimals3(m.balance_egp)} ج.م
+                              ${formatDecimals3(m.balance_usd ?? m.balance_egp)} USD
                             </div>
                           </td>
                           <td className="p-3 text-center font-mono">
@@ -1657,8 +1652,7 @@ function AdminPage() {
                 {/* 2) Mobile Responsive Cards View (visible strictly on mobile screens < md) */}
                 <div className="block md:hidden space-y-3">
                   {merchants.map((m: any) => {
-                    const balanceUsd = formatDecimals3(Number(m.balance_egp || 0) / (egpRate || 50));
-                    const balanceEgp = formatDecimals3(m.balance_egp);
+                    const balanceUsd = formatDecimals3(m.balance_usd ?? m.balance_egp);
                     const merchantInitial = (m.profile?.full_name || m.email || "M").trim().charAt(0).toUpperCase();
 
                     return (
@@ -1715,7 +1709,7 @@ function AdminPage() {
                               ${balanceUsd}
                             </div>
                             <div className="text-[9px] text-slate-500 font-mono leading-tight">
-                              {balanceEgp} ج.م
+                              USD
                             </div>
                           </div>
 
@@ -3008,8 +3002,7 @@ function AdminPage() {
                 <div className="flex items-center justify-between text-slate-400 pt-1">
                   <span>الرصيد الحالي:</span>
                   <span className="font-mono font-bold text-emerald-300">
-                    ${(Number(adjustBalance.merchant.balance_egp || 0) / (egpRate || 50)).toFixed(2)} USD
-                    {" "}({Number(adjustBalance.merchant.balance_egp || 0).toLocaleString("en-US")} ج.م)
+                    ${formatDecimals3(adjustBalance.merchant.balance_usd ?? adjustBalance.merchant.balance_egp)} USD
                   </span>
                 </div>
               </div>
@@ -3151,8 +3144,7 @@ function AdminPage() {
                 <div className="text-slate-300 text-xs">
                   الرصيد الحالي:{" "}
                   <span className="text-emerald-300 font-bold">
-                    ${(Number(deleteTarget.balance_egp || 0) / (egpRate || 50)).toFixed(2)} USD
-                    {" "}({Number(deleteTarget.balance_egp || 0).toLocaleString("en-US")} ج.م)
+                    ${formatDecimals3(deleteTarget.balance_usd ?? deleteTarget.balance_egp)} USD
                   </span>
                 </div>
               </div>
@@ -3321,10 +3313,7 @@ function AdminPage() {
                     <Wallet className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                   <div className="text-base sm:text-xl font-extrabold text-emerald-300 font-mono mt-1">
-                    ${formatDecimals3(profileData.merchant.balance_usd)} USD
-                  </div>
-                  <div className="text-[10px] sm:text-[11px] text-slate-400 font-mono mt-0.5">
-                    {formatDecimals3(profileData.merchant.balance_egp)} ج.م
+                    ${formatDecimals3(profileData.merchant.balance_usd ?? profileData.merchant.balance_egp)} USD
                   </div>
                 </div>
 
@@ -3708,18 +3697,12 @@ function AdminPage() {
                               </td>
                               <td className="p-2.5 text-center font-mono font-bold">
                                 <div className={amt >= 0 ? "text-emerald-300" : "text-rose-400"}>
-                                  {amt >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (amt / (profileData.egpRate || 50))))} USD
-                                </div>
-                                <div className="text-[10px] text-slate-400 font-normal">
-                                  {amt >= 0 ? `+${amt}` : amt} ج.م
+                                  {amt >= 0 ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? amt))} USD
                                 </div>
                               </td>
                               <td className="p-2.5 text-center font-mono text-slate-300">
                                 <div className="font-bold text-white">
-                                  ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after_egp || 0) / (profileData.egpRate || 50)))} USD
-                                </div>
-                                <div className="text-[10px] text-slate-400">
-                                  {Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م
+                                  ${formatDecimals3(t.balance_after_usd ?? t.balance_after_egp ?? t.balance_after)} USD
                                 </div>
                               </td>
                               <td className="p-2.5 text-right text-slate-300 font-mono text-[11px]">
@@ -3745,7 +3728,7 @@ function AdminPage() {
                   {/* 2.B: Mobile Responsive Cards for Ledger */}
                   <div className="block md:hidden space-y-2 max-h-96 overflow-y-auto pr-0.5">
                     {profileData.transactions?.map((t: any) => {
-                      const amt = Number(t.amount_egp || 0);
+                      const amt = Number(t.amount_usd ?? t.amount_egp ?? t.amount ?? 0);
                       const isCredit = amt >= 0;
                       return (
                         <div
@@ -3775,10 +3758,7 @@ function AdminPage() {
 
                             <div className="text-left font-mono">
                               <div className={`font-bold text-xs ${isCredit ? "text-emerald-300" : "text-rose-400"}`}>
-                                {isCredit ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? (amt / (profileData.egpRate || 50))))} USD
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {isCredit ? `+${amt}` : amt} ج.م
+                                {isCredit ? "+" : ""}${formatDecimals3(Math.abs(t.amount_usd ?? amt))} USD
                               </div>
                             </div>
                           </div>
@@ -3795,7 +3775,7 @@ function AdminPage() {
                           <div className="text-[10px] text-slate-500 font-mono border-t border-slate-800/80 pt-1 flex justify-between">
                             <span>الرصيد بعد الحركة:</span>
                             <span className="text-slate-200 font-bold">
-                              ${formatDecimals3(t.balance_after_usd ?? (Number(t.balance_after_egp || 0) / (profileData.egpRate || 50)))} USD ({Number(t.balance_after_egp || 0).toLocaleString("en-US")} ج.م)
+                              ${formatDecimals3(t.balance_after_usd ?? t.balance_after_egp ?? t.balance_after)} USD
                             </span>
                           </div>
                         </div>

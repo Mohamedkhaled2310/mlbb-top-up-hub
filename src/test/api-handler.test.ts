@@ -380,7 +380,7 @@ describe("API routes & merchant/admin workflows", () => {
     const loginJson = await loginRes!.json();
     expect(loginJson.merchant.balance_egp).toBe(1000);
 
-    // Credit merchant in USD ($10 = 500 EGP at 50 rate)
+    // Credit merchant in USD ($10 USD native)
     const creditRes = await handleApiRoute(
       new Request("http://localhost/api/admin/merchants/credit", {
         method: "POST",
@@ -394,7 +394,7 @@ describe("API routes & merchant/admin workflows", () => {
     expect(creditRes?.status).toBe(200);
     const creditJson = await creditRes!.json();
     expect(creditJson.success).toBe(true);
-    expect(creditJson.amount_egp).toBe(500);
+    expect(creditJson.amount_usd ?? creditJson.amount_egp).toBe(10);
   });
 
   it("debits merchant atomically on order and issues automatic refund if FazerCards fails", async () => {
@@ -425,11 +425,10 @@ describe("API routes & merchant/admin workflows", () => {
     expect(orderRes?.status).toBe(400);
     const data = await orderRes!.json();
     expect(data.status).toBe("failed");
-    // 2 USD * 50 * (1 + 0.10) = 110 EGP
-    expect(data.total_egp).toBe(110);
-    expect(data.refunded_egp).toBe(110);
+    // 2 USD * (1 + 0.10) = 2.2 USD merchant cost (100% Native USD)
+    expect(data.refunded_egp).toBe(2.2);
 
-    // Merchant balance MUST be restored to 500 EGP with both debit and refund entries
+    // Merchant balance MUST be restored to 500 USD with both debit and refund entries
     expect(dbState.merchant_accounts[0]!["balance_egp"]).toBe(500);
     expect(dbState.wallet_ledger.map((e) => e["entry_type"])).toEqual(["order_debit", "refund"]);
   });

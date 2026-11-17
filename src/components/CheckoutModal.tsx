@@ -109,10 +109,8 @@ export default function CheckoutModal({
   const merchantMargin = Number(merchant?.margin_percent || 0);
   const egpRate = Number(settings.egp_rate || 50);
 
-  // Determine if this is a USD merchant account
-  const merchantRegion = profile?.region || merchant?.region || "eg";
-  const currencyInfo = getCountryCurrencyInfo(merchantRegion);
-  const isUsdMerchant = isMerchant && currencyInfo.currency === "USD";
+  // All merchant accounts operate in 100% Native USD
+  const isUsdMerchant = isMerchant;
 
   const getItemUnitPrice = (item: CartItem): number => {
     if (isMerchant) {
@@ -620,15 +618,7 @@ export default function CheckoutModal({
               <div className="flex gap-2 text-xs text-purple-300 bg-purple-950/30 border border-purple-800/50 p-3 rounded-xl">
                 <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-purple-400" />
                 <span>
-                  {isUsdMerchant ? (
-                    <>
-                      كتاجر: سيتم خصم <b>${formatDecimals3(totalUsd)} USD</b> ({formatDecimals3(totalEgp)} ج.م) من محفظتك ذرياً مع استرداد تلقائي فوري إذا تعذر التنفيذ.
-                    </>
-                  ) : (
-                    <>
-                      كتاجر: سيتم خصم <b>{formatDecimals3(totalEgp)} ج.م</b> من محفظتك ذرياً مع استرداد تلقائي فوري إذا تعذر التنفيذ.
-                    </>
-                  )}
+                  كتاجر: سيتم خصم <b>${formatDecimals3(totalUsd)} USD</b> من محفظتك ذرياً مع استرداد تلقائي فوري إذا تعذر التنفيذ.
                 </span>
               </div>
             )}

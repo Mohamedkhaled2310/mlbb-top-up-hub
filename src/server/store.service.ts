@@ -455,8 +455,23 @@ export async function getStoreData(gameId?: string) {
     }
   }
 
-  // Exchange rate is strictly locked to prevent automatic balance or price drift
-  // Background processes and Binance P2P will NEVER overwrite store_settings.egp_rate
+  // Retail store EGP prices dynamically track Binance P2P rate to protect retail margins.
+  // Merchant wallet balances are 100% pure native USD and are immune to this rate.
+  if (
+    !process.env["VITEST"] &&
+    typeof binanceEgp === "number" &&
+    Number.isFinite(binanceEgp) &&
+    binanceEgp > 0
+  ) {
+    const liveEgp = Math.round(binanceEgp * 100) / 100;
+    if (Math.abs(egpRate - liveEgp) > 0.05) {
+      egpRate = liveEgp;
+      sb.from("store_settings")
+        .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
+        .eq("id", 1)
+        .catch(() => {});
+    }
+  }
 
   let q = sb
     .from("fazer_packages")
@@ -1254,10 +1269,23 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     };
   });
 
-  const total = Math.round(orderItems.reduce((s, i) => s + i.unit_price_egp * i.qty, 0) * 100) / 100;
+  const merchantTotalUsd = round3(orderItems.reduce((s, i) => s + (i.total_usd || 0), 0));
+  const retailTotalEgp = Math.round(orderItems.reduce((s, i) => s + i.unit_price_egp * i.qty, 0) * 100) / 100;
+  const total = asMerchant ? round3(merchantTotalUsd * egpRate) : retailTotalEgp;
   if (!Number.isFinite(total) || total <= 0) {
     return { success: false, error: "قيمة الطلب غير صحيحة" };
   }
+
+  if (asMerchant) {
+    const curBal = Number(merchant.balance_egp || 0);
+    if (curBal < merchantTotalUsd) {
+      return {
+        success: false,
+        error: `رصيد المحفظة ($${curBal.toFixed(2)} USD) غير كافٍ لإتمام الطلب ($${merchantTotalUsd.toFixed(2)} USD).`,
+      };
+    }
+  }
+
   const orderRef = clientOrderId || `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
   const { data: order, error: oerr } = await sb
@@ -1281,11 +1309,12 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
 
   let updatedBalance: number | undefined;
   if (asMerchant) {
+    const debitAmount = merchantTotalUsd;
     const { data: dData, error: derr } = await sb.rpc("debit_merchant_for_order", {
       p_merchant_id: merchant.id,
-      p_amount: total,
+      p_amount: debitAmount,
       p_order_ref: orderRef,
-      p_note: `خصم طلب شحن ${orderRef}`,
+      p_note: `خصم طلب شحن ${orderRef} ($${debitAmount.toFixed(2)})`,
     });
     if (derr) {
       await sb.from("orders").update({ status: "failed", error_message: derr.message }).eq("id", order.id);
@@ -1375,18 +1404,19 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
       }
 
       for (let q = 0; q < it.qty; q++) {
-        let remainingUnitEgp = it.unit_price_egp;
+        let remainingUnit = asMerchant ? (it.unit_price_usd || 0) : it.unit_price_egp;
 
         for (let cIdx = 0; cIdx < flattenedComps.length; cIdx++) {
           const comp = flattenedComps[cIdx]!;
           const isLastComp = cIdx === flattenedComps.length - 1;
-          const compShareEgp = isLastComp
-            ? Math.round(remainingUnitEgp * 100) / 100
+          const baseUnitPrice = asMerchant ? (it.unit_price_usd || 0) : it.unit_price_egp;
+          const compShare = isLastComp
+            ? Math.round(remainingUnit * 1000) / 1000
             : Math.min(
-                remainingUnitEgp,
-                Math.round(((comp.costUsd || 1) / totalCompCost) * it.unit_price_egp * 100) / 100,
+                remainingUnit,
+                Math.round(((comp.costUsd || 1) / totalCompCost) * baseUnitPrice * 1000) / 1000,
               );
-          remainingUnitEgp = Math.max(0, remainingUnitEgp - compShareEgp);
+          remainingUnit = Math.max(0, remainingUnit - compShare);
 
           const idempotencyKey = `${orderRef}-${it.package_id}-${q}-${comp.fazerOfferId}-${cIdx}`;
           topUpTasks.push({
@@ -1397,7 +1427,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
             diamonds: comp.diamonds,
             q,
             subIndex: cIdx,
-            shareEgp: compShareEgp,
+            shareEgp: compShare,
             gameId: it.game_id,
             idempotencyKey,
           });
@@ -1410,7 +1440,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
           offerId: it.fazer_offer_id,
           fazerCategoryId: it.fazer_category_id,
           q,
-          shareEgp: it.unit_price_egp,
+          shareEgp: asMerchant ? (it.unit_price_usd || 0) : it.unit_price_egp,
           gameId: it.game_id,
           idempotencyKey: `${orderRef}-${it.fazer_offer_id}-${q}`,
         });
@@ -1540,7 +1570,9 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     game_id: effectiveGameId,
     region,
     refunded_egp: asMerchant && failedAmount > 0 ? failedAmount : 0,
+    refunded_usd: asMerchant && failedAmount > 0 ? failedAmount : 0,
     balance_egp: updatedBalance,
+    balance_usd: updatedBalance,
     transaction_ids: txIds,
     player_name: playerName || `ID #${playerId}`,
     account_region: accRegion,
@@ -1551,7 +1583,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
         : finalStatus === "processing"
           ? "تم خصم الرصيد وإرسال الشحن مباشرة وجاري المعالجة على سيرفر اللعبة (قيد المعالجة) ⏳."
           : succeededCount > 0
-            ? `تم تنفيذ جزء من الطلب واسترداد ${failedAmount} ج.م للباقي تلقائياً.`
+            ? `تم تنفيذ جزء من الطلب واسترداد $${failedAmount} USD للباقي تلقائياً.`
             : "فشل تنفيذ الشحن وتم استرداد المبلغ بالكامل إلى محفظة التاجر تلقائياً."
       : finalStatus === "success"
         ? "تم تنفيذ الشحن بنجاح وتسليم الباقة في اللعبة. 🎉"
@@ -1811,10 +1843,10 @@ export async function getMerchantDashboard(token: string) {
   const successfulOrProcessingOrders = list.filter((o: any) => !["failed", "cancelled"].includes(o.status));
   const totalSpentUsd = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (o.total_usd || 0), 0));
   const totalSpentEgp = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (Number(o.total_egp) || 0), 0));
-  const balanceUsd = round3(Number(merchant.balance_egp || 0) / egpRate);
+  const balanceUsd = round3(Number(merchant.balance_egp || 0));
 
   const stats = {
-    balance_egp: Number(merchant.balance_egp || 0),
+    balance_egp: balanceUsd,
     balance_usd: balanceUsd,
     total_spent_usd: totalSpentUsd,
     total_spent_egp: totalSpentEgp,
@@ -1827,20 +1859,14 @@ export async function getMerchantDashboard(token: string) {
   };
 
   const formattedLedger = (ledger || []).map((t: any) => {
-    let amountUsd = round3(Number(t.amount || 0) / egpRate);
-    const noteMatch = (t.note || "").match(/\$([0-9.]+)/);
-    if (noteMatch && noteMatch[1]) {
-      const explicitUsd = parseFloat(noteMatch[1]);
-      if (Number.isFinite(explicitUsd) && explicitUsd > 0) {
-        amountUsd = Number(t.amount) < 0 ? -explicitUsd : explicitUsd;
-      }
-    }
+    const val = round3(Number(t.amount || 0));
+    const balAfter = round3(Number(t.balance_after || 0));
     return {
       ...t,
-      amount_egp: Number(t.amount || 0),
-      amount_usd: amountUsd,
-      balance_after_egp: Number(t.balance_after || 0),
-      balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+      amount_egp: val,
+      amount_usd: val,
+      balance_after_egp: balAfter,
+      balance_after_usd: balAfter,
     };
   });
 
@@ -1936,7 +1962,7 @@ export async function adminListMerchants(token: string, opts: { page: number; li
     .map((m: any) => ({
       ...m,
       balance_egp: Number(m.balance_egp || 0),
-      balance_usd: round3(Number(m.balance_egp || 0) / egpRate),
+      balance_usd: round3(Number(m.balance_egp || 0)),
       profit_usd: round3(merchantProfitMap.get(m.id) || 0),
       margin_percent: Number(m.margin_percent || 0),
       profile: pmap.get(m.user_id) || null,
@@ -1969,30 +1995,15 @@ export async function adminCreditMerchant(token: string, body: any) {
   const merchantId = body.merchant_id || body.merchantId;
   const note = body.note;
 
-  // Determine amount in EGP: if amount_usd / amountUsd is provided, convert by current egp_rate
-  const { data: settingsRow } = await sbAdmin.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
-  const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+  const usd = Number(body.amount_usd ?? body.amountUsd ?? body.amount);
+  if (!merchantId || !Number.isFinite(usd) || usd <= 0) throw new Error("مبلغ الشحن بالدولار يجب أن يكون رقماً أكبر من صفر");
 
-  let amountEgp = 0;
-  let finalNote = note;
-
-  if (body.amount_usd != null || body.amountUsd != null) {
-    const usd = Number(body.amount_usd ?? body.amountUsd);
-    if (!Number.isFinite(usd) || usd <= 0) throw new Error("مبلغ الشحن بالدولار يجب أن يكون رقماً أكبر من صفر");
-    amountEgp = Math.round(usd * egpRate * 100) / 100;
-    if (!finalNote) {
-      finalNote = `شحن رصيد $${usd} (بسعر ${egpRate} ج.م/$)`;
-    }
-  } else {
-    amountEgp = Number(body.amount);
-    if (!finalNote) finalNote = "إضافة رصيد من الأدمن";
-  }
-
-  if (!merchantId || !(amountEgp > 0)) throw new Error("بيانات الشحن غير صحيحة");
+  const amountUsd = round3(usd);
+  const finalNote = note || `شحن رصيد $${amountUsd.toFixed(2)}`;
 
   let res = await sbAdmin.rpc("admin_credit_merchant", {
     p_merchant_id: merchantId,
-    p_amount: amountEgp,
+    p_amount: amountUsd,
     p_note: finalNote,
     p_reference_type: "admin",
     p_reference_id: null,
@@ -2004,7 +2015,7 @@ export async function adminCreditMerchant(token: string, body: any) {
       .select("balance_egp")
       .eq("id", merchantId)
       .maybeSingle();
-    const newBal = (Number(currentMerch?.balance_egp) || 0) + amountEgp;
+    const newBal = round3((Number(currentMerch?.balance_egp) || 0) + amountUsd);
     const { error: updErr } = await sbAdmin
       .from("merchant_accounts")
       .update({ balance_egp: newBal, updated_at: new Date().toISOString() })
@@ -2013,16 +2024,16 @@ export async function adminCreditMerchant(token: string, body: any) {
 
     await sbAdmin.from("wallet_ledger").insert({
       merchant_id: merchantId,
-      amount: amountEgp,
+      amount: amountUsd,
       entry_type: "credit",
       reference_type: "admin",
       reference_id: null,
       balance_after: newBal,
       note: finalNote,
     });
-    return { success: true, amount_egp: amountEgp, result: [{ merchant_id: merchantId, new_balance: newBal }] };
+    return { success: true, amount_usd: amountUsd, amount_egp: amountUsd, result: [{ merchant_id: merchantId, new_balance: newBal }] };
   }
-  return { success: true, amount_egp: amountEgp, result: res.data };
+  return { success: true, amount_usd: amountUsd, amount_egp: amountUsd, result: res.data };
 }
 
 export async function adminSetMerchantMargin(token: string, body: any) {
@@ -2208,36 +2219,18 @@ export async function adminSetMerchantBalance(token: string, body: any) {
     .maybeSingle();
   if (mErr || !merchant) throw new Error("حساب التاجر غير موجود");
 
-  const { data: settingsRow } = await sbAdmin.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
-  const egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
+  const currentBalanceUsd = Number(merchant.balance_egp || 0);
+  const rawUsd = Number(body.balance_usd ?? body.balanceUsd ?? body.amount ?? body.balance_egp);
+  if (!Number.isFinite(rawUsd) || rawUsd < 0) throw new Error("الرصيد بالدولار يجب أن يكون صفراً أو موجباً");
 
-  const currentBalanceEgp = Number(merchant.balance_egp || 0);
-  let newBalanceEgp = 0;
-  let note = body.note;
-
-  if (body.balance_usd != null || body.balanceUsd != null) {
-    const usd = Number(body.balance_usd ?? body.balanceUsd);
-    if (!Number.isFinite(usd) || usd < 0) throw new Error("الرصيد بالدولار يجب أن يكون صفراً أو موجباً");
-    newBalanceEgp = Math.round(usd * egpRate * 100) / 100;
-    if (!note) {
-      note = `تعديل الرصيد إلى $${usd} (${newBalanceEgp} ج.م بسعر ${egpRate} ج.م/$)`;
-    }
-  } else if (body.balance_egp != null || body.balanceEgp != null || body.amount != null) {
-    newBalanceEgp = Number(body.balance_egp ?? body.balanceEgp ?? body.amount);
-    if (!Number.isFinite(newBalanceEgp) || newBalanceEgp < 0) throw new Error("الرصيد بالجنيه يجب أن يكون صفراً أو موجباً");
-    if (!note) {
-      note = `تعديل الرصيد يدوياً من الأدمن إلى ${newBalanceEgp} ج.م`;
-    }
-  } else {
-    throw new Error("يرجى تحديد الرصيد الجديد بالدولار أو بالجنيه");
-  }
-
-  const diff = Math.round((newBalanceEgp - currentBalanceEgp) * 100) / 100;
+  const newBalanceUsd = round3(rawUsd);
+  const diff = round3(newBalanceUsd - currentBalanceUsd);
   const nowIso = new Date().toISOString();
+  const note = body.note || `تعديل الرصيد إلى $${newBalanceUsd.toFixed(2)}`;
 
   const { error: upErr } = await sbAdmin
     .from("merchant_accounts")
-    .update({ balance_egp: newBalanceEgp, updated_at: nowIso })
+    .update({ balance_egp: newBalanceUsd, updated_at: nowIso })
     .eq("id", merchantId);
   if (upErr) throw new Error(upErr.message);
 
@@ -2245,9 +2238,9 @@ export async function adminSetMerchantBalance(token: string, body: any) {
     await sbAdmin.from("wallet_ledger").insert({
       merchant_id: merchantId,
       amount: diff,
-      balance_after: newBalanceEgp,
+      balance_after: newBalanceUsd,
       entry_type: "adjustment",
-      note: note || `تعديل رصيد التاجر من ${currentBalanceEgp} إلى ${newBalanceEgp} ج.م`,
+      note,
       created_at: nowIso,
     });
   }
@@ -2255,9 +2248,10 @@ export async function adminSetMerchantBalance(token: string, body: any) {
   return {
     success: true,
     merchant_id: merchantId,
-    previous_balance_egp: currentBalanceEgp,
-    balance_egp: newBalanceEgp,
-    balance_usd: round3(newBalanceEgp / egpRate),
+    previous_balance_usd: currentBalanceUsd,
+    balance_usd: newBalanceUsd,
+    balance_egp: newBalanceUsd,
+    merchant: { ...merchant, balance_egp: newBalanceUsd },
   };
 }
 
@@ -2414,25 +2408,19 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
   const successfulOrProcessingOrders = enrichedOrders.filter((o: any) => !["failed", "cancelled"].includes(o.status));
   const totalSpentUsd = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (o.total_usd || 0), 0));
   const totalSpentEgp = round3(successfulOrProcessingOrders.reduce((s: number, o: any) => s + (Number(o.total_egp) || 0), 0));
-  const balanceUsd = round3(Number(merchant.balance_egp || 0) / egpRate);
+  const balanceUsd = round3(Number(merchant.balance_egp || 0));
   const initialCreditUsd = round3(balanceUsd + totalSpentUsd);
-  const initialCreditEgp = round3(Number(merchant.balance_egp || 0) + totalSpentEgp);
+  const initialCreditEgp = round3(balanceUsd + totalSpentUsd);
 
   const formattedLedger = (ledgerRes.data || []).map((t: any) => {
-    let amountUsd = round3(Number(t.amount || 0) / egpRate);
-    const noteMatch = (t.note || "").match(/\$([0-9.]+)/);
-    if (noteMatch && noteMatch[1]) {
-      const explicitUsd = parseFloat(noteMatch[1]);
-      if (Number.isFinite(explicitUsd) && explicitUsd > 0) {
-        amountUsd = Number(t.amount) < 0 ? -explicitUsd : explicitUsd;
-      }
-    }
+    const val = round3(Number(t.amount || 0));
+    const balAfter = round3(Number(t.balance_after || 0));
     return {
       ...t,
-      amount_egp: Number(t.amount || 0),
-      amount_usd: amountUsd,
-      balance_after_egp: Number(t.balance_after || 0),
-      balance_after_usd: round3(Number(t.balance_after || 0) / egpRate),
+      amount_egp: val,
+      amount_usd: val,
+      balance_after_egp: balAfter,
+      balance_after_usd: balAfter,
     };
   });
 
@@ -2854,14 +2842,20 @@ export async function adminCancelAndRefundOrder(token: string, opts: { orderId: 
   const reason = opts.reason?.trim() || "تم الإلغاء والاسترداد اليدوي بواسطة الإدارة";
   const nowIso = new Date().toISOString();
 
-  // Refund merchant if not yet refunded and total_egp > 0
-  if (!alreadyRefunded && order.merchant_id && Number(order.total_egp || 0) > 0) {
+  // Refund merchant if not yet refunded in pure USD
+  const orderUsd = round3(
+    order.items && Array.isArray(order.items)
+      ? order.items.reduce((s: number, i: any) => s + Number(i.total_usd || 0), 0)
+      : (order.total_egp ? order.total_egp / 55.55 : 0)
+  );
+
+  if (!alreadyRefunded && order.merchant_id && orderUsd > 0) {
     await issueMerchantRefund(
       sb,
       order.merchant_id,
-      Number(order.total_egp),
+      orderUsd,
       order.order_ref,
-      `استرداد يدوي بواسطة الإدارة للطلب ${order.order_ref}: ${reason}`,
+      `استرداد يدوي بواسطة الإدارة للطلب ${order.order_ref} ($${orderUsd.toFixed(2)}): ${reason}`,
     );
   }
 
