@@ -97,13 +97,13 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
     }
   }
 
-  // Public store data (packages from Fazer cache + egp rate) with Edge SWR caching
+  // Public store data (packages from Fazer cache + egp rate) with no-store to guarantee live prices for all users
   if (path === "/api/store" && request.method === "GET") {
     try {
       const gameId = url.searchParams.get("gameId") || undefined;
       const data = await getStoreData(gameId);
       const response = json(data);
-      response.headers.set("Cache-Control", "public, max-age=10, stale-while-revalidate=30");
+      response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
       return response;
     } catch (e: any) {
       return json({ success: false, error: e?.message || "Failed to load store" }, 500);
@@ -480,7 +480,7 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       getStoreData().catch(() => null),
     ]);
     await persistFazerAccountBalance(fazer);
-    return json({
+    const resp = json({
       fazer,
       fazer_balance: fazer.connected ? (fazer.balance ?? store?.settings?.fazer_balance ?? null) : (store?.settings?.fazer_balance ?? null),
       fazer_balance_currency: fazer.currency ?? store?.settings?.fazer_balance_currency ?? "USD",
@@ -492,6 +492,8 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
         ? new Date().toISOString()
         : (store?.settings?.fazer_balance_updated_at ?? null),
     });
+    resp.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+    return resp;
   }
 
   return null;

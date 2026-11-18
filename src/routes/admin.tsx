@@ -495,7 +495,16 @@ function AdminPage() {
   const selectedOrderDetailsRef = useRef(selectedOrderDetails);
   selectedOrderDetailsRef.current = selectedOrderDetails;
 
-  // Stable, leak-proof admin live polling without rapid interval recreation
+  const loadStoreRef = useRef(loadStore);
+  loadStoreRef.current = loadStore;
+
+  const refreshStatusRef = useRef(refreshStatus);
+  refreshStatusRef.current = refreshStatus;
+
+  const loadMerchantsRef = useRef(loadMerchants);
+  loadMerchantsRef.current = loadMerchants;
+
+  // Stable, leak-proof admin live polling for orders
   useEffect(() => {
     if (!isAdmin || !store.accessToken) return;
 
@@ -505,6 +514,7 @@ function AdminPage() {
     let inFlight = false;
 
     const refreshLive = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       if (inFlight) return;
       inFlight = true;
       try {
@@ -530,6 +540,47 @@ function AdminPage() {
       clearInterval(interval);
     };
   }, [isAdmin, store.accessToken, (orders || []).length, !!selectedOrderDetails]);
+
+  // Stable live auto-refresh for Fazer balance, Binance exchange rate, package prices, and merchants
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let inFlightRates = false;
+    const refreshRatesAndStatus = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (inFlightRates) return;
+      inFlightRates = true;
+      try {
+        const tok = store.accessToken;
+        await Promise.all([
+          loadStoreRef.current ? loadStoreRef.current() : null,
+          refreshStatusRef.current ? refreshStatusRef.current() : null,
+          tok && loadMerchantsRef.current ? loadMerchantsRef.current(tok, mPage, mQuery).catch(() => {}) : null,
+        ]);
+      } catch {
+        // Ignore transient hiccups
+      } finally {
+        inFlightRates = false;
+      }
+    };
+
+    const interval = setInterval(refreshRatesAndStatus, 25000); // Auto-update every 25 seconds
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshRatesAndStatus();
+      }
+    };
+    const onFocus = () => refreshRatesAndStatus();
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [isAdmin, store.accessToken, mPage, mQuery]);
 
   const signIn = async () => {
     if (!email.trim() || !password) return;

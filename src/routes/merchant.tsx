@@ -176,15 +176,18 @@ function MerchantPage() {
       if (!activeToken) return;
       if (!silent) setRefreshing(true);
       try {
-        // Fast-path: Only refresh merchant wallet & orders. Packages do not change every second!
-        await loadDashboard(activeToken);
+        // Refresh merchant wallet & dashboard alongside live store packages
+        await Promise.all([
+          loadDashboard(activeToken),
+          loadStore(),
+        ]);
       } catch {
         // Keep existing state on transient errors
       } finally {
         if (!silent) setRefreshing(false);
       }
     },
-    [store.accessToken, loadDashboard],
+    [store.accessToken, loadDashboard, loadStore],
   );
 
   const syncOrder = async (orderId: string) => {
@@ -240,6 +243,7 @@ function MerchantPage() {
     let inFlight = false;
 
     const tick = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       if (inFlight) return;
       inFlight = true;
       try {

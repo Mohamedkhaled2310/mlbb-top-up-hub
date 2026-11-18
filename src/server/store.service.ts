@@ -468,6 +468,7 @@ export async function getStoreData(gameId?: string) {
     const liveEgp = Math.round(binanceEgp * 100) / 100;
     if (Math.abs(egpRate - liveEgp) > 0.05) {
       egpRate = liveEgp;
+      STORE_DATA_CACHE = null; // Invalidate cached packages immediately so new live prices propagate to everyone
       try {
         await sb.from("store_settings")
           .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
@@ -649,7 +650,7 @@ export async function getStoreData(gameId?: string) {
   if (!gameId) {
     STORE_DATA_CACHE = {
       data: payload,
-      expiresAt: Date.now() + 60 * 1000, // 60 seconds fast in-memory cache
+      expiresAt: Date.now() + 30 * 1000, // 30 seconds fast in-memory cache
     };
   }
 

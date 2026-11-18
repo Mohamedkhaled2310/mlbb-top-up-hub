@@ -4,7 +4,7 @@ interface LiveRatesResult {
   source: string;
 }
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds fresh rate for rapid updates
 
 // Static baseline fallback rates in case all network attempts fail
 const FALLBACK_RATES: Record<string, number> = {
