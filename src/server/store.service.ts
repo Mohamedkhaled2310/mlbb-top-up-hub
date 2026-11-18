@@ -586,16 +586,13 @@ export async function getStoreData(gameId?: string) {
     .map((p: any) => {
     let costUsd = Number(p.cost_usd || 0);
     const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
-    if (!hasAdminCustom && p.game_id === "mlbb") {
-      const off = String(p.offer_id || "");
-      if (off === "mobile_legends_global:50_5_diamonds_first_top_up_bonus") costUsd = 0.68;
-      else if (off === "mobile_legends_global:weekly_elite_pack") costUsd = 0.69;
-      else if (off === "mobile_legends_global:150_15_diamonds_first_top_up_bonus") costUsd = 2.03;
-      else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
-      else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
-      else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
-      else if (off === "mobile_legends_global:7740_1548_diamonds") costUsd = 104.67;
-      else if (off === "mobile_legends_brazil:7740_1548_diamonds") costUsd = 96.37;
+    if (hasAdminCustom) {
+      costUsd = Number(p.raw.custom_cost_usd);
+    } else {
+      const rawFazerCost = Number(p.raw?.price_usd ?? p.raw?.cost_usd ?? 0);
+      if (rawFazerCost > 0) {
+        costUsd = rawFazerCost;
+      }
     }
     const retail = costUsd > 0 ? calcRetailPriceEgp(costUsd, egpRate, DEFAULT_RETAIL_MARKUP) : 0;
     const merchantBase = costUsd > 0 ? calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP) : 0;
@@ -1225,16 +1222,13 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
     const p = byId.get(it.offerId);
     let costUsd = Number(p.cost_usd || 0);
     const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
-    if (!hasAdminCustom && p.game_id === "mlbb") {
-      const off = String(p.offer_id || "");
-      if (off === "mobile_legends_global:50_5_diamonds_first_top_up_bonus") costUsd = 0.68;
-      else if (off === "mobile_legends_global:weekly_elite_pack") costUsd = 0.69;
-      else if (off === "mobile_legends_global:150_15_diamonds_first_top_up_bonus") costUsd = 2.03;
-      else if (off === "mobile_legends_global:250_25_diamonds_first_top_up_bonus") costUsd = 3.26;
-      else if (off === "mobile_legends_global:500_65_diamonds_first_top_up_bonus") costUsd = 6.70;
-      else if (off === "mobile_legends_global:monthly_elite_pack") costUsd = 3.43;
-      else if (off === "mobile_legends_global:7740_1548_diamonds") costUsd = 104.67;
-      else if (off === "mobile_legends_brazil:7740_1548_diamonds") costUsd = 96.37;
+    if (hasAdminCustom) {
+      costUsd = Number(p.raw.custom_cost_usd);
+    } else {
+      const rawFazerCost = Number(p.raw?.price_usd ?? p.raw?.cost_usd ?? 0);
+      if (rawFazerCost > 0) {
+        costUsd = rawFazerCost;
+      }
     }
     const merchantBase = calcMerchantBasePriceEgp(costUsd, egpRate, DEFAULT_MERCHANT_MARKUP);
     const customEntry = asMerchant ? merchantCustomPrices[p.offer_id] : undefined;
