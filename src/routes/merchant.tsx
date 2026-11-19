@@ -754,11 +754,6 @@ function MerchantPage() {
                                   مجمعة
                                 </span>
                               )}
-                              {prices.isCustom && (
-                                <span className="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
-                                  سعر خاص
-                                </span>
-                              )}
                             </div>
                             <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
                               <span>سيرفر: <strong className="text-slate-300 uppercase">{pkgRegion}</strong></span>
