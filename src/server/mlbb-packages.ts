@@ -535,7 +535,7 @@ export async function curateMlbbPackages(sb: any) {
   // 2. Curate Global base packages
   for (const b of Object.values(MLBB_GLOBAL_BASE_PACKAGES)) {
     const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
-    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
+    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number" && b.baseOfferId !== "mobile_legends_global:78_8_diamonds";
     const rawFazerCost = Number(existing?.raw?.price_usd ?? existing?.raw?.cost_usd ?? 0);
     const effectiveCost = hasAdminCustom
       ? existing.raw.custom_cost_usd
@@ -563,7 +563,7 @@ export async function curateMlbbPackages(sb: any) {
   // 3. Curate Brazil base packages
   for (const b of Object.values(MLBB_BRAZIL_BASE_PACKAGES)) {
     const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
-    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
+    const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number" && b.baseOfferId !== "mobile_legends_global:78_8_diamonds";
     const rawFazerCost = Number(existing?.raw?.price_usd ?? existing?.raw?.cost_usd ?? 0);
     const effectiveCost = hasAdminCustom
       ? existing.raw.custom_cost_usd

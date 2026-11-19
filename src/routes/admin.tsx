@@ -54,6 +54,7 @@ import {
   adminSetMarginApi,
   adminSetMerchantBalanceApi,
   adminSetMerchantPackagePriceApi,
+  adminResetMerchantCustomPricesApi,
   adminSetMerchantRegionApi,
   adminSyncBinanceRateApi,
   adminSyncFazerApi,
@@ -158,6 +159,7 @@ function AdminPage() {
   const [editingMerchantPkg, setEditingMerchantPkg] = useState<any | null>(null);
   const [customPriceInput, setCustomPriceInput] = useState<string>("");
   const [savingMerchantPkg, setSavingMerchantPkg] = useState(false);
+  const [resettingCustomPrices, setResettingCustomPrices] = useState(false);
 
   const [credit, setCredit] = useState<{ id: string; amount: string; note: string } | null>(null);
   const [marginEdit, setMarginEdit] = useState<{ id: string; value: string } | null>(null);
@@ -1179,6 +1181,31 @@ function AdminPage() {
       toast({ title: "فشل حفظ سعر التاجر", description: e?.message });
     } finally {
       setSavingMerchantPkg(false);
+    }
+  };
+
+  const handleResetAllCustomPrices = async () => {
+    if (!profileMerchantId) return;
+    if (!window.confirm("هل أنت متأكد من رغبتك في حذف وإلغاء جميع الأسعار الخاصة المحددة لهذا التاجر وإعادته لحساب الهامش التلقائي؟")) {
+      return;
+    }
+    const activeToken = (await getFreshToken()) || token;
+    if (!activeToken) return;
+    setResettingCustomPrices(true);
+    try {
+      const res = await withAdminAuthRetry((tok) =>
+        adminResetMerchantCustomPricesApi(tok, profileMerchantId),
+      );
+      if (res?.error) throw new Error(res.error);
+      toast({
+        title: "تم تصفير كافة الأسعار الخاصة بنجاح",
+        description: "تم حذف جميع الأسعار الخاصة لهذا التاجر وعاد للتسعير التلقائي المعتمد على نسبة الهامش.",
+      });
+      await openMerchantProfile(profileMerchantId);
+    } catch (e: any) {
+      toast({ title: "فشل تصفير الأسعار", description: e?.message });
+    } finally {
+      setResettingCustomPrices(false);
     }
   };
 
@@ -3483,29 +3510,44 @@ function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Server/Region Filter */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                      <span className="text-slate-400 text-[11px] font-semibold shrink-0 ml-1">السيرفر:</span>
-                      {[
-                        { id: "all", label: "كل السيرفرات" },
-                        ...getGameServers(profilePkgGame === "all" ? "mlbb" : profilePkgGame).map((s) => ({
-                          id: s.code.toLowerCase(),
-                          label: s.labelAr,
-                        })),
-                      ].map((srv) => (
-                        <button
-                          key={srv.id}
-                          type="button"
-                          onClick={() => setProfilePkgServer(srv.id)}
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 transition-all ${
-                            profilePkgServer === srv.id
-                              ? "bg-purple-600 text-white shadow-sm"
-                              : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
-                          }`}
+                    {/* Server/Region Filter & Reset All Custom Prices */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                        <span className="text-slate-400 text-[11px] font-semibold shrink-0 ml-1">السيرفر:</span>
+                        {[
+                          { id: "all", label: "كل السيرفرات" },
+                          ...getGameServers(profilePkgGame === "all" ? "mlbb" : profilePkgGame).map((s) => ({
+                            id: s.code.toLowerCase(),
+                            label: s.labelAr,
+                          })),
+                        ].map((srv) => (
+                          <button
+                            key={srv.id}
+                            type="button"
+                            onClick={() => setProfilePkgServer(srv.id)}
+                            className={`px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0 transition-all ${
+                              profilePkgServer === srv.id
+                                ? "bg-purple-600 text-white shadow-sm"
+                                : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
+                            }`}
+                          >
+                            {srv.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {profileData.packagesPreview?.some((p: any) => p.isCustomPrice) && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-rose-500/40 bg-rose-950/30 text-rose-300 hover:bg-rose-900/60 font-semibold gap-1.5 shrink-0"
+                          onClick={handleResetAllCustomPrices}
+                          disabled={resettingCustomPrices}
                         >
-                          {srv.label}
-                        </button>
-                      ))}
+                          <RotateCcw className={`w-3 h-3 ${resettingCustomPrices ? "animate-spin" : ""}`} />
+                          إلغاء وتصفير كافة الأسعار الخاصة للتاجر
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -3577,11 +3619,6 @@ function AdminPage() {
                                 <td className="p-2.5 text-center font-mono bg-purple-950/20">
                                   <div className="font-extrabold text-purple-300 text-sm flex items-center justify-center gap-1.5 flex-wrap">
                                     <span>${formatDecimals3(p.merchantPriceUsd || (p.merchantPriceEgp / (profileData.egpRate || 50)))}</span>
-                                    {p.isCustomPrice && (
-                                      <span className="font-sans font-bold text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded shrink-0">
-                                        سعر خاص
-                                      </span>
-                                    )}
                                   </div>
                                   <div className="text-[10px] text-slate-400">
                                     {formatDecimals3(p.merchantPriceEgp)} ج.م
@@ -3671,11 +3708,6 @@ function AdminPage() {
                               <div className="bg-purple-950/40 border border-purple-500/30 rounded-md py-1 px-1">
                                 <div className="text-[10px] text-purple-200 font-semibold flex items-center justify-center gap-1">
                                   <span>سعر التاجر</span>
-                                  {p.isCustomPrice && (
-                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[8px] px-1 rounded font-bold">
-                                      خاص
-                                    </span>
-                                  )}
                                 </div>
                                 <div className="font-mono font-extrabold text-purple-300 text-xs sm:text-sm">
                                   ${formatDecimals3(p.merchantPriceUsd || (p.merchantPriceEgp / (profileData.egpRate || 50)))}

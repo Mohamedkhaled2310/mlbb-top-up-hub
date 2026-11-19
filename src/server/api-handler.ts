@@ -11,6 +11,7 @@ import {
   adminSetMerchantBalance,
   adminSetMerchantMargin,
   adminSetMerchantPackagePrice,
+  adminResetMerchantCustomPrices,
   adminSetMerchantRegion,
   adminToggleMerchantStatus,
   adminUpdateEgpRate,
@@ -445,6 +446,19 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       if (!token) return json({ error: "unauthorized" }, 401);
       const body = await request.json();
       const data = await adminSetMerchantPackagePrice(token, body);
+      return json(data);
+    } catch (e: any) {
+      return json({ error: e?.message || "failed" }, 400);
+    }
+  }
+
+  if (path === "/api/admin/merchants/reset-custom-prices" && request.method === "POST") {
+    try {
+      const token = getAuthToken(request);
+      if (!token) return json({ error: "unauthorized" }, 401);
+      const body = await request.json();
+      const merchantId = body.merchant_id || body.merchantId;
+      const data = await adminResetMerchantCustomPrices(token, merchantId);
       return json(data);
     } catch (e: any) {
       return json({ error: e?.message || "failed" }, 400);

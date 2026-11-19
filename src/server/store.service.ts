@@ -311,7 +311,7 @@ async function syncFazerInternal() {
       const { data: existingRows } = await sb.from("fazer_packages").select("offer_id, cost_usd, raw");
       const customOverrides = new Map<string, { cost_usd: number; raw: any }>();
       for (const ex of existingRows || []) {
-        if (ex?.raw?.cost_edited_by_admin && typeof ex.cost_usd === "number") {
+        if (ex?.raw?.cost_edited_by_admin && typeof ex.cost_usd === "number" && ex.offer_id !== "mobile_legends_global:78_8_diamonds") {
           customOverrides.set(ex.offer_id, { cost_usd: ex.cost_usd, raw: ex.raw });
         }
       }
@@ -585,7 +585,7 @@ export async function getStoreData(gameId?: string) {
     })
     .map((p: any) => {
     let costUsd = Number(p.cost_usd || 0);
-    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
+    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number" && p.offer_id !== "mobile_legends_global:78_8_diamonds";
     if (hasAdminCustom) {
       costUsd = Number(p.raw.custom_cost_usd);
     } else {
@@ -1046,6 +1046,41 @@ export async function adminSetMerchantPackagePrice(
   return { success: true, merchantId, offerId, priceUsd: rawPriceUsd ? round3(rawPriceUsd) : null };
 }
 
+export async function adminResetMerchantCustomPrices(
+  token: string,
+  merchantId: string,
+) {
+  await requireAdmin(token);
+  const mid = (merchantId || "").trim();
+  if (!mid) throw new Error("معرف التاجر مطلوب");
+
+  const sb = getAdminClient() as any;
+  const { data: row } = await sb
+    .from("fazer_packages")
+    .select("*")
+    .eq("offer_id", "config:merchant_custom_prices")
+    .maybeSingle();
+
+  let raw: Record<string, Record<string, any>> = {};
+  if (row?.raw && typeof row.raw === "object" && !Array.isArray(row.raw)) {
+    raw = { ...row.raw };
+  }
+
+  delete raw[mid];
+
+  const nowIso = new Date().toISOString();
+  if (row) {
+    const { error } = await sb
+      .from("fazer_packages")
+      .update({ raw, updated_at: nowIso })
+      .eq("offer_id", "config:merchant_custom_prices");
+    if (error) throw new Error(error.message);
+  }
+
+  invalidateCustomPricesCache();
+  return { success: true, merchantId: mid, cleared: true };
+}
+
 export async function submitCustomerOrder(body: any, token?: string | null) {
   const sb = getAdminClient() as any;
   const rawItems: Array<{ offerId?: string; packageId?: string; qty: number }> = Array.isArray(body?.items)
@@ -1221,7 +1256,7 @@ export async function submitCustomerOrder(body: any, token?: string | null) {
   const orderItems = items.map((it) => {
     const p = byId.get(it.offerId);
     let costUsd = Number(p.cost_usd || 0);
-    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number";
+    const hasAdminCustom = p.raw?.cost_edited_by_admin && typeof p.raw.custom_cost_usd === "number" && p.offer_id !== "mobile_legends_global:78_8_diamonds";
     if (hasAdminCustom) {
       costUsd = Number(p.raw.custom_cost_usd);
     } else {

@@ -261,6 +261,18 @@ export async function adminSetMerchantPackagePriceApi(
   return await res.json();
 }
 
+export async function adminResetMerchantCustomPricesApi(
+  token: string,
+  merchantId: string,
+): Promise<any> {
+  const res = await fetch("/api/admin/merchants/reset-custom-prices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ merchant_id: merchantId }),
+  });
+  return await res.json();
+}
+
 export async function adminUpdateEgpRateApi(
   token: string,
   rateOrParams: number | { egp_rate: number; mode?: "manual" | "binance_auto" },
