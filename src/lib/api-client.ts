@@ -18,9 +18,12 @@ export async function refreshSessionApi(refreshToken: string): Promise<any> {
   return await res.json();
 }
 
-export async function getStoreApi(gameId?: string): Promise<any> {
-  const q = gameId ? `?gameId=${encodeURIComponent(gameId)}` : "";
-  const res = await fetch(`/api/store${q}`, { method: "GET", cache: "no-store" });
+export async function getStoreApi(gameId?: string, refresh?: boolean): Promise<any> {
+  const params = new URLSearchParams();
+  if (gameId) params.set("gameId", gameId);
+  if (refresh) params.set("refresh", "1");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/store${qs}`, { method: "GET", cache: "no-store" });
   return await res.json();
 }
 

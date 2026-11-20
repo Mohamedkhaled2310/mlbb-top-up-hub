@@ -101,8 +101,9 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
   // Public store data (packages from Fazer cache + egp rate) with no-store to guarantee live prices for all users
   if (path === "/api/store" && request.method === "GET") {
     try {
-      const gameId = url.searchParams.get("gameId") || undefined;
-      const data = await getStoreData(gameId);
+      const gameId = url.searchParams.get("gameId") || url.searchParams.get("game_id") || undefined;
+      const forceRefresh = url.searchParams.get("refresh") === "1" || url.searchParams.get("force") === "1";
+      const data = await getStoreData(gameId, forceRefresh);
       const response = json(data);
       response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
       return response;

@@ -51,6 +51,43 @@ const REGION_FROM_CATEGORY_SUFFIX: Record<string, string> = {
   auto: "global",
 };
 
+const KNOWN_GAME_TARGETS: Array<{ categoryId: string; gameHint: "mlbb" | "pubg" | "freefire" | "hok" }> = [
+  // MLBB Canonical Servers
+  { categoryId: "mobile_legends_global", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_brazil", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_turkey", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_indonesia", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_malaysia", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_philippines", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_ru", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_singapore", gameHint: "mlbb" },
+  { categoryId: "mobile_legends_united_states", gameHint: "mlbb" },
+  // PUBG Mobile
+  { categoryId: "pubg_mobile_auto", gameHint: "pubg" },
+  { categoryId: "pubg_mobile_krjp", gameHint: "pubg" },
+  { categoryId: "pubg_mobile_tw", gameHint: "pubg" },
+  { categoryId: "pubg_mobile_vn", gameHint: "pubg" },
+  { categoryId: "pubg_mobile_mena", gameHint: "pubg" },
+  // Free Fire
+  { categoryId: "free_fire_mena", gameHint: "freefire" },
+  { categoryId: "free_fire_global", gameHint: "freefire" },
+  { categoryId: "free_fire_brazil", gameHint: "freefire" },
+  { categoryId: "free_fire_indonesia", gameHint: "freefire" },
+  { categoryId: "free_fire_europe", gameHint: "freefire" },
+  { categoryId: "free_fire_thailand", gameHint: "freefire" },
+  { categoryId: "free_fire_my_sg", gameHint: "freefire" },
+  { categoryId: "free_fire_philippines", gameHint: "freefire" },
+  { categoryId: "free_fire_singapore", gameHint: "freefire" },
+  { categoryId: "free_fire_taiwan", gameHint: "freefire" },
+  { categoryId: "free_fire_vietnam", gameHint: "freefire" },
+  { categoryId: "free_fire_cis", gameHint: "freefire" },
+  // Honor of Kings
+  { categoryId: "honor_of_kings", gameHint: "hok" },
+  { categoryId: "honor_of_kings_brazil", gameHint: "hok" },
+  { categoryId: "honor_of_kings_turkey", gameHint: "hok" },
+  { categoryId: "honor_of_kings_mena", gameHint: "hok" },
+];
+
 export interface FazerCatalogProduct {
   offer_id: string;
   game_id: string;
@@ -70,6 +107,8 @@ export interface FazerCatalogProduct {
 const PLAYER_VALIDATION_CACHE = new Map<string, { result: any; expiresAt: number }>();
 
 export class FazerCardsService {
+  private static categoryTargetsCache: { targets: Array<{ categoryId: string; gameHint: "mlbb" | "pubg" | "freefire" | "hok" }>; expiresAt: number } | null = null;
+
   private static getApiKey(): string {
     return (process.env["FAZER_API_KEY"] || "").trim();
   }
@@ -692,39 +731,44 @@ export class FazerCardsService {
     const collected: FazerCatalogProduct[] = [];
     const discoveredTargets = new Map<string, { categoryId: string; gameHint: "mlbb" | "pubg" | "freefire" | "hok" }>();
 
-    // Step 1: Discover categories from /topups (cursor pagination via meta.next_cursor)
-    let cursor: string | null = null;
-    for (let page = 0; page < 8; page++) {
-      const qs = new URLSearchParams({ limit: "500" });
-      if (cursor) qs.set("cursor", cursor);
-      try {
-        const res = await this.fetchWithTimeout(`${baseUrl}/topups?${qs.toString()}`, {
-          method: "GET",
-          timeoutMs: 8000,
-        });
-        if (!res.ok) break;
-        const data = (await res.json().catch(() => null)) as Record<string, any> | null;
-        if (!data) break;
-        const cats = this.extractItems(data) || [];
-        for (const cat of cats) {
-          const catId = String(cat?.["category_id"] || cat?.["id"] || cat?.["slug"] || cat?.["code"] || "").trim();
-          const catName = String(cat?.["name"] || cat?.["title"] || "").trim();
-          const matchedGame = this.classifyCategoryToSupportedGame(catId, catName);
-          if (catId && matchedGame) {
-            discoveredTargets.set(`${matchedGame}::${catId}`, { categoryId: catId, gameHint: matchedGame });
-          }
-        }
+    // Pre-populate with all known canonical targets so sync is lightning-fast and never blocked
+    for (const t of KNOWN_GAME_TARGETS) {
+      discoveredTargets.set(`${t.gameHint}::${t.categoryId}`, t);
+    }
 
-        const hasMore = data["meta"]?.["has_more"];
-        const nextCursor = data["meta"]?.["next_cursor"] ?? data["next_cursor"] ?? null;
-        if (hasMore === false || !nextCursor || typeof nextCursor !== "string") break;
-        cursor = nextCursor;
+    // Step 1: Discover any additional categories from /topups with in-memory caching (30 min)
+    if (!this.categoryTargetsCache || this.categoryTargetsCache.expiresAt < Date.now()) {
+      try {
+        const res = await this.fetchWithTimeout(`${baseUrl}/topups?limit=500`, {
+          method: "GET",
+          timeoutMs: 3500,
+        });
+        if (res.ok) {
+          const data = (await res.json().catch(() => null)) as Record<string, any> | null;
+          const cats = this.extractItems(data) || [];
+          for (const cat of cats) {
+            const catId = String(cat?.["category_id"] || cat?.["id"] || cat?.["slug"] || cat?.["code"] || "").trim();
+            const catName = String(cat?.["name"] || cat?.["title"] || "").trim();
+            const matchedGame = this.classifyCategoryToSupportedGame(catId, catName);
+            if (catId && matchedGame) {
+              discoveredTargets.set(`${matchedGame}::${catId}`, { categoryId: catId, gameHint: matchedGame });
+            }
+          }
+          this.categoryTargetsCache = {
+            targets: Array.from(discoveredTargets.values()),
+            expiresAt: Date.now() + 30 * 60 * 1000,
+          };
+        }
       } catch {
-        break;
+        // Fall back immediately to pre-populated canonical targets without waiting
+      }
+    } else {
+      for (const t of this.categoryTargetsCache.targets) {
+        discoveredTargets.set(`${t.gameHint}::${t.categoryId}`, t);
       }
     }
 
-    // Ensure every supported game has its primary category even if `/topups` listing failed
+    // Ensure every supported game has its primary category
     for (const [game, cat] of Object.entries(GAME_CATEGORY_IDS) as Array<["mlbb" | "pubg" | "freefire" | "hok", string]>) {
       const hasGame = Array.from(discoveredTargets.values()).some((t) => t.gameHint === game);
       if (!hasGame) {
@@ -732,15 +776,15 @@ export class FazerCardsService {
       }
     }
 
-    // Step 2: Fetch `/topups/offers?category_id=...` for each discovered category in bounded batches
+    // Step 2: Fetch `/topups/offers?category_id=...` for each discovered category in parallel batches (BATCH_SIZE = 16)
     const targets = Array.from(discoveredTargets.values());
-    const BATCH_SIZE = 6;
+    const BATCH_SIZE = 16;
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
       const batch = targets.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map(async (t) => {
           const url = `${baseUrl}/topups/offers?category_id=${encodeURIComponent(t.categoryId)}`;
-          const res = await this.fetchWithTimeout(url, { method: "GET", timeoutMs: 8000 });
+          const res = await this.fetchWithTimeout(url, { method: "GET", timeoutMs: 5000 });
           if (!res.ok) return [] as FazerCatalogProduct[];
           const data = await res.json().catch(() => null);
           const items = this.extractItems(data);

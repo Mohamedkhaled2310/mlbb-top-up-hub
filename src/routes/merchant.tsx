@@ -113,9 +113,9 @@ function MerchantPage() {
     }
   }, []);
 
-  const loadStore = useCallback(async () => {
+  const loadStore = useCallback(async (force = false) => {
     try {
-      const d = await getStoreApi();
+      const d = await getStoreApi(undefined, force);
       if (d?.packages) store.setPackages(d.packages);
       if (d?.settings) store.setSettings(d.settings);
     } catch {
@@ -179,7 +179,7 @@ function MerchantPage() {
         // Refresh merchant wallet & dashboard alongside live store packages
         await Promise.all([
           loadDashboard(activeToken),
-          loadStore(),
+          loadStore(true),
         ]);
       } catch {
         // Keep existing state on transient errors

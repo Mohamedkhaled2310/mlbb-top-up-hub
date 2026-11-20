@@ -521,18 +521,9 @@ export async function curateMlbbPackages(sb: any) {
   const { data: allPkgs } = await sb.from("fazer_packages").select("*").eq("game_id", "mlbb");
   const pkgs = allPkgs || [];
   const nowIso = new Date().toISOString();
+  const rowsToUpsert: any[] = [];
 
-  // 1. Generate and upsert the composite packages for Global and Brazil
-  const globalCompositeRows = generateCompositePackageRows(pkgs, "global");
-  const brazilCompositeRows = generateCompositePackageRows(pkgs, "br");
-  const allCompositeRows = [...globalCompositeRows, ...brazilCompositeRows];
-
-  const { error: upsertErr } = await sb.from("fazer_packages").upsert(allCompositeRows, { onConflict: "offer_id" });
-  if (upsertErr) {
-    console.error("Failed to upsert composite MLBB packages:", upsertErr);
-  }
-
-  // 2. Curate Global base packages
+  // 1. Curate Global base packages
   for (const b of Object.values(MLBB_GLOBAL_BASE_PACKAGES)) {
     const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
     const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number" && b.baseOfferId !== "mobile_legends_global:78_8_diamonds";
@@ -545,22 +536,26 @@ export async function curateMlbbPackages(sb: any) {
           ? Number(existing.cost_usd)
           : b.fallbackCostUsd;
 
-    await sb
-      .from("fazer_packages")
-      .update({
-        name: b.name,
-        category: "diamonds",
-        diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
-        bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
-        regions: ["global"],
-        cost_usd: effectiveCost,
-        active: true,
-        updated_at: nowIso,
-      })
-      .eq("offer_id", b.baseOfferId);
+    if (existing) {
+      existing.cost_usd = effectiveCost;
+    }
+
+    rowsToUpsert.push({
+      offer_id: b.baseOfferId,
+      game_id: "mlbb",
+      name: b.name,
+      category: "diamonds",
+      diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
+      bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
+      regions: ["global"],
+      cost_usd: effectiveCost,
+      active: true,
+      raw: existing?.raw ?? null,
+      updated_at: nowIso,
+    });
   }
 
-  // 3. Curate Brazil base packages
+  // 2. Curate Brazil base packages
   for (const b of Object.values(MLBB_BRAZIL_BASE_PACKAGES)) {
     const existing = pkgs.find((p: any) => p.offer_id === b.baseOfferId);
     const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number" && b.baseOfferId !== "mobile_legends_global:78_8_diamonds";
@@ -573,97 +568,112 @@ export async function curateMlbbPackages(sb: any) {
           ? Number(existing.cost_usd)
           : b.fallbackCostUsd;
 
-    await sb
-      .from("fazer_packages")
-      .update({
-        name: b.name,
-        category: "diamonds",
-        diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
-        bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
-        regions: ["br"],
-        cost_usd: effectiveCost,
-        active: true,
-        updated_at: nowIso,
-      })
-      .eq("offer_id", b.baseOfferId);
+    if (existing) {
+      existing.cost_usd = effectiveCost;
+    }
+
+    rowsToUpsert.push({
+      offer_id: b.baseOfferId,
+      game_id: "mlbb",
+      name: b.name,
+      category: "diamonds",
+      diamonds: b.totalDiamonds === 9288 ? 7740 : b.totalDiamonds,
+      bonus_diamonds: b.totalDiamonds === 9288 ? 1548 : 0,
+      regions: ["br"],
+      cost_usd: effectiveCost,
+      active: true,
+      raw: existing?.raw ?? null,
+      updated_at: nowIso,
+    });
   }
 
-  // 4. Curate Weekly Passes for Global and Brazil
+  // 3. Curate Weekly Passes for Global and Brazil (Always pick up live Fazer wholesale cost)
   const globalWp = pkgs.find((p: any) => p.offer_id === "mobile_legends_global:weekly_pass");
   const hasGlobalWpCustom = globalWp?.raw?.cost_edited_by_admin && typeof globalWp.raw.custom_cost_usd === "number";
+  const rawGlobalWpCost = Number(globalWp?.raw?.price_usd ?? globalWp?.raw?.cost_usd ?? 0);
   const globalWpCost = hasGlobalWpCustom
     ? globalWp.raw.custom_cost_usd
-    : Number.isFinite(Number(globalWp?.cost_usd)) && Number(globalWp.cost_usd) > 0
-      ? Number(globalWp.cost_usd)
-      : 1.319;
+    : rawGlobalWpCost > 0
+      ? rawGlobalWpCost
+      : Number.isFinite(Number(globalWp?.cost_usd)) && Number(globalWp.cost_usd) > 0
+        ? Number(globalWp.cost_usd)
+        : 1.319;
 
-  await sb
-    .from("fazer_packages")
-    .update({
-      name: "Weekly Diamond Pass",
-      category: "weekly_pass",
-      cost_usd: globalWpCost,
-      regions: ["global"],
-      active: true,
-      updated_at: nowIso,
-    })
-    .eq("offer_id", "mobile_legends_global:weekly_pass");
+  rowsToUpsert.push({
+    offer_id: "mobile_legends_global:weekly_pass",
+    game_id: "mlbb",
+    name: "Weekly Diamond Pass",
+    category: "weekly_pass",
+    cost_usd: globalWpCost,
+    regions: ["global"],
+    active: true,
+    raw: globalWp?.raw ?? null,
+    updated_at: nowIso,
+  });
 
   const brazilWp = pkgs.find((p: any) => p.offer_id === "mobile_legends_brazil:weekly_pass");
   const hasBrazilWpCustom = brazilWp?.raw?.cost_edited_by_admin && typeof brazilWp.raw.custom_cost_usd === "number";
+  const rawBrazilWpCost = Number(brazilWp?.raw?.price_usd ?? brazilWp?.raw?.cost_usd ?? 0);
   const brazilWpCost = hasBrazilWpCustom
     ? brazilWp.raw.custom_cost_usd
-    : Number.isFinite(Number(brazilWp?.cost_usd)) && Number(brazilWp.cost_usd) > 0
-      ? Number(brazilWp.cost_usd)
-      : 1.21;
+    : rawBrazilWpCost > 0
+      ? rawBrazilWpCost
+      : Number.isFinite(Number(brazilWp?.cost_usd)) && Number(brazilWp.cost_usd) > 0
+        ? Number(brazilWp.cost_usd)
+        : 1.21;
 
-  await sb
-    .from("fazer_packages")
-    .update({
-      name: "Weekly Diamond Pass",
-      category: "weekly_pass",
-      cost_usd: brazilWpCost,
-      regions: ["br"],
-      active: true,
-      updated_at: nowIso,
-    })
-    .eq("offer_id", "mobile_legends_brazil:weekly_pass");
+  rowsToUpsert.push({
+    offer_id: "mobile_legends_brazil:weekly_pass",
+    game_id: "mlbb",
+    name: "Weekly Diamond Pass",
+    category: "weekly_pass",
+    cost_usd: brazilWpCost,
+    regions: ["br"],
+    active: true,
+    raw: brazilWp?.raw ?? null,
+    updated_at: nowIso,
+  });
 
-  // 5. Curate Twilight Passes
+  // 4. Curate Twilight Passes
   const globalTp = pkgs.find((p: any) => p.offer_id === "mobile_legends_global:twilight_pass");
   if (globalTp) {
-    await sb
-      .from("fazer_packages")
-      .update({
-        name: "Twilight Pass",
-        category: "bundles",
-        regions: ["global"],
-        active: true,
-        updated_at: nowIso,
-      })
-      .eq("offer_id", "mobile_legends_global:twilight_pass");
+    const rawGlobalTpCost = Number(globalTp?.raw?.price_usd ?? globalTp?.raw?.cost_usd ?? 0);
+    const globalTpCost = rawGlobalTpCost > 0 ? rawGlobalTpCost : (Number(globalTp.cost_usd) || 7.5);
+    rowsToUpsert.push({
+      offer_id: "mobile_legends_global:twilight_pass",
+      game_id: "mlbb",
+      name: "Twilight Pass",
+      category: "bundles",
+      cost_usd: globalTpCost,
+      regions: ["global"],
+      active: true,
+      raw: globalTp?.raw ?? null,
+      updated_at: nowIso,
+    });
   }
 
   const brazilTp = pkgs.find((p: any) => p.offer_id === "mobile_legends_brazil:twilight_pass");
   if (brTpExists(brazilTp)) {
-    await sb
-      .from("fazer_packages")
-      .update({
-        name: "Twilight Pass",
-        category: "bundles",
-        regions: ["br"],
-        active: true,
-        updated_at: nowIso,
-      })
-      .eq("offer_id", "mobile_legends_brazil:twilight_pass");
+    const rawBrazilTpCost = Number(brazilTp?.raw?.price_usd ?? brazilTp?.raw?.cost_usd ?? 0);
+    const brazilTpCost = rawBrazilTpCost > 0 ? rawBrazilTpCost : (Number(brazilTp.cost_usd) || 7.5);
+    rowsToUpsert.push({
+      offer_id: "mobile_legends_brazil:twilight_pass",
+      game_id: "mlbb",
+      name: "Twilight Pass",
+      category: "bundles",
+      cost_usd: brazilTpCost,
+      regions: ["br"],
+      active: true,
+      raw: brazilTp?.raw ?? null,
+      updated_at: nowIso,
+    });
   }
 
-  // 6. Curate Requested First Top-Up Bonus and Elite Pack packages
+  // 5. Curate Requested First Top-Up Bonus and Elite Pack packages
   for (const r of MLBB_REQUESTED_PACKAGES) {
     const existing = pkgs.find((p: any) => p.offer_id === r.offerId);
     const hasAdminCustom = existing?.raw?.cost_edited_by_admin && typeof existing.raw.custom_cost_usd === "number";
     const rawFazerCost = Number(existing?.raw?.price_usd ?? existing?.raw?.cost_usd ?? 0);
-    // Always apply verified wholesale cost from Fazer catalog unless admin explicitly customized it
     const effectiveCost = hasAdminCustom
       ? existing.raw.custom_cost_usd
       : rawFazerCost > 0
@@ -672,23 +682,31 @@ export async function curateMlbbPackages(sb: any) {
           ? Number(existing.cost_usd)
           : r.fallbackCostUsd;
 
-    await sb
-      .from("fazer_packages")
-      .upsert(
-        {
-          offer_id: r.offerId,
-          game_id: "mlbb",
-          name: r.name,
-          category: r.category,
-          regions: [r.region],
-          cost_usd: effectiveCost,
-          diamonds: r.diamonds ?? 0,
-          bonus_diamonds: r.bonusDiamonds ?? 0,
-          active: true,
-          updated_at: nowIso,
-        },
-        { onConflict: "offer_id" },
-      );
+    rowsToUpsert.push({
+      offer_id: r.offerId,
+      game_id: "mlbb",
+      name: r.name,
+      category: r.category,
+      regions: [r.region],
+      cost_usd: effectiveCost,
+      diamonds: r.diamonds ?? 0,
+      bonus_diamonds: r.bonusDiamonds ?? 0,
+      active: true,
+      raw: existing?.raw ?? null,
+      updated_at: nowIso,
+    });
+  }
+
+  // 6. Generate composite packages using the fresh base costs
+  const globalCompositeRows = generateCompositePackageRows(pkgs, "global");
+  const brazilCompositeRows = generateCompositePackageRows(pkgs, "br");
+  const allCompositeRows = [...globalCompositeRows, ...brazilCompositeRows];
+
+  // Perform single fast batch upsert of all curated packages
+  const allRows = [...rowsToUpsert, ...allCompositeRows];
+  const { error: upsertErr } = await sb.from("fazer_packages").upsert(allRows, { onConflict: "offer_id" });
+  if (upsertErr) {
+    console.error("Failed to upsert curated MLBB packages:", upsertErr);
   }
 
   // 7. Identify all active curated MLBB offer IDs and deactivate noisy uncurated duplicates
@@ -737,23 +755,25 @@ export async function curateMlbbPackages(sb: any) {
     return cat !== "mobile_legends_global" && cat !== "mobile_legends_brazil" && MLBB_CANONICAL_CATEGORIES.has(cat);
   });
 
-  for (const [catId, regCode] of Object.entries(MLBB_CAT_TO_REGION)) {
-    const offersInCat = regionalCanonicalOffers
-      .filter((p: any) => {
-        const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
-          ? p.raw.fazer_category_id
-          : String(p.offer_id || "").split(":")[0];
-        return cat === catId && p.cost_usd != null && Number(p.cost_usd) > 0;
-      })
-      .map((p: any) => p.offer_id);
+  await Promise.all(
+    Object.entries(MLBB_CAT_TO_REGION).map(async ([catId, regCode]) => {
+      const offersInCat = regionalCanonicalOffers
+        .filter((p: any) => {
+          const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
+            ? p.raw.fazer_category_id
+            : String(p.offer_id || "").split(":")[0];
+          return cat === catId && p.cost_usd != null && Number(p.cost_usd) > 0;
+        })
+        .map((p: any) => p.offer_id);
 
-    if (offersInCat.length) {
-      await sb
-        .from("fazer_packages")
-        .update({ active: true, regions: [regCode], updated_at: nowIso })
-        .in("offer_id", offersInCat);
-    }
-  }
+      if (offersInCat.length) {
+        await sb
+          .from("fazer_packages")
+          .update({ active: true, regions: [regCode], updated_at: nowIso })
+          .in("offer_id", offersInCat);
+      }
+    }),
+  );
 
   // Deactivate uncurated, non-canonical, or noisy odd tiers across all servers
   const toDeactivate = pkgs

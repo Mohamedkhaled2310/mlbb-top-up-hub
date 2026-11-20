@@ -200,9 +200,9 @@ function AdminPage() {
   const [profilePkgServer, setProfilePkgServer] = useState("all");
   const [profileTab, setProfileTab] = useState<"packages" | "ledger" | "orders">("packages");
 
-  const loadStore = useCallback(async () => {
+  const loadStore = useCallback(async (force = false) => {
     try {
-      const d = await getStoreApi();
+      const d = await getStoreApi(undefined, force);
       if (d?.packages) store.setPackages(d.packages);
       if (d?.settings) {
         store.setSettings(d.settings);
@@ -795,7 +795,7 @@ function AdminPage() {
         title: "تمت مزامنة سيرفر الشحن بنجاح",
         description: `إجمالي الباقات: ${r?.catalog?.count || 0}${bd ? ` (${bd})` : ""} • رصيد: ${r?.account?.balance ?? "—"} ${r?.account?.currency ?? "USD"}`,
       });
-      await Promise.all([loadStore(), refreshStatus()]);
+      await Promise.all([loadStore(true), refreshStatus()]);
     } catch (e: any) {
       toast({ title: "خطأ في المزامنة", description: e?.message });
     } finally {

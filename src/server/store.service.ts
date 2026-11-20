@@ -336,6 +336,7 @@ async function syncFazerInternal() {
     }
 
     await sb.from("store_settings").update(updates).eq("id", 1);
+    STORE_DATA_CACHE = null; // Invalidate cached packages immediately on sync completion
 
     const gamesBreakdown = catalog.products.reduce((acc: Record<string, number>, p) => {
       const g = p.game_id || "mlbb";
@@ -389,9 +390,16 @@ export async function persistFazerAccountBalance(account: {
 // Global server cache for store packages to serve /api/store instantly (< 10ms)
 let STORE_DATA_CACHE: { data: any; expiresAt: number } | null = null;
 
-export async function getStoreData(gameId?: string) {
-  // If no game filter, use cached store payload if fresher than 60 seconds
-  if (!gameId && STORE_DATA_CACHE && STORE_DATA_CACHE.expiresAt > Date.now()) {
+export function invalidateStoreDataCache() {
+  STORE_DATA_CACHE = null;
+}
+
+export async function getStoreData(gameId?: string, forceRefresh = false) {
+  if (forceRefresh) {
+    STORE_DATA_CACHE = null;
+  }
+  // If no game filter, use cached store payload if fresher than 15 seconds
+  if (!forceRefresh && !gameId && STORE_DATA_CACHE && STORE_DATA_CACHE.expiresAt > Date.now()) {
     return STORE_DATA_CACHE.data;
   }
 
@@ -463,9 +471,9 @@ export async function getStoreData(gameId?: string) {
   let { data: pkgs } = await q;
 
   // Check if packages are empty OR missing games OR stale (auto-sync packages & balance)
-  const distinctGames = new Set((pkgs || []).map((p: any) => p.game_id));
   const lastSyncMs = settingsRow?.packages_synced_at ? Date.parse(settingsRow.packages_synced_at) : 0;
-  const syncStale = !lastSyncMs || Date.now() - lastSyncMs > 5 * 60 * 1000;
+  // Live Fazer sync is considered stale when older than 45 seconds or when forceRefresh is requested
+  const syncStale = Boolean(forceRefresh || !lastSyncMs || Date.now() - lastSyncMs > 45 * 1000);
   const missingCompositeMlbb = (pkgs || []).some((p: any) => p.game_id === "mlbb") && !(pkgs || []).some((p: any) => p.raw?.is_composite);
 
   if (!process.env["VITEST"] && missingCompositeMlbb) {
@@ -485,12 +493,12 @@ export async function getStoreData(gameId?: string) {
     }
   }
 
-  if ((!pkgs || pkgs.length === 0 || (!gameId && distinctGames.size < 4 && syncStale)) && readEnv("FAZER_API_KEY")) {
+  if ((!pkgs || pkgs.length === 0 || syncStale) && readEnv("FAZER_API_KEY") && !process.env["VITEST"]) {
     try {
       await syncFazerInternal();
       const s2 = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
       settingsRow = s2.data || settingsRow;
-      if (process.env["VITEST"] || rateMode === "manual" || !binanceEgp) {
+      if (rateMode === "manual" || !binanceEgp) {
         egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
       }
       let q2 = sb
@@ -502,19 +510,17 @@ export async function getStoreData(gameId?: string) {
         .limit(1000);
       if (gameId) q2 = q2.eq("game_id", gameId);
       pkgs = (await q2).data || pkgs;
-    } catch {
-      // Ignore sync error, return current cached packages
+      STORE_DATA_CACHE = null;
+    } catch (syncErr) {
+      console.error("Auto Fazer sync error:", syncErr);
     }
-  } else if (!process.env["VITEST"] && syncStale && readEnv("FAZER_API_KEY")) {
-    // Packages exist, trigger background auto-refresh when stale (> 5 min)
-    syncFazerInternal().catch(() => {});
   } else if (
     !process.env["VITEST"] &&
     readEnv("FAZER_API_KEY") &&
     (!settingsRow?.fazer_balance_updated_at ||
-      Date.now() - Date.parse(settingsRow.fazer_balance_updated_at) > 2 * 60 * 1000)
+      Date.now() - Date.parse(settingsRow.fazer_balance_updated_at) > 45 * 1000)
   ) {
-    // Keep Fazer wallet balance auto-refreshed when > 2 min old
+    // Keep Fazer wallet balance auto-refreshed when > 45s old
     FazerCardsService.checkAccount().then(persistFazerAccountBalance).catch(() => {});
   }
 
@@ -593,7 +599,7 @@ export async function getStoreData(gameId?: string) {
   if (!gameId) {
     STORE_DATA_CACHE = {
       data: payload,
-      expiresAt: Date.now() + 30 * 1000, // 30 seconds fast in-memory cache
+      expiresAt: Date.now() + 15 * 1000, // 15 seconds fast in-memory cache
     };
   }
 
@@ -611,6 +617,7 @@ export async function syncFazerPackagesAndBalance(opts: { token?: string | null 
       return { ok: false, error: e?.message || "forbidden" };
     }
   }
+  STORE_DATA_CACHE = null;
   return await syncFazerInternal();
 }
 
