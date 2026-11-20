@@ -261,34 +261,7 @@ export async function refreshSessionServer(refreshToken: string) {
 
 let inFlightSync: Promise<any> | null = null;
 
-const NOISY_MLBB_TIERS = new Set([
-  "10_1_diamonds",
-  "12_diamonds",
-  "14_diamonds",
-  "19_diamonds",
-  "20_2_diamonds",
-  "28_diamonds",
-  "42_diamonds",
-  "51_5_diamonds",
-  "70_diamonds",
-  "102_10_diamonds",
-  "140_diamonds",
-  "170_diamonds",
-  "240_diamonds",
-  "284_diamonds",
-  "296_diamonds",
-  "355_diamonds",
-  "429_diamonds",
-  "504_66_diamonds",
-  "716_diamonds",
-  "1007_156_diamonds",
-  "1084_diamonds",
-  "1446_diamonds",
-  "2010_diamonds",
-  "2015_383_diamonds",
-  "2976_diamonds",
-  "7502_diamonds",
-]);
+const NOISY_MLBB_TIERS = new Set<string>();
 
 async function syncFazerInternal() {
   if (inFlightSync) return inFlightSync;
@@ -545,34 +518,7 @@ export async function getStoreData(gameId?: string) {
     FazerCardsService.checkAccount().then(persistFazerAccountBalance).catch(() => {});
   }
 
-  const NOISY_MLBB_TIERS = new Set([
-    "10_1_diamonds",
-    "12_diamonds",
-    "14_diamonds",
-    "19_diamonds",
-    "20_2_diamonds",
-    "28_diamonds",
-    "42_diamonds",
-    "51_5_diamonds",
-    "70_diamonds",
-    "102_10_diamonds",
-    "140_diamonds",
-    "170_diamonds",
-    "240_diamonds",
-    "284_diamonds",
-    "296_diamonds",
-    "355_diamonds",
-    "429_diamonds",
-    "504_66_diamonds",
-    "716_diamonds",
-    "1007_156_diamonds",
-    "1084_diamonds",
-    "1446_diamonds",
-    "2010_diamonds",
-    "2015_383_diamonds",
-    "2976_diamonds",
-    "7502_diamonds",
-  ]);
+  const NOISY_MLBB_TIERS = new Set<string>();
 
   const packages = (pkgs || [])
     .filter((p: any) => {
@@ -770,14 +716,37 @@ export function findLeastCostComponentCombination(
       const c = Number(p.cost_usd || 0);
       if (c <= 0) return false;
 
-      const pRegs = Array.isArray(p.regions) ? p.regions : [];
-      const isBr = p.offer_id.includes("brazil") || pRegs.includes("br");
-      const isGlobal = p.offer_id.includes("global") || pRegs.includes("global") || pRegs.length === 0;
+      const pRegs = Array.isArray(p.regions) ? p.regions.map((r: any) => String(r).toLowerCase().trim()) : [];
+      const cleanTargetReg = String(regionFilter || "").toLowerCase().trim();
 
-      if (regionFilter === "br") {
-        if (!isBr) return false;
-      } else if (regionFilter === "global") {
-        if (isBr || !isGlobal) return false;
+      if (cleanTargetReg && cleanTargetReg !== "global" && cleanTargetReg !== "all") {
+        // Target is a specific regional server (e.g. "ph", "my", "br", "id", "tr", "ru", "sg", "us", "mena")
+        const matchesTarget =
+          pRegs.includes(cleanTargetReg) ||
+          p.offer_id.toLowerCase().includes(`_${cleanTargetReg}:`) ||
+          p.offer_id.toLowerCase().startsWith(`mobile_legends_${cleanTargetReg}:`) ||
+          (cleanTargetReg === "br" && p.offer_id.toLowerCase().includes("brazil")) ||
+          (cleanTargetReg === "my" && p.offer_id.toLowerCase().includes("malaysia")) ||
+          (cleanTargetReg === "ph" && p.offer_id.toLowerCase().includes("philippines")) ||
+          (cleanTargetReg === "id" && p.offer_id.toLowerCase().includes("indonesia")) ||
+          (cleanTargetReg === "tr" && p.offer_id.toLowerCase().includes("turkey")) ||
+          (cleanTargetReg === "sg" && p.offer_id.toLowerCase().includes("singapore")) ||
+          (cleanTargetReg === "us" && p.offer_id.toLowerCase().includes("united_states"));
+
+        if (!matchesTarget) return false;
+      } else {
+        // Target is global - must NEVER borrow regional server packages (e.g. Brazil, Malaysia, Philippines, Turkey)
+        const isRegional =
+          pRegs.some((r: any) => r !== "global") ||
+          p.offer_id.toLowerCase().includes("brazil") ||
+          p.offer_id.toLowerCase().includes("malaysia") ||
+          p.offer_id.toLowerCase().includes("philippines") ||
+          p.offer_id.toLowerCase().includes("indonesia") ||
+          p.offer_id.toLowerCase().includes("turkey") ||
+          p.offer_id.toLowerCase().includes("singapore") ||
+          p.offer_id.toLowerCase().includes("united_states");
+
+        if (isRegional) return false;
       }
 
       const totalDia =

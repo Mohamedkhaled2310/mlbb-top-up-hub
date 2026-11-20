@@ -717,36 +717,19 @@ export async function curateMlbbPackages(sb: any) {
     "mobile_legends_united_states",
   ]);
 
-  const NOISY_ODD_MLBB_TIERS_SET = new Set([
-    "10_1_diamonds",
-    "12_diamonds",
-    "14_diamonds",
-    "19_diamonds",
-    "20_2_diamonds",
-    "28_diamonds",
-    "42_diamonds",
-    "51_5_diamonds",
-    "70_diamonds",
-    "102_10_diamonds",
-    "140_diamonds",
-    "170_diamonds",
-    "240_diamonds",
-    "284_diamonds",
-    "296_diamonds",
-    "355_diamonds",
-    "429_diamonds",
-    "504_66_diamonds",
-    "716_diamonds",
-    "1007_156_diamonds",
-    "1084_diamonds",
-    "1446_diamonds",
-    "2010_diamonds",
-    "2015_383_diamonds",
-    "2976_diamonds",
-    "7502_diamonds",
-  ]);
+  const NOISY_ODD_MLBB_TIERS_SET = new Set<string>();
 
-  // Activate regional packages for supported canonical servers (Turkey, Indonesia, Malaysia, etc.)
+  // Activate regional packages for supported canonical servers (Turkey, Indonesia, Malaysia, Philippines, etc.)
+  const MLBB_CAT_TO_REGION: Record<string, string> = {
+    mobile_legends_philippines: "ph",
+    mobile_legends_malaysia: "my",
+    mobile_legends_indonesia: "id",
+    mobile_legends_turkey: "tr",
+    mobile_legends_ru: "ru",
+    mobile_legends_singapore: "sg",
+    mobile_legends_united_states: "us",
+  };
+
   const regionalCanonicalOffers = pkgs.filter((p: any) => {
     const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
       ? p.raw.fazer_category_id
@@ -754,21 +737,22 @@ export async function curateMlbbPackages(sb: any) {
     return cat !== "mobile_legends_global" && cat !== "mobile_legends_brazil" && MLBB_CANONICAL_CATEGORIES.has(cat);
   });
 
-  const regionalToActivate = regionalCanonicalOffers
-    .filter((p: any) => {
-      if (p.cost_usd == null || Number(p.cost_usd) <= 0) return false;
-      const off = String(p.offer_id || "");
-      const rawId = (off.includes(":") ? off.split(":")[1] : off) || "";
-      if (rawId && NOISY_ODD_MLBB_TIERS_SET.has(rawId.toLowerCase())) return false;
-      return true;
-    })
-    .map((p: any) => p.offer_id);
+  for (const [catId, regCode] of Object.entries(MLBB_CAT_TO_REGION)) {
+    const offersInCat = regionalCanonicalOffers
+      .filter((p: any) => {
+        const cat = (p.raw && typeof p.raw === "object" && typeof p.raw.fazer_category_id === "string")
+          ? p.raw.fazer_category_id
+          : String(p.offer_id || "").split(":")[0];
+        return cat === catId && p.cost_usd != null && Number(p.cost_usd) > 0;
+      })
+      .map((p: any) => p.offer_id);
 
-  if (regionalToActivate.length) {
-    await sb
-      .from("fazer_packages")
-      .update({ active: true, updated_at: nowIso })
-      .in("offer_id", regionalToActivate);
+    if (offersInCat.length) {
+      await sb
+        .from("fazer_packages")
+        .update({ active: true, regions: [regCode], updated_at: nowIso })
+        .in("offer_id", offersInCat);
+    }
   }
 
   // Deactivate uncurated, non-canonical, or noisy odd tiers across all servers

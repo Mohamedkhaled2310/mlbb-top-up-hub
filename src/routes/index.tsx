@@ -356,13 +356,13 @@ function CustomerStorePage() {
   }, [gamePackages, effectivePkgRegion, searchQuery, selectedCategory]);
 
   const displayedPackages = useMemo(() => {
-    if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory) {
+    if (selectedCategory === "all" && !searchQuery.trim() && !showAllInAllCategory && effectivePkgRegion === "global") {
       return filteredPackages.slice(0, 12);
     }
     return filteredPackages;
-  }, [filteredPackages, selectedCategory, searchQuery, showAllInAllCategory]);
+  }, [filteredPackages, selectedCategory, searchQuery, showAllInAllCategory, effectivePkgRegion]);
 
-  const hasHiddenPackages = selectedCategory === "all" && !searchQuery.trim() && filteredPackages.length > 12;
+  const hasHiddenPackages = selectedCategory === "all" && !searchQuery.trim() && effectivePkgRegion === "global" && filteredPackages.length > 12;
 
   const merchantMargin = Number(merchant?.margin_percent || 0);
   const getDisplayPrice = (pkg: TopUpPackage): number => {
@@ -558,7 +558,7 @@ function CustomerStorePage() {
                         : "border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-slate-200"
                     }`}
                   >
-                    <span>{reg}</span>
+                    <span>{getServerLabel(reg, selectedGameId)}</span>
                     <span className="text-[10px] opacity-75 font-mono">({cnt})</span>
                   </button>
                 );

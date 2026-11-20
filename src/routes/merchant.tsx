@@ -724,7 +724,7 @@ function MerchantPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                  {pkgs.slice(0, 60).map((p, idx) => {
+                  {pkgs.map((p, idx) => {
                     const prices = getMerchantPrices(p);
                     const pkgRawReg = (Array.isArray(p.regions) && p.regions[0]) || "";
                     const pkgRegion = pkgRawReg && pkgRawReg !== "global" ? pkgRawReg : effectivePkgRegion;
@@ -746,8 +746,8 @@ function MerchantPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                               <span className="text-xs sm:text-sm font-semibold text-white truncate">{p.name}</span>
-                              <span className="rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 text-[9px] font-mono uppercase font-bold shrink-0">
-                                {pkgRegion.toUpperCase()}
+                              <span className="rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 px-1.5 py-0.2 text-[9px] font-semibold shrink-0">
+                                {getServerLabel(pkgRegion, p.gameId || selectedGameId)}
                               </span>
                               {Boolean(p.raw?.["is_composite"]) && (
                                 <span className="rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 px-1 py-0.2 text-[9px] font-bold shrink-0">
@@ -756,7 +756,7 @@ function MerchantPage() {
                               )}
                             </div>
                             <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
-                              <span>سيرفر: <strong className="text-slate-300 uppercase">{pkgRegion}</strong></span>
+                              <span>سيرفر: <strong className="text-slate-300">{getServerLabel(pkgRegion, p.gameId || selectedGameId)}</strong></span>
                               {p.diamonds > 0 && (
                                 <>
                                   <span className="text-slate-600">•</span>

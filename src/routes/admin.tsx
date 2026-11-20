@@ -3585,9 +3585,9 @@ function AdminPage() {
                             const regList: string[] = Array.isArray(p.regions) && p.regions.length
                               ? p.regions.map((r: any) => String(r).toLowerCase())
                               : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                            const isBr = regList.includes("br") || p.offerId?.includes("brazil");
-                            const isMena = regList.includes("mena");
-                            const srvLabel = isBr ? "البرازيل (Brazil)" : isMena ? "MENA" : "عالمي (Global)";
+                            const rawReg = regList[0] || (p.offerId?.includes("brazil") ? "br" : "global");
+                            const isBr = rawReg === "br" || p.offerId?.includes("brazil");
+                            const srvLabel = getServerLabel(rawReg, p.gameId);
                             return (
                               <tr key={p.id} className="hover:bg-slate-900/40">
                                 <td className="p-2.5 text-right">
@@ -3665,9 +3665,9 @@ function AdminPage() {
                         const regList: string[] = Array.isArray(p.regions) && p.regions.length
                           ? p.regions.map((r: any) => String(r).toLowerCase())
                           : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                        const isBr = regList.includes("br") || p.offerId?.includes("brazil");
-                        const isMena = regList.includes("mena");
-                        const srvLabel = isBr ? "البرازيل (Brazil)" : isMena ? "MENA" : "عالمي (Global)";
+                        const rawReg = regList[0] || (p.offerId?.includes("brazil") ? "br" : "global");
+                        const isBr = rawReg === "br" || p.offerId?.includes("brazil");
+                        const srvLabel = getServerLabel(rawReg, p.gameId);
                         return (
                           <div
                             key={p.id}

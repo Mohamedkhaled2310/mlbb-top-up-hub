@@ -33,6 +33,12 @@ export const GAME_SERVERS: Record<string, GameServerRegion[]> = {
     { code: "id", labelAr: "إندونيسيا (Indonesia)", labelEn: "Indonesia" },
     { code: "eu", labelAr: "أوروبا (Europe)", labelEn: "Europe" },
     { code: "th", labelAr: "تايلاند (Thailand)", labelEn: "Thailand" },
+    { code: "my_sg", labelAr: "ماليزيا وسنغافورة (MY/SG)", labelEn: "MY/SG" },
+    { code: "ph", labelAr: "الفلبين (Philippines)", labelEn: "Philippines" },
+    { code: "sg", labelAr: "سنغافورة (Singapore)", labelEn: "Singapore" },
+    { code: "tw", labelAr: "تايوان (Taiwan)", labelEn: "Taiwan" },
+    { code: "vn", labelAr: "فيتنام (Vietnam)", labelEn: "Vietnam" },
+    { code: "cis", labelAr: "رابطة الدول المستقلة (CIS)", labelEn: "CIS" },
   ],
   hok: [
     { code: "global", labelAr: "عالمي (Global)", labelEn: "Global" },
@@ -58,10 +64,47 @@ export function normalizeRegion(r?: string | null): string {
 }
 
 export function getServerLabel(code: string, gameId = "mlbb"): string {
+  const clean = (code || "").toLowerCase().trim();
   const servers = getGameServers(gameId);
-  const found = servers.find((s) => s.code.toLowerCase() === (code || "").toLowerCase());
+  const found = servers.find((s) => s.code.toLowerCase() === clean);
   if (found) return found.labelAr;
-  return (code || "").toUpperCase();
+
+  for (const sList of Object.values(GAME_SERVERS)) {
+    const f = sList.find((s) => s.code.toLowerCase() === clean);
+    if (f) return f.labelAr;
+  }
+
+  const knownLabels: Record<string, string> = {
+    global: "عالمي (Global)",
+    br: "البرازيل (Brazil)",
+    brazil: "البرازيل (Brazil)",
+    tr: "تركيا (Turkey)",
+    turkey: "تركيا (Turkey)",
+    id: "إندونيسيا (Indonesia)",
+    indonesia: "إندونيسيا (Indonesia)",
+    my: "ماليزيا (Malaysia)",
+    malaysia: "ماليزيا (Malaysia)",
+    ph: "الفلبين (Philippines)",
+    philippines: "الفلبين (Philippines)",
+    ru: "روسيا (Russia)",
+    russia: "روسيا (Russia)",
+    sg: "سنغافورة (Singapore)",
+    singapore: "سنغافورة (Singapore)",
+    us: "الولايات المتحدة (US)",
+    united_states: "الولايات المتحدة (US)",
+    mena: "الشرق الأوسط (MENA)",
+    kr: "كوريا / اليابان (KRJP)",
+    tw: "تايوان (Taiwan)",
+    vn: "فيتنام (Vietnam)",
+    eu: "أوروبا (Europe)",
+    th: "تايلاند (Thailand)",
+    my_sg: "ماليزيا وسنغافورة (MY/SG)",
+    cis: "رابطة الدول المستقلة (CIS)",
+    bd: "بنغلاديش (Bangladesh)",
+    latam: "أمريكا اللاتينية (LATAM)",
+  };
+
+  return knownLabels[clean] || (code || "").toUpperCase();
 }
 
 /**
@@ -117,40 +160,9 @@ export function findMatchingPackageForServer(
   return globalPkg || currentPkg;
 }
 
-export const NOISY_ODD_MLBB_TIERS = new Set([
-  "10_1_diamonds",
-  "12_diamonds",
-  "14_diamonds",
-  "19_diamonds",
-  "20_2_diamonds",
-  "28_diamonds",
-  "42_diamonds",
-  "51_5_diamonds",
-  "70_diamonds",
-  "102_10_diamonds",
-  "140_diamonds",
-  "170_diamonds",
-  "240_diamonds",
-  "284_diamonds",
-  "296_diamonds",
-  "355_diamonds",
-  "429_diamonds",
-  "504_66_diamonds",
-  "716_diamonds",
-  "1007_156_diamonds",
-  "1084_diamonds",
-  "1446_diamonds",
-  "2010_diamonds",
-  "2015_383_diamonds",
-  "2976_diamonds",
-  "7502_diamonds",
-]);
+export const NOISY_ODD_MLBB_TIERS = new Set<string>();
 
-export function isNoisyOddMlbbPackage(pkg: { gameId?: string | undefined; offerId?: string | undefined; id?: string | undefined; name?: string | undefined }): boolean {
-  if (pkg.gameId && pkg.gameId !== "mlbb") return false;
-  const id = String(pkg.offerId || pkg.id || "");
-  const rawId = id.includes(":") ? id.split(":")[1] : id;
-  if (rawId && NOISY_ODD_MLBB_TIERS.has(rawId.toLowerCase())) return true;
+export function isNoisyOddMlbbPackage(_pkg: { gameId?: string | undefined; offerId?: string | undefined; id?: string | undefined; name?: string | undefined }): boolean {
   return false;
 }
 
@@ -190,17 +202,35 @@ export function filterPackagesForServer(
     const isExact = regs.includes(selReg);
     const isGlobal = regs.includes("global");
 
-    if (!isExact && !isGlobal && selReg !== "all") {
-      continue;
+    if (selReg === "br") {
+      // Brazil has strict regional isolation - do not show global fallback
+      if (!isExact) continue;
+    } else if (selReg !== "all") {
+      if (!isExact && !isGlobal) continue;
     }
 
-    const key = `${p.category || "diamonds"}_${p.diamonds || 0}_${(p.name || "")
-      .replace(/\s*(global|mena|brazil|br|turkey|tr|indonesia|id|malaysia|my)\s*/gi, "")
-      .trim()}`;
+    // Determine normalized tier key for proper deduplication
+    const normName = (p.name || "").toLowerCase();
+    let tierKey = "";
+    if (normName.includes("weekly") && (normName.includes("pass") || normName.includes("diamond"))) {
+      tierKey = "pass:weekly_diamond_pass";
+    } else if (normName.includes("twilight") && normName.includes("pass")) {
+      tierKey = "pass:twilight_pass";
+    } else if (normName.includes("monthly") && normName.includes("pass")) {
+      tierKey = "pass:monthly_pass";
+    } else if ((p.category || "").toLowerCase() === "weekly_pass") {
+      tierKey = `weekly_pass:${p.diamonds || 0}`;
+    } else {
+      const cleanName = normName
+        .replace(/\b(global|mena|brazil|br|turkey|tr|indonesia|id|malaysia|my|philippines|ph|singapore|sg|russia|ru|united states|us)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      tierKey = `${p.category || "diamonds"}_${p.diamonds || 0}_${cleanName}`;
+    }
 
-    const existing = seenTiers.get(key);
+    const existing = seenTiers.get(tierKey);
     if (!existing) {
-      seenTiers.set(key, p);
+      seenTiers.set(tierKey, p);
       result.push(p);
     } else {
       const existingRegs = Array.isArray(existing.regions) && existing.regions.length
@@ -211,7 +241,7 @@ export function filterPackagesForServer(
         const idx = result.indexOf(existing);
         if (idx !== -1) {
           result[idx] = p;
-          seenTiers.set(key, p);
+          seenTiers.set(tierKey, p);
         }
       }
     }
