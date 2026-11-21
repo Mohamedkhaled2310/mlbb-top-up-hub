@@ -198,6 +198,59 @@ export function getExplicitServerRegion(p: { id?: string | undefined; offerId?: 
 }
 
 /**
+ * Case-insensitive & cross-lingual package search matching (supports Arabic e.g. "ويكلي" / "اسبوعي" and English).
+ */
+export function matchPackageSearch(
+  pkg: {
+    name?: string | null | undefined;
+    offerId?: string | null | undefined;
+    category?: string | null | undefined;
+    gameId?: string | null | undefined;
+    diamonds?: number | null | undefined;
+  },
+  searchQuery = "",
+): boolean {
+  if (!searchQuery || !searchQuery.trim()) return true;
+  const q = searchQuery.trim().toLowerCase();
+  const name = (pkg.name || "").toLowerCase();
+  const offerId = (pkg.offerId || "").toLowerCase();
+  const cat = (pkg.category || "").toLowerCase();
+  const game = (pkg.gameId || "").toLowerCase();
+  const diamonds = String(pkg.diamonds || "");
+
+  if (name.includes(q) || offerId.includes(q) || cat.includes(q) || game.includes(q) || diamonds.includes(q)) {
+    return true;
+  }
+
+  // Cross-lingual match for Weekly Pass
+  const isWeeklyQuery =
+    q.includes("ويكل") ||
+    q.includes("اسبوع") ||
+    q.includes("أسبوع") ||
+    q.includes("weekly") ||
+    q.includes("pass") ||
+    q.includes("باس");
+  if (
+    isWeeklyQuery &&
+    (cat === "weekly_pass" ||
+      name.includes("weekly") ||
+      offerId.includes("weekly") ||
+      name.includes("pass") ||
+      offerId.includes("pass"))
+  ) {
+    return true;
+  }
+
+  // Cross-lingual match for Twilight Pass
+  const isTwilightQuery = q.includes("توايلايت") || q.includes("تويلايت") || q.includes("twilight");
+  if (isTwilightQuery && (name.includes("twilight") || offerId.includes("twilight"))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Filters and prioritizes packages for a given game and selected server so that:
  * - For any diamond tier, if an exact server package exists, it is shown.
  * - If not, the global package is shown as fallback.
@@ -218,11 +271,7 @@ export function filterPackagesForServer(
     if (isNoisyOddMlbbPackage(p)) return false;
     if (p.active === false) return false;
     if (!q) return true;
-    return (
-      (p.name || "").toLowerCase().includes(q) ||
-      (p.offerId || "").toLowerCase().includes(q) ||
-      String(p.diamonds || "").includes(q)
-    );
+    return matchPackageSearch(p, q);
   });
 
   const result: TopUpPackage[] = [];

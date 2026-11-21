@@ -532,6 +532,23 @@ export async function getStoreData(gameId?: string, forceRefresh = false) {
       egp_rate_mode: "manual" as const,
       binance_rate: null,
       binance_updated_at: null,
+      fx_rates: settingsRow?.fx_rates || {
+        SAR: 3.75,
+        AED: 3.67,
+        KWD: 0.31,
+        QAR: 3.64,
+        BHD: 0.376,
+        OMR: 0.385,
+        JOD: 0.709,
+        IQD: 1310,
+        LYD: 4.85,
+        TND: 3.12,
+        MAD: 10.05,
+        DZD: 134,
+        TRY: 34.5,
+        USD: 1,
+      },
+      fx_updated_at: settingsRow?.fx_updated_at ?? null,
       fazer_balance: settingsRow?.fazer_balance ?? null,
       fazer_balance_currency: settingsRow?.fazer_balance_currency ?? null,
       fazer_balance_updated_at: settingsRow?.fazer_balance_updated_at ?? null,
@@ -2343,6 +2360,7 @@ export async function adminGetMerchantDetails(token: string, merchantId: string)
       id: p.id,
       offerId: p.offer_id,
       gameId: p.game_id,
+      category: p.category || "diamonds",
       name: p.name,
       diamonds: Number(p.diamonds || 0),
       regions: p.regions || null,
@@ -2569,6 +2587,8 @@ export async function adminUpdateEgpRate(
   });
 
   invalidateStoreSettingsCache();
+  invalidateStoreDataCache();
+  STORE_DATA_CACHE = null;
 
   return { success: true, egp_rate: targetRate, mode };
 }

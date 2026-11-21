@@ -69,7 +69,7 @@ import {
 } from "../lib/api-client";
 import { MERCHANT_COUNTRIES, getCountryCurrencyInfo } from "../lib/currency";
 import { calcMerchantBasePriceEgp, calcRetailPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
-import { getGameServers, getServerLabel } from "../lib/regions";
+import { getExplicitServerRegion, getGameServers, getServerLabel, matchPackageSearch } from "../lib/regions";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
@@ -810,11 +810,15 @@ function AdminPage() {
       const r = await adminUpdateEgpRateApi(activeToken, { egp_rate: Number(egpRate), mode: "manual" });
       if (r?.error) throw new Error(r.error);
       setRateMode("manual");
+      if (r?.egp_rate) {
+        setEgpRate(r.egp_rate);
+        store.setSettings({ ...store.settings, egp_rate: r.egp_rate });
+      }
       toast({
         title: "تم حفظ سعر صرف الدولار يدوياً بنجاح 🔒",
-        description: `سعر الصرف المعتمد: ${egpRate} ج.م / $ • ثابت ولن يتغير تلقائياً`,
+        description: `سعر الصرف المعتمد: ${r?.egp_rate || egpRate} ج.م / $ • ثابت ولن يتغير تلقائياً`,
       });
-      await loadStore();
+      await loadStore(true);
     } catch (e: any) {
       toast({ title: "تعذر الحفظ", description: e?.message });
     }
@@ -1202,14 +1206,7 @@ function AdminPage() {
       list = list.filter((p) => (p.gameId || "mlbb") === pkgGameFilter);
     }
     if (pkgSearch.trim()) {
-      const q = pkgSearch.trim().toLowerCase();
-      list = list.filter(
-        (p) =>
-          (p.name || "").toLowerCase().includes(q) ||
-          (p.offerId || "").toLowerCase().includes(q) ||
-          (p.gameId || "").toLowerCase().includes(q) ||
-          String(p.diamonds || "").includes(q),
-      );
+      list = list.filter((p) => matchPackageSearch(p, pkgSearch));
     }
     return list;
   }, [store.packages, pkgGameFilter, pkgSearch]);
@@ -3528,19 +3525,23 @@ function AdminPage() {
                         {profileData.packagesPreview
                           ?.filter((p: any) => {
                             const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                            const explicitReg = getExplicitServerRegion(p);
                             const regList: string[] = Array.isArray(p.regions) && p.regions.length
                               ? p.regions.map((r: any) => String(r).toLowerCase())
-                              : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                            const serverMatch = profilePkgServer === "all" || regList.includes(profilePkgServer.toLowerCase());
-                            const q = profilePkgSearch.trim().toLowerCase();
-                            const textMatch = !q || (p.name || "").toLowerCase().includes(q) || (p.offerId || "").toLowerCase().includes(q);
+                              : explicitReg ? [explicitReg] : ["global"];
+                            const serverMatch =
+                              profilePkgServer === "all" ||
+                              regList.includes(profilePkgServer.toLowerCase()) ||
+                              (explicitReg && explicitReg === profilePkgServer.toLowerCase());
+                            const textMatch = matchPackageSearch(p, profilePkgSearch);
                             return gameMatch && serverMatch && textMatch;
                           })
                           .map((p: any) => {
+                            const explicitReg = getExplicitServerRegion(p);
                             const regList: string[] = Array.isArray(p.regions) && p.regions.length
                               ? p.regions.map((r: any) => String(r).toLowerCase())
-                              : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                            const rawReg = regList[0] || (p.offerId?.includes("brazil") ? "br" : "global");
+                              : explicitReg ? [explicitReg] : ["global"];
+                            const rawReg = explicitReg || regList[0] || "global";
                             const isBr = rawReg === "br" || p.offerId?.includes("brazil");
                             const srvLabel = getServerLabel(rawReg, p.gameId);
                             return (
@@ -3607,20 +3608,24 @@ function AdminPage() {
                     {profileData.packagesPreview
                       ?.filter((p: any) => {
                         const gameMatch = profilePkgGame === "all" || p.gameId === profilePkgGame;
+                        const explicitReg = getExplicitServerRegion(p);
                         const regList: string[] = Array.isArray(p.regions) && p.regions.length
                           ? p.regions.map((r: any) => String(r).toLowerCase())
-                          : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                        const serverMatch = profilePkgServer === "all" || regList.includes(profilePkgServer.toLowerCase());
-                        const q = profilePkgSearch.trim().toLowerCase();
-                        const textMatch = !q || (p.name || "").toLowerCase().includes(q) || (p.offerId || "").toLowerCase().includes(q);
+                          : explicitReg ? [explicitReg] : ["global"];
+                        const serverMatch =
+                          profilePkgServer === "all" ||
+                          regList.includes(profilePkgServer.toLowerCase()) ||
+                          (explicitReg && explicitReg === profilePkgServer.toLowerCase());
+                        const textMatch = matchPackageSearch(p, profilePkgSearch);
                         return gameMatch && serverMatch && textMatch;
                       })
                       .map((p: any) => {
                         const merchantUsd = formatDecimals3(p.merchantPriceEgp / (profileData.egpRate || 50));
+                        const explicitReg = getExplicitServerRegion(p);
                         const regList: string[] = Array.isArray(p.regions) && p.regions.length
                           ? p.regions.map((r: any) => String(r).toLowerCase())
-                          : p.offerId?.includes("brazil") ? ["br"] : ["global"];
-                        const rawReg = regList[0] || (p.offerId?.includes("brazil") ? "br" : "global");
+                          : explicitReg ? [explicitReg] : ["global"];
+                        const rawReg = explicitReg || regList[0] || "global";
                         const isBr = rawReg === "br" || p.offerId?.includes("brazil");
                         const srvLabel = getServerLabel(rawReg, p.gameId);
                         return (

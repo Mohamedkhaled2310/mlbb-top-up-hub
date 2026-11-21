@@ -97,6 +97,8 @@ describe("Server-Specific Package Filtering & Matching", () => {
         gameId: "mlbb",
         name: "Weekly Diamond Pass",
         category: "weekly_pass",
+        diamonds: 0,
+        retailPriceEgp: 95,
         costUsd: 1.478,
         regions: ["global"],
         active: true,
@@ -107,6 +109,8 @@ describe("Server-Specific Package Filtering & Matching", () => {
         gameId: "mlbb",
         name: "Weekly Diamond Pass",
         category: "weekly_pass",
+        diamonds: 0,
+        retailPriceEgp: 85,
         costUsd: 1.21,
         regions: ["br"],
         active: true,
@@ -117,6 +121,8 @@ describe("Server-Specific Package Filtering & Matching", () => {
         gameId: "mlbb",
         name: "Weekly Diamond Pass",
         category: "weekly_pass",
+        diamonds: 0,
+        retailPriceEgp: 90,
         costUsd: 1.68,
         regions: ["ph"],
         active: true,
@@ -127,6 +133,8 @@ describe("Server-Specific Package Filtering & Matching", () => {
         gameId: "mlbb",
         name: "Weekly Pass",
         category: "weekly_pass",
+        diamonds: 0,
+        retailPriceEgp: 92,
         costUsd: 1.97,
         regions: ["my"],
         active: true,
@@ -138,6 +146,7 @@ describe("Server-Specific Package Filtering & Matching", () => {
         name: "86 Diamonds",
         category: "diamonds",
         diamonds: 86,
+        retailPriceEgp: 75,
         costUsd: 1.15,
         regions: ["my"],
         active: true,
@@ -149,6 +158,7 @@ describe("Server-Specific Package Filtering & Matching", () => {
         name: "86 Diamonds",
         category: "diamonds",
         diamonds: 86,
+        retailPriceEgp: 75,
         costUsd: 1.12,
         regions: ["ph"],
         active: true,
@@ -160,6 +170,7 @@ describe("Server-Specific Package Filtering & Matching", () => {
         name: "Odd Tier",
         category: "diamonds",
         diamonds: 99,
+        retailPriceEgp: 100,
         costUsd: 2.0,
         regions: ["global"],
         active: false,
@@ -204,5 +215,57 @@ describe("Server-Specific Package Filtering & Matching", () => {
     expect(brWeekly).toBeDefined();
     expect(brWeekly?.offerId).toBe("mobile_legends_brazil:weekly_pass");
     expect(brWeekly?.costUsd).toBe(1.21);
+  });
+
+  it("supports bilingual Arabic and English search matching for Weekly Pass and passes", () => {
+    const weeklyPkg: TopUpPackage = {
+      id: "mobile_legends_global:weekly_pass",
+      offerId: "mobile_legends_global:weekly_pass",
+      gameId: "mlbb",
+      name: "Weekly Diamond Pass",
+      category: "weekly_pass",
+      diamonds: 0,
+      costUsd: 1.319,
+      retailPriceEgp: 95,
+      merchantBasePriceEgp: 78,
+      regions: ["global"],
+      active: true,
+    };
+
+    const diamondPkg: TopUpPackage = {
+      id: "mobile_legends_global:86_diamonds",
+      offerId: "mobile_legends_global:86_diamonds",
+      gameId: "mlbb",
+      name: "86 Diamonds",
+      category: "diamonds",
+      diamonds: 86,
+      costUsd: 1.06,
+      retailPriceEgp: 75,
+      merchantBasePriceEgp: 68,
+      regions: ["global"],
+      active: true,
+    };
+
+    const pkgs = [weeklyPkg, diamondPkg];
+
+    // Arabic "ويكلي" should find Weekly Diamond Pass
+    const searchResultAr1 = filterPackagesForServer(pkgs, "global", "ويكلي");
+    expect(searchResultAr1).toHaveLength(1);
+    expect(searchResultAr1[0]?.id).toBe("mobile_legends_global:weekly_pass");
+
+    // Arabic "اسبوعي" should also match Weekly Diamond Pass
+    const searchResultAr2 = filterPackagesForServer(pkgs, "global", "اسبوعي");
+    expect(searchResultAr2).toHaveLength(1);
+    expect(searchResultAr2[0]?.id).toBe("mobile_legends_global:weekly_pass");
+
+    // English "weekly"
+    const searchResultEn = filterPackagesForServer(pkgs, "global", "weekly");
+    expect(searchResultEn).toHaveLength(1);
+    expect(searchResultEn[0]?.id).toBe("mobile_legends_global:weekly_pass");
+
+    // Diamonds search "86"
+    const searchResultDia = filterPackagesForServer(pkgs, "global", "86");
+    expect(searchResultDia).toHaveLength(1);
+    expect(searchResultDia[0]?.id).toBe("mobile_legends_global:86_diamonds");
   });
 });
