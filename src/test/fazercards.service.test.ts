@@ -141,7 +141,7 @@ describe("FazerCardsService", () => {
           { status: 200 },
         );
       }
-      if (url.includes("category_id=honor_of_kings")) {
+      if (url.includes("category_id=honor_of_kings&") || url.endsWith("category_id=honor_of_kings")) {
         return new Response(
           JSON.stringify({
             offers: [{ offer_id: "80_tokens", name: "80 Tokens", price_usd: "0.8400" }],
@@ -153,6 +153,7 @@ describe("FazerCardsService", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
+    (FazerCardsService as any).categoryTargetsCache = null;
 
     const catalog = await FazerCardsService.fetchCatalog();
     expect(catalog.ok).toBe(true);

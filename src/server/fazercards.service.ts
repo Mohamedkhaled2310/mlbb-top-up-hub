@@ -1023,12 +1023,15 @@ export class FazerCardsService {
       GAME_CATEGORY_IDS[game_id] ||
       "mobile_legends_global";
 
+    const explicitRegionFromCat = this.inferRegionFromCategory(resolvedCategoryId);
     const regionsRaw = it["regions"] ?? (it["region"] ? [it["region"]] : null) ?? it["countries"] ?? null;
-    const regions = Array.isArray(regionsRaw)
-      ? regionsRaw.map((r) => String(r).trim().toLowerCase()).filter(Boolean)
-      : typeof regionsRaw === "string" && regionsRaw.trim()
-        ? [regionsRaw.trim().toLowerCase()]
-        : this.inferRegionFromCategory(resolvedCategoryId);
+    const regions = explicitRegionFromCat && explicitRegionFromCat.length && explicitRegionFromCat[0] !== "global"
+      ? explicitRegionFromCat
+      : Array.isArray(regionsRaw)
+        ? regionsRaw.map((r) => String(r).trim().toLowerCase()).filter(Boolean)
+        : typeof regionsRaw === "string" && regionsRaw.trim()
+          ? [regionsRaw.trim().toLowerCase()]
+          : explicitRegionFromCat;
 
     // Composite offer_id guarantees zero collisions across Fazer categories that reuse `offer_id` strings
     const storedOfferId =

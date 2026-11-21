@@ -168,32 +168,34 @@ describe("MLBB Base & Composite Packages", () => {
     expect(res.brazilBaseCount).toBe(8);
     expect(res.compositeCount).toBe(30); // 15 Global + 15 Brazil
 
+    const allUpserted: any[] = upserts.flat();
+
     // Verify Global 172 Diamonds (156+16) has exact $2.10 cost and regions: ["global"]
-    const global172 = updates.find((u) => u.val === "mobile_legends_global:156_16_diamonds");
+    const global172 = allUpserted.find((u) => u.offer_id === "mobile_legends_global:156_16_diamonds");
     expect(global172).toBeDefined();
-    expect(global172.fields.cost_usd).toBe(2.1);
-    expect(global172.fields.regions).toEqual(["global"]);
-    expect(global172.fields.active).toBe(true);
+    expect(global172.cost_usd).toBe(2.1);
+    expect(global172.regions).toEqual(["global"]);
+    expect(global172.active).toBe(true);
 
     // Verify Brazil 172 Diamonds (156+16) has exact $1.93 cost and regions: ["br"]
-    const brazil172 = updates.find((u) => u.val === "mobile_legends_brazil:156_16_diamonds");
+    const brazil172 = allUpserted.find((u) => u.offer_id === "mobile_legends_brazil:156_16_diamonds");
     expect(brazil172).toBeDefined();
-    expect(brazil172.fields.cost_usd).toBe(1.93);
-    expect(brazil172.fields.regions).toEqual(["br"]);
-    expect(brazil172.fields.active).toBe(true);
+    expect(brazil172.cost_usd).toBe(1.93);
+    expect(brazil172.regions).toEqual(["br"]);
+    expect(brazil172.active).toBe(true);
 
     // Verify Global Weekly Pass has cost 1.319 and regions: ["global"]
-    const globalWeekly = updates.find((u) => u.val === "mobile_legends_global:weekly_pass");
+    const globalWeekly = allUpserted.find((u) => u.offer_id === "mobile_legends_global:weekly_pass");
     expect(globalWeekly).toBeDefined();
-    expect(globalWeekly.fields.cost_usd).toBe(1.319);
-    expect(globalWeekly.fields.regions).toEqual(["global"]);
-    expect(globalWeekly.fields.active).toBe(true);
+    expect(globalWeekly.cost_usd).toBe(1.319);
+    expect(globalWeekly.regions).toEqual(["global"]);
+    expect(globalWeekly.active).toBe(true);
 
     // Verify Brazil Weekly Pass has cost 1.21 and regions: ["br"]
-    const brazilWeekly = updates.find((u) => u.val === "mobile_legends_brazil:weekly_pass");
+    const brazilWeekly = allUpserted.find((u) => u.offer_id === "mobile_legends_brazil:weekly_pass");
     expect(brazilWeekly).toBeDefined();
-    expect(brazilWeekly.fields.cost_usd).toBe(1.21);
-    expect(brazilWeekly.fields.regions).toEqual(["br"]);
-    expect(brazilWeekly.fields.active).toBe(true);
+    expect(brazilWeekly.cost_usd).toBe(1.21);
+    expect(brazilWeekly.regions).toEqual(["br"]);
+    expect(brazilWeekly.active).toBe(true);
   });
 });

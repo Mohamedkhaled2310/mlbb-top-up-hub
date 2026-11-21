@@ -35,7 +35,7 @@ import { PackageCardSkeleton } from "../components/PackageCardSkeleton";
 import { findCachedPlayer, getRecentAccounts, saveRecentAccount, type SavedPlayerAccount } from "../lib/recent-players";
 import { useStore } from "../lib/store/useStore";
 import { calcMerchantUnitPriceEgp, formatDecimals3, round3 } from "../lib/pricing";
-import { filterPackagesForServer, getGameServers, getServerLabel } from "../lib/regions";
+import { filterPackagesForServer, getExplicitServerRegion, getGameServers, getServerLabel } from "../lib/regions";
 import type { PackageCategory, TopUpPackage } from "../types/store";
 import { getStoreApi, validatePlayerApi } from "../lib/api-client";
 import metoPoster from "../assets/meto-poster.webp";
@@ -332,7 +332,8 @@ function CustomerStorePage() {
   const availableRegions = useMemo(() => {
     const counts = new Map<string, number>();
     for (const p of gamePackages) {
-      const r = (Array.isArray(p.regions) && p.regions[0]) || (selectedGameId === "freefire" ? "mena" : "global");
+      const explicit = getExplicitServerRegion(p);
+      const r = explicit || (Array.isArray(p.regions) && p.regions[0]) || (selectedGameId === "freefire" ? "mena" : "global");
       counts.set(r, (counts.get(r) || 0) + 1);
     }
     const order = ["global", "mena", "eu", "my", "id", "br", "tr", "ph", "sg", "ru", "us", "bd", "cis", "latam", "th", "tw", "vn"];

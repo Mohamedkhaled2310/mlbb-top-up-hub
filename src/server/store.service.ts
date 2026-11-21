@@ -404,61 +404,9 @@ export async function getStoreData(gameId?: string, forceRefresh = false) {
   }
 
   const sb = getAdminClient() as any;
-  const [{ data: initialSettingsRow }, fxResult, { data: fxConfigRow }] = await Promise.all([
-    sb.from("store_settings").select("*").eq("id", 1).maybeSingle(),
-    getLiveUsdRates().catch(() => null),
-    sb.from("fazer_packages").select("raw").eq("offer_id", "config:fx_settings").maybeSingle(),
-  ]);
+  const { data: initialSettingsRow } = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
   let settingsRow = initialSettingsRow;
   let egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
-
-  const fxConfig = (fxConfigRow?.raw as any) || { mode: "manual" };
-  const rateMode: "manual" | "binance_auto" = fxConfig.mode === "binance_auto" ? "binance_auto" : "manual";
-  const binanceEgp = fxResult?.rates ? (fxResult.rates["BINANCE_EGP"] ?? fxResult.rates["EGP"]) : undefined;
-
-  // Persist latest live binance rate in config if available
-  if (binanceEgp && typeof binanceEgp === "number" && binanceEgp > 0) {
-    if (Math.abs((fxConfig.binance_rate || 0) - binanceEgp) > 0.05) {
-      try {
-        await sb.from("fazer_packages")
-          .upsert({
-            offer_id: "config:fx_settings",
-            game_id: "system",
-            name: "FX Settings",
-            active: false,
-            raw: {
-              ...fxConfig,
-              binance_rate: binanceEgp,
-              binance_updated_at: new Date().toISOString(),
-            },
-          });
-      } catch {
-        // Ignore background persistence error
-      }
-    }
-  }
-
-  // Retail store EGP prices dynamically track Binance P2P rate to protect retail margins.
-  // Merchant wallet balances are 100% pure native USD and are immune to this rate.
-  if (
-    !process.env["VITEST"] &&
-    typeof binanceEgp === "number" &&
-    Number.isFinite(binanceEgp) &&
-    binanceEgp > 0
-  ) {
-    const liveEgp = Math.round(binanceEgp * 100) / 100;
-    if (Math.abs(egpRate - liveEgp) > 0.05) {
-      egpRate = liveEgp;
-      STORE_DATA_CACHE = null; // Invalidate cached packages immediately so new live prices propagate to everyone
-      try {
-        await sb.from("store_settings")
-          .update({ egp_rate: egpRate, updated_at: new Date().toISOString() })
-          .eq("id", 1);
-      } catch {
-        // Ignore settings update error
-      }
-    }
-  }
 
   let q = sb
     .from("fazer_packages")
@@ -498,9 +446,7 @@ export async function getStoreData(gameId?: string, forceRefresh = false) {
       await syncFazerInternal();
       const s2 = await sb.from("store_settings").select("*").eq("id", 1).maybeSingle();
       settingsRow = s2.data || settingsRow;
-      if (rateMode === "manual" || !binanceEgp) {
-        egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
-      }
+      egpRate = Number(settingsRow?.egp_rate || DEFAULT_EGP_RATE);
       let q2 = sb
         .from("fazer_packages")
         .select("*")
@@ -583,16 +529,14 @@ export async function getStoreData(gameId?: string, forceRefresh = false) {
     packages,
     settings: {
       egp_rate: egpRate,
-      egp_rate_mode: rateMode,
-      binance_rate: binanceEgp ?? fxConfig.binance_rate ?? null,
-      binance_updated_at: fxConfig.binance_updated_at ?? null,
+      egp_rate_mode: "manual" as const,
+      binance_rate: null,
+      binance_updated_at: null,
       fazer_balance: settingsRow?.fazer_balance ?? null,
       fazer_balance_currency: settingsRow?.fazer_balance_currency ?? null,
       fazer_balance_updated_at: settingsRow?.fazer_balance_updated_at ?? null,
       packages_synced_at: settingsRow?.packages_synced_at ?? null,
       global_retail_markup_percent: DEFAULT_RETAIL_MARKUP * 100,
-      fx_rates: fxResult?.rates ?? undefined,
-      fx_updated_at: fxResult?.updatedAt ?? null,
     },
   };
 
@@ -2632,38 +2576,9 @@ export async function adminUpdateEgpRate(
 export async function adminSyncBinanceRate(token: string) {
   await requireAdmin(token);
   const sb = getAdminClient() as any;
-  const { fetchBinanceUsdtEgp } = await import("./fx.service");
-  const liveBinance = await fetchBinanceUsdtEgp();
-  if (!liveBinance || liveBinance <= 0) {
-    throw new Error("تعذر جلب سعر بينانس P2P اللحظي، يرجى المحاولة لاحقاً أو التحديد يدوياً.");
-  }
-
-  const nowIso = new Date().toISOString();
   const { data: currentSettings } = await sb.from("store_settings").select("egp_rate").eq("id", 1).maybeSingle();
   const currentRate = Number(currentSettings?.egp_rate || DEFAULT_EGP_RATE);
-
-  const { data: existing } = await sb
-    .from("fazer_packages")
-    .select("raw")
-    .eq("offer_id", "config:fx_settings")
-    .maybeSingle();
-
-  const prevRaw = (existing?.raw as any) || {};
-  await sb.from("fazer_packages").upsert({
-    offer_id: "config:fx_settings",
-    game_id: "system",
-    name: "FX Settings",
-    active: false,
-    raw: {
-      ...prevRaw,
-      mode: "manual",
-      binance_rate: liveBinance,
-      binance_updated_at: nowIso,
-      updated_by: "admin",
-    },
-  });
-
-  return { success: true, egp_rate: currentRate, binance_rate: liveBinance, mode: "manual" };
+  return { success: true, egp_rate: currentRate, mode: "manual" };
 }
 
 export async function getMyProfile(token: string) {

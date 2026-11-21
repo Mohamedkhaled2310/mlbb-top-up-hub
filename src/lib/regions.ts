@@ -166,11 +166,45 @@ export function isNoisyOddMlbbPackage(_pkg: { gameId?: string | undefined; offer
   return false;
 }
 
+export function getExplicitServerRegion(p: { id?: string | undefined; offerId?: string | undefined; regions?: string[] | null | undefined }): string | null {
+  const str = String(p.offerId || p.id || "").toLowerCase();
+  if (str.startsWith("mobile_legends_philippines") || str.includes(":ph_")) return "ph";
+  if (str.startsWith("mobile_legends_malaysia") || str.includes(":my_")) return "my";
+  if (str.startsWith("mobile_legends_indonesia") || str.includes(":id_")) return "id";
+  if (str.startsWith("mobile_legends_brazil") || str.includes(":br_")) return "br";
+  if (str.startsWith("mobile_legends_turkey") || str.includes(":tr_")) return "tr";
+  if (str.startsWith("mobile_legends_ru") || str.includes(":ru_")) return "ru";
+  if (str.startsWith("mobile_legends_singapore") || str.includes(":sg_")) return "sg";
+  if (str.startsWith("mobile_legends_united_states") || str.includes(":us_")) return "us";
+  if (str.startsWith("mobile_legends_global")) return "global";
+  if (str.startsWith("free_fire_br")) return "br";
+  if (str.startsWith("free_fire_id")) return "id";
+  if (str.startsWith("free_fire_sg")) return "sg";
+  if (str.startsWith("free_fire_eu")) return "eu";
+  if (str.startsWith("free_fire_my_sg")) return "my_sg";
+  if (str.startsWith("free_fire_bd")) return "bd";
+  if (str.startsWith("free_fire_cis")) return "cis";
+  if (str.startsWith("free_fire_latam")) return "latam";
+  if (str.startsWith("free_fire_th")) return "th";
+  if (str.startsWith("free_fire_tw")) return "tw";
+  if (str.startsWith("free_fire_vn")) return "vn";
+  if (str.startsWith("free_fire_mena")) return "mena";
+
+  if (Array.isArray(p.regions) && p.regions.length === 1) {
+    const r = normalizeRegion(p.regions[0]);
+    if (r && r !== "global") return r;
+  }
+  return null;
+}
+
 /**
  * Filters and prioritizes packages for a given game and selected server so that:
  * - For any diamond tier, if an exact server package exists, it is shown.
  * - If not, the global package is shown as fallback.
  * - Duplicate diamond tiers with conflicting prices are eliminated.
+ * - Regional servers never show packages belonging to other countries.
+ * - Global server only shows Global packages, and never regional packages.
+ * - Inactive or uncurated packages remain hidden.
  */
 export function filterPackagesForServer(
   gamePackages: TopUpPackage[],
@@ -182,7 +216,7 @@ export function filterPackagesForServer(
 
   const matched = gamePackages.filter((p) => {
     if (isNoisyOddMlbbPackage(p)) return false;
-    if (!p.active) return false;
+    if (p.active === false) return false;
     if (!q) return true;
     return (
       (p.name || "").toLowerCase().includes(q) ||
@@ -195,22 +229,29 @@ export function filterPackagesForServer(
   const seenTiers = new Map<string, TopUpPackage>();
 
   for (const p of matched) {
+    if (p.active === false) continue;
+
+    const pExplicitReg = getExplicitServerRegion(p);
     const regs = Array.isArray(p.regions) && p.regions.length
       ? p.regions.map(normalizeRegion)
       : ["global"];
 
-    const isExact = regs.includes(selReg);
-    const isGlobal = regs.includes("global");
+    const isExact = regs.includes(selReg) || pExplicitReg === selReg;
+    const isGlobal = (regs.includes("global") || pExplicitReg === "global") && !pExplicitReg;
 
-    if (selReg === "br") {
-      // Brazil has strict regional isolation - do not show global fallback
-      if (!isExact) continue;
+    if (selReg === "global") {
+      // In Global server, NEVER show packages belonging to specific regional countries
+      if (pExplicitReg && pExplicitReg !== "global") continue;
+      if (!isExact && !regs.includes("global")) continue;
     } else if (selReg !== "all") {
+      // In a specific regional server, NEVER show packages belonging to a different country
+      if (pExplicitReg && pExplicitReg !== selReg && pExplicitReg !== "global") continue;
       if (!isExact && !isGlobal) continue;
     }
 
     // Determine normalized tier key for proper deduplication
     const normName = (p.name || "").toLowerCase();
+    const offerIdStr = String(p.offerId || p.id || "").toLowerCase();
     let tierKey = "";
     if (normName.includes("weekly") && (normName.includes("pass") || normName.includes("diamond"))) {
       tierKey = "pass:weekly_diamond_pass";
@@ -228,15 +269,23 @@ export function filterPackagesForServer(
       tierKey = `${p.category || "diamonds"}_${p.diamonds || 0}_${cleanName}`;
     }
 
+    // Guarantee that Global Weekly Pass is strictly mobile_legends_global:weekly_pass
+    if (tierKey === "pass:weekly_diamond_pass") {
+      if (selReg === "global" && !offerIdStr.includes("mobile_legends_global:weekly_pass")) {
+        continue;
+      }
+    }
+
     const existing = seenTiers.get(tierKey);
     if (!existing) {
       seenTiers.set(tierKey, p);
       result.push(p);
     } else {
+      const existingExplicit = getExplicitServerRegion(existing);
       const existingRegs = Array.isArray(existing.regions) && existing.regions.length
         ? existing.regions.map(normalizeRegion)
         : ["global"];
-      const existingIsExact = existingRegs.includes(selReg);
+      const existingIsExact = existingRegs.includes(selReg) || existingExplicit === selReg;
       if (!existingIsExact && isExact) {
         const idx = result.indexOf(existing);
         if (idx !== -1) {

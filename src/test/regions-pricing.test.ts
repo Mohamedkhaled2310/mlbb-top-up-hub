@@ -88,4 +88,121 @@ describe("Server-Specific Package Filtering & Matching", () => {
     const matched = findMatchingPackageForServer(p520, "mena", samplePackages);
     expect(matched.id).toBe("ff_520_global");
   });
+
+  it("strictly pins Global Weekly Pass to Global server and isolates regional Weekly Passes", () => {
+    const mlbbWeeklyAndRegional: TopUpPackage[] = [
+      {
+        id: "mobile_legends_global:weekly_pass",
+        offerId: "mobile_legends_global:weekly_pass",
+        gameId: "mlbb",
+        name: "Weekly Diamond Pass",
+        category: "weekly_pass",
+        costUsd: 1.478,
+        regions: ["global"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_brazil:weekly_pass",
+        offerId: "mobile_legends_brazil:weekly_pass",
+        gameId: "mlbb",
+        name: "Weekly Diamond Pass",
+        category: "weekly_pass",
+        costUsd: 1.21,
+        regions: ["br"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_philippines:weekly_diamond_pass",
+        offerId: "mobile_legends_philippines:weekly_diamond_pass",
+        gameId: "mlbb",
+        name: "Weekly Diamond Pass",
+        category: "weekly_pass",
+        costUsd: 1.68,
+        regions: ["ph"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_malaysia:weekly_pass",
+        offerId: "mobile_legends_malaysia:weekly_pass",
+        gameId: "mlbb",
+        name: "Weekly Pass",
+        category: "weekly_pass",
+        costUsd: 1.97,
+        regions: ["my"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_malaysia:86_diamonds",
+        offerId: "mobile_legends_malaysia:86_diamonds",
+        gameId: "mlbb",
+        name: "86 Diamonds",
+        category: "diamonds",
+        diamonds: 86,
+        costUsd: 1.15,
+        regions: ["my"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_philippines:86_diamonds",
+        offerId: "mobile_legends_philippines:86_diamonds",
+        gameId: "mlbb",
+        name: "86 Diamonds",
+        category: "diamonds",
+        diamonds: 86,
+        costUsd: 1.12,
+        regions: ["ph"],
+        active: true,
+      },
+      {
+        id: "mobile_legends_global:inactive_tier",
+        offerId: "mobile_legends_global:inactive_tier",
+        gameId: "mlbb",
+        name: "Odd Tier",
+        category: "diamonds",
+        diamonds: 99,
+        costUsd: 2.0,
+        regions: ["global"],
+        active: false,
+      },
+    ];
+
+    // 1. Global server MUST only show the Global Weekly Pass
+    const forGlobal = filterPackagesForServer(mlbbWeeklyAndRegional, "global");
+    const globalWeekly = forGlobal.find((p) => p.category === "weekly_pass");
+    expect(globalWeekly).toBeDefined();
+    expect(globalWeekly?.offerId).toBe("mobile_legends_global:weekly_pass");
+    expect(globalWeekly?.costUsd).toBe(1.478);
+    // Regional packages must NEVER appear in Global
+    expect(forGlobal.some((p) => p.offerId === "mobile_legends_malaysia:86_diamonds")).toBe(false);
+    expect(forGlobal.some((p) => p.offerId === "mobile_legends_philippines:86_diamonds")).toBe(false);
+    // Inactive packages must NEVER be displayed
+    expect(forGlobal.some((p) => p.active === false)).toBe(false);
+
+    // 2. Philippines server MUST only show Philippines Weekly Pass and Packages
+    const forPh = filterPackagesForServer(mlbbWeeklyAndRegional, "ph");
+    const phWeekly = forPh.find((p) => p.category === "weekly_pass");
+    expect(phWeekly).toBeDefined();
+    expect(phWeekly?.offerId).toBe("mobile_legends_philippines:weekly_diamond_pass");
+    expect(phWeekly?.costUsd).toBe(1.68);
+    // Malaysian package must NEVER appear in Philippines!
+    expect(forPh.some((p) => p.offerId === "mobile_legends_malaysia:86_diamonds")).toBe(false);
+    expect(forPh.some((p) => p.offerId === "mobile_legends_philippines:86_diamonds")).toBe(true);
+
+    // 3. Malaysia server MUST only show Malaysian Weekly Pass and Packages
+    const forMy = filterPackagesForServer(mlbbWeeklyAndRegional, "my");
+    const myWeekly = forMy.find((p) => p.category === "weekly_pass");
+    expect(myWeekly).toBeDefined();
+    expect(myWeekly?.offerId).toBe("mobile_legends_malaysia:weekly_pass");
+    expect(myWeekly?.costUsd).toBe(1.97);
+    // Philippines package must NEVER appear in Malaysia!
+    expect(forMy.some((p) => p.offerId === "mobile_legends_philippines:86_diamonds")).toBe(false);
+    expect(forMy.some((p) => p.offerId === "mobile_legends_malaysia:86_diamonds")).toBe(true);
+
+    // 4. Brazil server MUST only show Brazil Weekly Pass
+    const forBr = filterPackagesForServer(mlbbWeeklyAndRegional, "br");
+    const brWeekly = forBr.find((p) => p.category === "weekly_pass");
+    expect(brWeekly).toBeDefined();
+    expect(brWeekly?.offerId).toBe("mobile_legends_brazil:weekly_pass");
+    expect(brWeekly?.costUsd).toBe(1.21);
+  });
 });

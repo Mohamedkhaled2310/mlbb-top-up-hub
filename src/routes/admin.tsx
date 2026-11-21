@@ -803,17 +803,16 @@ function AdminPage() {
     }
   };
 
-  const saveRate = async (modeToSave?: "manual" | "binance_auto") => {
+  const saveRate = async (_modeToSave?: "manual" | "binance_auto") => {
     const activeToken = (await getFreshToken()) || token;
     if (!activeToken) return;
-    const mode = modeToSave || rateMode;
     try {
-      const r = await adminUpdateEgpRateApi(activeToken, { egp_rate: Number(egpRate), mode });
+      const r = await adminUpdateEgpRateApi(activeToken, { egp_rate: Number(egpRate), mode: "manual" });
       if (r?.error) throw new Error(r.error);
-      setRateMode(mode);
+      setRateMode("manual");
       toast({
-        title: mode === "manual" ? "تم تثبيت سعر الصرف يدوياً (🔒 مقفل)" : "تم حفظ سعر الصرف وتفعيل التحديث التلقائي",
-        description: `${egpRate} ج.م / $ ${mode === "manual" ? "• لن يتغير تلقائياً" : ""}`,
+        title: "تم حفظ سعر صرف الدولار يدوياً بنجاح 🔒",
+        description: `سعر الصرف المعتمد: ${egpRate} ج.م / $ • ثابت ولن يتغير تلقائياً`,
       });
       await loadStore();
     } catch (e: any) {
@@ -821,28 +820,7 @@ function AdminPage() {
     }
   };
 
-  const syncBinance = async () => {
-    const activeToken = (await getFreshToken()) || token;
-    if (!activeToken) return;
-    setSyncingBinance(true);
-    try {
-      const r = await adminSyncBinanceRateApi(activeToken);
-      if (r?.error) throw new Error(r.error);
-      if (r?.egp_rate) {
-        setEgpRate(r.egp_rate);
-        setRateMode("binance_auto");
-        toast({
-          title: "تم تطبيق سعر دولار بينانس P2P بنجاح ⚡",
-          description: `السعر المطبق: ${r.egp_rate} ج.م / USDT (سوق بينانس مصر)`,
-        });
-      }
-      await loadStore();
-    } catch (e: any) {
-      toast({ title: "فشل جلب سعر بينانس", description: e?.message });
-    } finally {
-      setSyncingBinance(false);
-    }
-  };
+  const syncBinance = async () => {};
 
   const submitCredit = async () => {
     if (!credit) return;
@@ -1376,50 +1354,14 @@ function AdminPage() {
                     <h3 className="font-bold flex items-center gap-2 text-white">
                       <DollarSign className="w-4 h-4 text-amber-400" /> سعر دولار المتجر
                     </h3>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        rateMode === "manual"
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      }`}
-                    >
-                      {rateMode === "manual" ? (
-                        <>
-                          <Lock className="w-3 h-3" /> تثبيت يدوي (مقفل)
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-3 h-3" /> تلقائي من بينانس
-                        </>
-                      )}
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      <Lock className="w-3 h-3" /> تحديد يدوي من الإدارة
                     </span>
-                  </div>
-
-                  {/* Binance P2P Live Rate Indicator & Sync */}
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 flex items-center justify-between text-xs">
-                    <div className="space-y-0.5">
-                      <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-amber-400" /> سعر بينانس P2P الفعلي:
-                      </div>
-                      <div className="font-mono font-bold text-amber-300">
-                        {store.settings.binance_rate ? `${store.settings.binance_rate} ج.م / USDT` : "سوق مصر الحي"}
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-bold gap-1"
-                      onClick={syncBinance}
-                      disabled={syncingBinance}
-                    >
-                      <RefreshCw className={`w-3 h-3 ${syncingBinance ? "animate-spin" : ""}`} />
-                      {syncingBinance ? "جارٍ الجلب..." : "تطبيق سعر بينانس"}
-                    </Button>
                   </div>
 
                   <div>
                     <label className="text-[11px] text-slate-400 block font-semibold mb-1">
-                      السعر الحالي المعتمد:
+                      سعر الدولار مقابل الجنيه (ج.م / $):
                     </label>
                     <div className="flex items-center gap-2">
                       <Input
@@ -1434,27 +1376,17 @@ function AdminPage() {
                   </div>
 
                   <p className="text-[10px] text-slate-400 leading-relaxed">
-                    {rateMode === "manual"
-                      ? "🔒 وضع التثبيت اليدوي مفعّل: لن يتغير السعر تلقائياً أبداً عند فتح المتجر، وسيبقى ثابتاً حتى تحديثه يدوياً."
-                      : "⚡ وضع التحديث التلقائي مفعّل: يتم تحديث السعر تلقائياً وفقاً لأسعار صفقات بينانس P2P الفعلية."}
+                    🔒 سعر الصرف محدد وثابت بواسطة الإدارة، وتعتمد عليه جميع أسعار بيع الباقات وحسابات الأرباح في المتجر بالكامل.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="pt-1">
                   <Button
                     size="sm"
-                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold gap-1 text-xs"
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold gap-1 text-xs"
                     onClick={() => saveRate("manual")}
                   >
-                    <Lock className="w-3.5 h-3.5" /> تثبيت يدوياً
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold gap-1 text-xs"
-                    onClick={() => saveRate("binance_auto")}
-                  >
-                    <Zap className="w-3.5 h-3.5" /> تفعيل التلقائي
+                    <Check className="w-3.5 h-3.5" /> حفظ سعر الدولار الآن
                   </Button>
                 </div>
               </div>
