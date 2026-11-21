@@ -345,5 +345,18 @@ export function filterPackagesForServer(
     }
   }
 
+  // Professional logical ordering: Special Passes first (Weekly, Twilight), then regular tiers sorted strictly ascending by diamonds & cost
+  result.sort((a, b) => {
+    const isPassA = a.category === "weekly_pass" || (a.name || "").toLowerCase().includes("pass");
+    const isPassB = b.category === "weekly_pass" || (b.name || "").toLowerCase().includes("pass");
+    if (isPassA && !isPassB) return -1;
+    if (!isPassA && isPassB) return 1;
+
+    const totalA = (Number(a.diamonds) || 0) + (Number(a.bonusDiamonds) || 0);
+    const totalB = (Number(b.diamonds) || 0) + (Number(b.bonusDiamonds) || 0);
+    if (totalA !== totalB) return totalA - totalB;
+    return (Number(a.costUsd) || 0) - (Number(b.costUsd) || 0);
+  });
+
   return result;
 }
