@@ -1242,6 +1242,29 @@ function AdminPage() {
           )}
         </div>
 
+        {isAdmin && liveBalance !== null && liveBalance < 15 && (
+          <div className="rounded-2xl border border-rose-500/40 bg-gradient-to-l from-rose-950/40 via-rose-900/20 to-[#14172b] p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-rose-200">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 animate-pulse" />
+              <div>
+                <span className="font-bold text-white">تنبيه أمان للرصيد: </span>
+                رصيد حساب فيزر الحالي منخفض (
+                <span className="font-mono font-bold text-amber-300">${liveBalance} {liveCurrency}</span>
+                ). يرجى شحن الحساب لتفادي تعطل طلبات الشحن التلقائية للتجار والعملاء.
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold text-xs shrink-0 self-start sm:self-auto gap-1"
+              onClick={doSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} /> تحديث الرصيد الآن
+            </Button>
+          </div>
+        )}
+
         {!isAdmin ? (
           <div className="w-full max-w-md mx-auto rounded-2xl border border-slate-700/80 bg-gradient-to-b from-[#13172a] to-[#0a0f20] p-5 sm:p-7 shadow-xl shadow-amber-950/10">
             <div className="flex flex-col items-center text-center mb-5">

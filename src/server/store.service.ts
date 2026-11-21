@@ -2712,9 +2712,22 @@ export async function getOrderStatus(targetRefOrId: string) {
   const q = isUid
     ? sb.from("orders").select("*").eq("id", clean)
     : sb.from("orders").select("*").eq("order_ref", clean);
-  const { data: order } = await q.maybeSingle();
+  let { data: order } = await q.maybeSingle();
 
   if (!order) return { found: false };
+
+  // If order is still processing and has a transaction ID, sync live with Fazer immediately!
+  if (order.status === "processing" && order.fazer_transaction_id) {
+    try {
+      const syncRes = await syncSingleOrderInternal(sb, order);
+      if (syncRes.updated) {
+        order.status = syncRes.status;
+        order.error_message = syncRes.failMsg || order.error_message;
+      }
+    } catch {
+      // Ignore transient sync error and return existing order
+    }
+  }
 
   const items = Array.isArray(order.items) ? order.items : [];
   const playerName = order.player_name || items[0]?.player_name || null;

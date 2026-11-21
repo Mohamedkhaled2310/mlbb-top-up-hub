@@ -414,7 +414,20 @@ export default function CheckoutModal({
                 <Input
                   value={player.id}
                   onChange={(e) => {
-                    const newId = e.target.value;
+                    const rawVal = e.target.value;
+                    // Auto-split if user pasted ID + Zone together (e.g. "12345678 (1234)" or "12345678 1234")
+                    const mlbbMatch = rawVal.match(/^(\d{6,11})[\s\(\[\{]+(\d{4,5})[\)\]\}]*$/);
+                    if (mlbbMatch && needsZone) {
+                      const newId = mlbbMatch[1]!;
+                      const newZone = mlbbMatch[2]!;
+                      const cached = findCachedPlayer(activeGameId, newId, newZone);
+                      setPlayer({ ...player, id: newId, zoneId: newZone, name: cached?.name });
+                      if (cached?.name) setVerifiedPlayerName(cached.name);
+                      else setVerifiedPlayerName(null);
+                      setValidationError(null);
+                      return;
+                    }
+                    const newId = rawVal.replace(/\D/g, "");
                     const cached = findCachedPlayer(activeGameId, newId, player.zoneId);
                     setPlayer({ ...player, id: newId, name: cached?.name });
                     if (cached?.name) {
@@ -435,7 +448,7 @@ export default function CheckoutModal({
                   <Input
                     value={player.zoneId || ""}
                     onChange={(e) => {
-                      const newZone = e.target.value;
+                      const newZone = e.target.value.replace(/\D/g, "").slice(0, 5);
                       const cached = findCachedPlayer(activeGameId, player.id, newZone);
                       setPlayer({ ...player, zoneId: newZone, name: cached?.name });
                       if (cached?.name) {
@@ -446,6 +459,7 @@ export default function CheckoutModal({
                       setValidationError(null);
                     }}
                     placeholder="مثال: 2024"
+                    maxLength={5}
                     className="mt-1 bg-slate-900/90 border-slate-700 text-slate-100 placeholder:text-slate-500 font-mono"
                   />
                 </div>

@@ -105,7 +105,11 @@ export async function handleApiRoute(request: Request): Promise<Response | null>
       const forceRefresh = url.searchParams.get("refresh") === "1" || url.searchParams.get("force") === "1";
       const data = await getStoreData(gameId, forceRefresh);
       const response = json(data);
-      response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      if (forceRefresh) {
+        response.headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      } else {
+        response.headers.set("Cache-Control", "public, s-maxage=10, stale-while-revalidate=30");
+      }
       return response;
     } catch (e: any) {
       return json({ success: false, error: e?.message || "Failed to load store" }, 500);
